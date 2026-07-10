@@ -700,6 +700,10 @@ $$;
 
 **Important for whichever phase implements this** (`04_PHASE_PLAN.md` Phase 2): test RLS by logging in as a `staff` account scoped to `restaurant` and confirming a query for `canteen` rows returns empty — not by reading the policy and assuming it works. Also test `canteen_supplied_total()` returns the correct sum when called as canteen staff, and confirm canteen staff still cannot query `stock_entries` directly for restaurant rows even though the function works. Also confirm canteen staff cannot read `ingredients`/`ingredient_entries` at all (empty result, not an error) — ingredient tracking is restaurant-only. See the acceptance criteria in `04_PHASE_PLAN.md`'s Phase 2 section.
 
+### 4.1 Schema-level grants (not just RLS)
+
+RLS policies alone are not sufficient — Postgres requires baseline `GRANT` privileges on top of them, and this is easy to miss because a dashboard-created Supabase project applies these invisibly, while a project built by hand-writing migrations (as this one is) does not get them for free. `anon`, `authenticated`, and `service_role` all need `usage` on the `public` schema plus table/sequence/routine grants; `service_role`'s `rolbypassrls = true` bypasses RLS checks specifically, but does **not** imply table-level grants — the two mechanisms are independent, and a role can pass every RLS check and still be refused at the grant layer underneath it. See `supabase/migrations/20260710110004_grants.sql` for the concrete statements (`grant all on all tables/sequences/routines in schema public`, plus matching `alter default privileges` so future migrations' new objects inherit the same grants automatically). Discovered in Phase 2 when the service-role staff-seeding script failed with `permission denied for table users` despite correct RLS policies and `service_role` RLS bypass — see `docs/phases/phase2_context.md` for the full story.
+
 ---
 
 ## 5. Deliberate omissions (don't "fix" these without checking the immediately-previous phase's `docs/phases/phaseX_context.md` first — see `CLAUDE.md`)

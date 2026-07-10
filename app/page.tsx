@@ -1,10 +1,17 @@
-import { Wordmark } from "@/components/Wordmark";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
- * Placeholder root page — Phase 1 builds tokens and components only, no
- * screens (04_PHASE_PLAN.md). Real routing (redirect to /login or /entry
- * based on auth state) lands in Phase 2.
+ * Root route: redirects to /login or the role-appropriate landing
+ * page. middleware.ts already redirects most navigations before this
+ * ever renders; this is the fallback for a direct request to "/".
  */
-export default function Home() {
-  return <Wordmark />;
+export default async function Home() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  redirect(user.role === "admin" ? "/dashboard" : "/entry");
 }
