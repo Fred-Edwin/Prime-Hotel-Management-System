@@ -29,3 +29,15 @@ export async function signOut(): Promise<void> {
   const supabase = await createServerSupabaseClient();
   await supabase.auth.signOut();
 }
+
+/**
+ * Returns the current user's row if they're an admin, or null otherwise.
+ * Route handlers for admin-only resources (items, ingredients,
+ * delivery-locations, staff — see 00_ARCHITECTURE.md §5) must call this
+ * and reject with 403 themselves, not rely on middleware/RLS alone.
+ */
+export async function requireAdmin(): Promise<UserRow | null> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "admin") return null;
+  return user;
+}

@@ -1,0 +1,105 @@
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-sunken);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-brand-primary);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-index-sticky);
+}
+
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.staffName {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-surface-raised);
+  display: none;
+}
+
+.logoutButton {
+  min-height: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  color: var(--color-surface-raised);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  cursor: pointer;
+}
+
+.content {
+  flex: 1;
+  padding: var(--space-5);
+  padding-bottom: calc(var(--space-touch) + var(--space-6));
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.bottomNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--color-surface-raised);
+  border-top: 1px solid var(--color-border-default);
+  z-index: var(--z-index-sticky);
+}
+
+.navItem {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--space-touch);
+  padding: var(--space-2) 0;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.navItemActive {
+  color: var(--color-brand-primary);
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .staffName {
+    display: inline;
+  }
+
+  .bottomNav {
+    position: sticky;
+    bottom: auto;
+    order: -1;
+    justify-content: flex-start;
+    gap: var(--space-2);
+    padding: 0 var(--space-5);
+  }
+
+  .navItem {
+    flex: none;
+    padding: 0 var(--space-4);
+  }
+
+  .content {
+    padding-bottom: var(--space-5);
+  }
+}
