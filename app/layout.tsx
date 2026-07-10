@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope, IBM_Plex_Sans } from "next/font/google";
+import { Manrope, IBM_Plex_Sans, Fraunces } from "next/font/google";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -16,6 +16,15 @@ const ibmPlexSans = IBM_Plex_Sans({
   display: "swap",
 });
 
+// Login screen headline only — see docs/design/00_FOUNDATIONS.md §2.2's
+// scoped display-typeface exception. Never used inside a working screen.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["600"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Prime Hotel Management System",
   description: "Stock, sales, and profit tracking for Prime Hotel.",
@@ -27,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${ibmPlexSans.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${ibmPlexSans.variable} ${fraunces.variable}`}>
       <body>{children}</body>
     </html>
   );

@@ -14,6 +14,25 @@ Standard enterprise components are specified using this system's own tokens thro
 
 ### 4.1 Authentication — Name Select + PIN
 
+*Revised in Phase 2, after the original v0.1.0 spec (below the line) shipped and was judged too spartan in practice — the login screen read as unfinished, not restrained, with no visual anchor and no typographic moment of its own. `00_FOUNDATIONS.md` §1.2/§1.3/§2.2/§2.7 were amended in the same phase to carve out a narrow, explicitly-scoped exception for this one screen — see those sections for the full rationale. This is still the system's only screen with a display typeface, decorative icon use, or a boxed-digit input; nothing here licenses similar treatment elsewhere.*
+
+**Structure, top to bottom:**
+1. **Logo** — the Prime Hotel roundel mark, ~130px, centered, on the plain `color-surface-page` background (no aubergine band behind it).
+2. **Headline** — "Welcome back" in `display-lg` (Fraunces), the one sanctioned use of the display typeface in this system.
+3. **Subordinate line** — "Prime Hotel Management System" in `label`-weight Manrope, `color-text-secondary`.
+4. **Card** (`color-surface-raised`, `radius-lg`, `elevation-2`, per §4.10's content-card spec):
+   - **Staff name** — a custom-styled dropdown (§4.18, new), not a native `select`. A native select's open popup is OS/browser-rendered and can't be restyled to match the card, which read as inconsistent once the rest of the screen was designed. Lists staff names for lookup (see `docs/01_DATA_MODEL.md` for how a picked name resolves to a staff account server-side). Since staff use their own phones, this may default to "remember last selected staff member," with a manual change always available.
+   - **PIN** — a segmented **boxed-digit input** (§4.16, new), revealed once a name is selected. This reverses the original spec's "no segmented boxes, too POS-like" call — in practice a single masked text field was slower to visually self-check than a boxed pattern, and the boxed pattern is now judged worth the small increase in visual weight for this one high-frequency interaction.
+   - Primary button ("Sign in"), full-width, standard `btn-primary` (§4.2), enabled once all PIN digits are entered.
+5. **Footer** (§4.17, new) — sits outside/below the card, `color-surface-dark` background (the only other surface on this screen besides the plain page background and the white card), containing support contact links and a "Developed by Lobster Technologies" attribution line.
+
+**States:** standard input/select states apply (default, focus, error) per §4.3 and §4.16. Error state (wrong PIN) uses `color-border-error` + a `body-sm` error message below the PIN boxes — no modal, no shake on this control (motion-shake stays reserved for oversell, per §4.7's higher-stakes framing).
+
+**What's unchanged from the original spec:** no welcome illustration beyond the logo itself, no split-panel layout, no color outside the existing aubergine/gold/neutral palette. The exception is narrow — a headline and a footer — not a rebuild of the visual language.
+
+<details>
+<summary>Original v0.1.0 spec (superseded above, kept for history)</summary>
+
 No oversized POS-style component. This is built entirely from this system's standard input primitives — a dropdown/select and a compact PIN field — styled exactly like every other form control in this system, not a special "auth moment."
 
 **Structure:**
@@ -24,6 +43,8 @@ No oversized POS-style component. This is built entirely from this system's stan
 **States:** standard input states apply (default, focus, error). Error state (wrong PIN) uses `color-border-error` + a `body-sm` error message below the field — no modal, no shake on this particular control (motion-shake is reserved for oversell, a higher-stakes and more time-critical error).
 
 No welcome illustration, no split-panel brand moment, no serif headline. The login screen's only brand presence is the wordmark/logotype at the top, in Manrope, and the aubergine primary button.
+
+</details>
 
 ### 4.2 Buttons
 
@@ -152,3 +173,43 @@ A considered empty state is a plain-language invitation to act, not a blank page
 | Action (where applicable) | Standard primary or secondary button (§4.2) — e.g. "Add your first item" on an empty catalog. Omit entirely on screens where the empty state is expected/normal rather than actionable (e.g. a brand-new staff account's first day with no entries yet) |
 
 **Rule:** never reuse the oversell/error visual language (§4.7) for an empty state — an empty state is a normal, expected condition, not a failure, and should read calmly (`neutral` tones), not with any status color.
+
+### 4.16 PIN Input (boxed digit entry)
+
+*Added Phase 2, exclusively for the login screen (§4.1) — reverses the original spec's single-masked-field call. Not a general-purpose component; nowhere else in this system currently needs numeric-code entry.*
+
+**Structure:** N (4, matching the PIN length in `docs/01_DATA_MODEL.md`) individual boxes in a horizontal row, equal width via flex, `radius-md`, 1.5px `color-border-default` border. Each box shows one digit, `font-family-data` (Plex Sans), tabular numerals, `figure-md`-equivalent size, centered.
+
+| State | Spec |
+|---|---|
+| Empty | `color-border-default` border, no content |
+| Filled | Border shifts to `color-brand-primary`; digit is masked as a small centered dot rather than the literal numeral, consistent with this being a credential field |
+| Active (next box to receive input) | Border shifts to `color-brand-primary` at 2px width plus a soft focus ring (`0 0 0 3px` at 10% `color-brand-primary` opacity) |
+| Error | All boxes shift to `color-border-error`; `body-sm` error message below the row, same message-placement convention as §4.3/§4.7 |
+
+**Behavior:** a single visually-hidden numeric input (`inputmode="numeric"`, `pattern="[0-9]*"`) sits behind the boxes and receives all real keyboard/touch input — the boxes are a pure visual reflection of that input's value, not N separate focusable fields. This keeps autofill, paste, and mobile numeric-keyboard behavior working normally, which a truly-segmented multi-input implementation often breaks. Tapping anywhere on the box row focuses the hidden input. The primary "Sign in" button enables once the value reaches full length; pressing it (or optionally auto-submitting on the last digit, a product decision left open) submits the form.
+
+No `motion-shake` on individual digit entry — that motion stays reserved for oversell (§4.7). A failed sign-in attempt (wrong PIN) uses the plain Error state above, not a shake.
+
+### 4.17 Footer / Attribution Band
+
+*Added Phase 2, for the login screen (§4.1). Not yet used elsewhere, but reusable wherever a full-page (non-nav-shell) layout needs a closing edge.*
+
+A slim band at the bottom of the login screen — the one place besides the headline (§4.1) where this screen departs from the plain `color-surface-page` background used everywhere else on it.
+
+| Element | Spec |
+|---|---|
+| Background | `color-surface-dark` (aubergine), optionally a subtle gradient toward a deeper shade for depth — same surface color already used for the admin dashboard hero band (`02_PATTERNS_AND_CHECKLIST.md` §5), not a new color |
+| Support links | WhatsApp and email contact, each with a small line icon (§2.7's entry-surface exception) in `color-brand-accent` (gold — valid here, dark surface) at `body-sm`, text in `color-text-on-brand-muted` |
+| Attribution line | "Developed by **Lobster Technologies**" (linked), `caption` size, the company name in `color-brand-accent`, the rest in a dimmer on-dark neutral |
+| Placement | Sits at the true bottom of the viewport, always — this is a footer, it should read as the page's closing edge. Achieved by wrapping *only* the header+card block in a `flex: 1` container that vertically centers itself, with the footer as a sibling **outside** that wrapper, at the end of a `min-height: 100vh` flex column. (An earlier draft of this spec put `flex: 1`/centering on the whole screen including the footer, which on a short-content/tall-viewport combination left the footer stranded mid-page with a dead zone above and below it — corrected during Phase 2 build; see `docs/phases/phase2_context.md` if it exists, or the git history on `app/login/login.module.css`.) |
+
+### 4.18 Dropdown (custom listbox)
+
+*Added Phase 2, for the login screen's name picker (§4.1). A native `<select>` was tried first and reverted — its open popup is rendered by the OS/browser and can't be restyled, which looked inconsistent once the surrounding card had real design applied to it. This is a general-purpose replacement wherever a styled open-list matters more than the native control's zero-effort familiarity; a plain `select` (§4.3) remains valid for simple admin CRUD forms where the open-list appearance doesn't matter as much.*
+
+**Closed state:** looks like a standard input/select per §4.3 — label above, bordered trigger button, placeholder or selected value, trailing chevron that rotates 180° when open.
+
+**Open state:** an absolutely-positioned list directly below the trigger, `color-surface-raised` background, `radius-md`, `elevation-2`, `space-1` internal padding. Each option is a full-width row, `space-touch`-minimum height, `radius-sm` on hover/keyboard-focus (`color-surface-sunken` fill), and the currently-selected option shown in `color-brand-primary` medium weight.
+
+**Interaction:** click the trigger to open; click an option or press Enter/Space to select and close; Arrow Up/Down moves a keyboard-focus highlight through options while open; Escape or a click outside the component closes without changing the selection. Implements the standard `listbox`/`option` ARIA pattern (`role="listbox"`, `aria-expanded`, `aria-selected`) so it isn't a regression in accessibility versus the native control it replaces.

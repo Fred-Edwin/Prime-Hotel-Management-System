@@ -49,6 +49,8 @@
   /* Typography */
   --font-family-structural: var(--font-manrope), -apple-system, sans-serif;
   --font-family-data: var(--font-ibm-plex-sans), -apple-system, sans-serif;
+  /* Login screen headline only — see docs/design/00_FOUNDATIONS.md §2.2 */
+  --font-family-display: var(--font-fraunces), Georgia, serif;
 
   --font-size-heading-xl: 28px;  --line-height-heading-xl: 36px;
   --font-size-heading-lg: 22px;  --line-height-heading-lg: 30px;
@@ -63,6 +65,8 @@
   --font-size-label: 13px;       --line-height-label: 16px;
   --font-size-caption: 12px;     --line-height-caption: 16px;
   --font-size-overline: 11px;    --line-height-overline: 14px;
+  /* Login screen headline only — see docs/design/00_FOUNDATIONS.md §2.2 */
+  --font-size-display-lg: 32px;  --line-height-display-lg: 38px;
 
   --font-weight-regular: 400;
   --font-weight-medium: 500;

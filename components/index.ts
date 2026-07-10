@@ -12,3 +12,7 @@ export * from "./Toast";
 export * from "./EmptyState";
 export * from "./CategoryChips";
 export * from "./Wordmark";
+export * from "./PinInput";
+export * from "./Select";
+export * from "./Dropdown";
+export * from "./AppFooter";

@@ -1,15 +1,58 @@
-.page {
+.screen {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
   background: var(--color-surface-page);
 }
 
-.wordmark {
-  margin-bottom: var(--space-8);
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.header {
+  padding: var(--space-10) var(--space-6) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.logo {
+  width: 132px;
+  height: 132px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-elevation-2);
+}
+
+.headline {
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-display-lg);
+  line-height: var(--line-height-display-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-2);
+}
+
+.subline {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 var(--space-6) var(--space-10);
 }
 
 .card {
@@ -24,49 +67,8 @@
   gap: var(--space-5);
 }
 
-.nameList {
+.pinSection {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-}
-
-.nameButton {
-  width: 100%;
-  min-height: var(--space-touch);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  border: var(--border-width-default) solid var(--color-border-default);
-  background: var(--color-surface-raised);
-  color: var(--color-text-primary);
-  font-family: var(--font-family-structural);
-  font-size: 1rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.nameButton:hover {
-  background: var(--color-surface-sunken);
-}
-
-.nameButtonSelected {
-  border-color: var(--color-border-focus);
-  border-width: var(--border-width-focus);
-  background: var(--color-surface-sunken);
-}
-
-.backButton {
-  align-self: flex-start;
-  background: none;
-  border: none;
-  color: var(--color-text-link);
-  font-family: var(--font-family-structural);
-  font-size: 0.875rem;
-  cursor: pointer;
-  padding: 0;
-}
-
-.formError {
-  color: var(--color-status-error);
-  font-size: 0.875rem;
-  margin: 0;
+  gap: var(--space-5);
 }

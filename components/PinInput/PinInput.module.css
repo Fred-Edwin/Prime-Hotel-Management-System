@@ -1,0 +1,60 @@
+.field {
+  position: relative;
+}
+
+.boxes {
+  display: flex;
+  gap: var(--space-2);
+  cursor: text;
+}
+
+.box {
+  flex: 1;
+  aspect-ratio: 1;
+  min-height: var(--space-touch);
+  border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-raised);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.filled {
+  border-color: var(--color-brand-primary);
+}
+
+.active {
+  border-color: var(--color-brand-primary);
+  border-width: var(--border-width-focus);
+  box-shadow: 0 0 0 3px rgba(51, 22, 66, 0.1);
+}
+
+.error {
+  border-color: var(--color-border-error);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-primary);
+}
+
+.hiddenInput {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  width: 0;
+}
+
+.errorMessage {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  color: var(--color-status-error);
+}

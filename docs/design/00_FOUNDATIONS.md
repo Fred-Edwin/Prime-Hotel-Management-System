@@ -20,7 +20,7 @@ The philosophy here has two halves held in tension. The first half is **restrain
 
 1. **Legibility over elegance when they conflict.** If a beautifully restrained treatment makes a number harder to read at a glance on a mid-range Android phone in bright daylight, legibility wins. Every time.
 2. **One brand color, one accent color, everything else neutral.** Prime Hotel's deep aubergine and gold are spent deliberately, never as a rainbow of "on-brand" colors applied wherever something needs to stand out.
-3. **No display typeface.** This product carries its brand entirely through color, spacing, and restraint — not through a serif wordmark moment. One sans-serif family for structure, a second sans-serif family for data and numerals, weight and size doing the work a second typeface's *character* usually would.
+3. **No display typeface inside working screens — one narrow exception at the door.** Every interior screen (till entry, dashboard, catalog management) carries its brand entirely through color, spacing, and restraint, using only the two structural/data sans-serif families below — this is unchanged. **The login screen is the one deliberate exception** (added in Phase 2, see §2.2): a display serif is permitted there, and only there, for a single headline moment, because a login screen is a threshold a person crosses once per session, not a working surface they operate against — see §2.2's full rationale and the login pattern in `02_PATTERNS_AND_CHECKLIST.md` §5.
 4. **Flat until it has a reason not to be.** Elevation communicates state, never decorates.
 5. **Error-prevention is a design material.** This product explicitly must reject oversell attempts and make wastage, stock, and profit figures impossible to misread. Validation and warning states are treated with the same care as the primary path — not an afterthought bolted on later.
 6. **Role and cadence should be visually legible.** A cashier logging today's till sales and a canteen assistant reconciling last week's stock are doing different kinds of work at different rhythms — the interface should feel different enough to signal that, without needing separate design languages.
@@ -30,8 +30,8 @@ The philosophy here has two halves held in tension. The first half is **restrain
 
 This system is **not**:
 - A POS/kiosk aesthetic — no oversized number-pad tiles, no shared-device unlock-screen patterns. Staff use their own phones; login behaves like any personal-device login, not a shared-terminal one.
-- Illustrated or decorated — no linework motif, no background texture. Every visual detail earns its place through structure and type, not ornament.
-- Serif-anchored — this build carries no display typeface at all.
+- Illustrated or decorated **on interior/working screens** — no linework motif, no background texture on till entry, dashboard, or catalog screens. Every visual detail there earns its place through structure and type, not ornament. (The login screen carries one narrow exception — see §2.2 and §2.7.)
+- Serif-anchored on interior screens — no working screen carries a display typeface. (Login is the one exception — see §2.2.)
 - A dashboard-first product — while the admin profit view matters, most of this system's real usage is fast, repetitive, single-purpose data entry, and the design should never forget that its primary user is standing at a till, not sitting at a desk reviewing a report.
 
 ---
@@ -81,14 +81,17 @@ A cool, low-saturation neutral scale — deliberately not warm-leaning, because 
 
 ### 2.2 Typography
 
-No display serif in this build. Two sans-serif families carry the entire system — one for structure and UI, one for data and numerals — differentiated by role rather than character.
+Two sans-serif families carry every interior/working screen — one for structure and UI, one for data and numerals — differentiated by role rather than character. A third, display, family exists solely for the login screen's headline — see below.
 
 | Role | Typeface family | Usage |
 |---|---|---|
 | **Structural / UI sans** | **Manrope** — a geometric, slightly warm grotesque with distinct weight steps and a confident feel at heading size, without needing a serif to carry "premium" | Page titles, section headers, card titles, button text, nav, labels |
 | **Data / numeric sans** | **IBM Plex Sans** (or **Inter**, as a safe substitute) — a highly legible, tabular-figure-friendly workhorse | Body copy, table cells, form input text, all monetary and quantity figures, timestamps |
+| **Display (login only)** | **Fraunces** — a warm, high-contrast display serif with real optical weight at large sizes | The login screen's single headline ("Welcome back") only — see §1.2 principle 3 and the exception below. Never used inside a working screen. |
 
-**Why two families instead of one:** a single sans across every role is defensible, but at high-density numeric screens — a till entry grid with dozens of steppers and running totals — a small but real typographic contrast between "this is structure" (Manrope headings) and "this is data" (Plex Sans figures) helps a fast-moving user's eye separate the two without relying on color or weight alone.
+**Why two families instead of one (interior screens):** a single sans across every role is defensible, but at high-density numeric screens — a till entry grid with dozens of steppers and running totals — a small but real typographic contrast between "this is structure" (Manrope headings) and "this is data" (Plex Sans figures) helps a fast-moving user's eye separate the two without relying on color or weight alone.
+
+**Why a third family exists at all (login exception, added Phase 2):** the original build deliberately carried no display typeface anywhere, on the reasoning that this product's brand should live in restraint, not ornament. In practice, the login screen — visited once per session, not a working surface — read as *unfinished* rather than *restrained* with no typographic moment of its own: a floating card on a flat background with no hierarchy above it. Fraunces is scoped narrowly: one headline, one screen, never inside `(staff)` or `(admin)` route groups. If a future screen is tempted to reach for it, that's a sign the "no display typeface" rule is eroding and needs a deliberate conversation, not a silent precedent.
 
 **Numeral treatment:** All monetary and quantity figures use **tabular (lining) numerals** — critical for running totals and stock counts, where digits must align vertically as they update. If the chosen data font doesn't default to tabular figures, enable the `font-variant-numeric: tabular-nums` feature explicitly.
 
@@ -109,6 +112,7 @@ No display serif in this build. Two sans-serif families carry the entire system 
 | `label` | 13px / 16px | 500 | Manrope | Form field labels |
 | `caption` | 12px / 16px | 500 | Manrope, tracked +4% | Status text, small metadata |
 | `overline` | 11px / 14px | 700 | Manrope, tracked +8%, uppercase | Section eyebrows, category labels |
+| `display-lg` | 32px / 38px (38px / 44px ≥600px) | 600 | Fraunces | Login screen headline only — see §2.2's login exception. Never used elsewhere. |
 
 #### Rules
 
@@ -185,6 +189,8 @@ Thin-stroke line icons, rounded caps, 24×24px grid, 2px stroke weight. Recommen
 | Status icons | Paired with semantic colors (§2.1) — success/warning/error, never brand colors |
 | Badge treatment | 36×36px circle, sized for this product's dense mobile layouts, aubergine or gold fill, white icon — used sparingly, e.g. role indicator, delivery-order marker |
 
+**Entry/brand-surface exception (added Phase 2):** interior working screens keep icons strictly functional per the table above — no decorative use, per §1.3. The login screen alone may use icons in a lightly decorative capacity (e.g. a support-contact icon next to a WhatsApp/email link in the footer) provided they stay within this same thin-stroke line-icon language — no filled/color illustration, no separate icon style invented for that one screen. This does not reopen §1.3's "no illustration" rule for interior screens; it only acknowledges that the login screen, like its typography (§2.2), is allowed one narrow threshold treatment.
+
 No decorative icon badges used purely for visual rhythm — this product has no marketing-style surface where that pattern would apply.
 
 ---
@@ -245,6 +251,7 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
   /* Typography */
   --font-family-structural: "Manrope", -apple-system, sans-serif;
   --font-family-data: "IBM Plex Sans", "Inter", -apple-system, sans-serif;
+  --font-family-display: "Fraunces", Georgia, serif;  /* login screen headline ONLY — see §2.2 */
 
   --font-size-heading-xl: 28px;  --line-height-heading-xl: 36px;
   --font-size-heading-lg: 22px;  --line-height-heading-lg: 30px;
@@ -259,6 +266,7 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
   --font-size-label: 13px;       --line-height-label: 16px;
   --font-size-caption: 12px;     --line-height-caption: 16px;
   --font-size-overline: 11px;    --line-height-overline: 14px;
+  --font-size-display-lg: 32px;  --line-height-display-lg: 38px;  /* 38px/44px at >=600px, see 02_PATTERNS_AND_CHECKLIST.md §5 */
 
   --font-weight-regular: 400;
   --font-weight-medium: 500;

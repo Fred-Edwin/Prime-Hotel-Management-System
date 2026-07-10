@@ -1,0 +1,57 @@
+.footer {
+  background: linear-gradient(165deg, var(--color-surface-dark) 0%, var(--color-brand-primary-active) 100%);
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  margin-top: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.supportRow {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.supportLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-body-sm);
+  color: rgba(255, 255, 255, 0.68);
+  text-decoration: none;
+}
+
+.supportLink svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-brand-accent);
+  flex-shrink: 0;
+}
+
+.supportLink:hover {
+  color: var(--color-text-on-brand);
+}
+
+.attribution {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-caption);
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  margin: 0;
+}
+
+.attribution a {
+  color: var(--color-brand-accent);
+  text-decoration: none;
+  font-weight: var(--font-weight-bold);
+}
+
+.attribution a:hover {
+  text-decoration: underline;
+}
