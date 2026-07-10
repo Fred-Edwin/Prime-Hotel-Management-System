@@ -1,0 +1,18 @@
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-md);
+  line-height: var(--line-height-heading-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.onDark {
+  color: var(--color-text-on-brand);
+}
+
+.mark {
+  display: block;
+}

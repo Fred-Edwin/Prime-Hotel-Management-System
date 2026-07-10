@@ -1,0 +1,26 @@
+.toggle {
+  display: inline-flex;
+  padding: var(--space-1);
+  background: var(--neutral-100);
+  border-radius: var(--radius-full);
+  gap: var(--space-1);
+}
+
+.segment {
+  min-height: var(--space-touch);
+  padding: var(--space-1) var(--space-4);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
+}
+
+.active {
+  background: var(--color-brand-primary);
+  color: var(--color-text-on-brand);
+}

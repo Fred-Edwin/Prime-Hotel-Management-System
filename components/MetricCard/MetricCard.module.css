@@ -1,0 +1,58 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cardOnDark {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: transparent;
+}
+
+.label {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-overline);
+  line-height: var(--line-height-overline);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tracked-lg);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.labelOnDark {
+  color: var(--color-brand-accent);
+}
+
+.value {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-figure-lg);
+  line-height: var(--line-height-figure-lg);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-brand-primary);
+}
+
+.valueOnDark {
+  color: var(--color-text-on-brand);
+}
+
+.trend {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.trendUp {
+  color: var(--color-status-success);
+}
+
+.trendDown {
+  color: var(--color-status-error);
+}
+
+.trendNeutral {
+  color: var(--color-text-secondary);
+}
