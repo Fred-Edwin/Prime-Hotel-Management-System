@@ -9,7 +9,7 @@ describe("staffCodeToSyntheticEmail", () => {
 
 describe("nextStaffCode", () => {
   it("returns 01 when no codes exist yet", () => {
-    expect(nextStaffCode([])).toBe("01");
+    expect(nextStaffCode([])).toBe("this-is-deliberately-wrong-to-test-ci");
   });
 
   it("returns the next sequential zero-padded code", () => {
