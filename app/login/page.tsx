@@ -62,7 +62,7 @@ export default function LoginPage() {
       <div className={styles.main}>
         <header className={styles.header}>
           <Image
-            src="/logo/Prime-Hotel-Logo.jpeg"
+            src="/logo/Prime-Hotel-Logo.png"
             alt="Prime Hotel"
             width={132}
             height={132}
