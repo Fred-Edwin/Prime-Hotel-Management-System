@@ -29,7 +29,6 @@ The philosophy here has two halves held in tension. The first half is **restrain
 ### 1.3 Non-goals
 
 This system is **not**:
-- A POS/kiosk aesthetic — no oversized number-pad tiles, no shared-device unlock-screen patterns. Staff use their own phones; login behaves like any personal-device login, not a shared-terminal one.
 - Illustrated or decorated **on interior/working screens** — no linework motif, no background texture on till entry, dashboard, or catalog screens. Every visual detail there earns its place through structure and type, not ornament. (The login screen carries one narrow exception — see §2.2 and §2.7.)
 - Serif-anchored on interior screens — no working screen carries a display typeface. (Login is the one exception — see §2.2.)
 - A dashboard-first product — while the admin profit view matters, most of this system's real usage is fast, repetitive, single-purpose data entry, and the design should never forget that its primary user is standing at a till, not sitting at a desk reviewing a report.

@@ -1,0 +1,196 @@
+.page {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-surface-page);
+}
+
+/* ---------- SIDEBAR ---------- */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--color-surface-raised);
+  border-right: var(--border-width-default) solid var(--color-border-default);
+  padding: var(--space-6) var(--space-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.sidebarHeading {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-heading-sm);
+  color: var(--color-brand-primary);
+  margin: 0;
+}
+
+.sidebarSubtitle {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-placeholder);
+  margin: calc(var(--space-2) * -1) 0 0;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.navLink {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.navLink:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-primary);
+}
+
+/* ---------- MAIN CONTENT ---------- */
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-10) var(--space-10) var(--space-16);
+  max-width: 1280px;
+}
+
+.pageHeading {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-heading-xl);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-2);
+}
+
+.pageIntro {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-lg);
+  color: var(--color-text-secondary);
+  max-width: 640px;
+  margin: 0 0 var(--space-10);
+}
+
+.section {
+  margin-bottom: var(--space-16);
+  padding-top: var(--space-6);
+  scroll-margin-top: var(--space-6);
+}
+
+.sectionHeading {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-heading-lg);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-1);
+}
+
+.sectionDescription {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-6);
+  max-width: 640px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-6);
+}
+
+.tile {
+  background: var(--color-surface-raised);
+  border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tileWide {
+  grid-column: 1 / -1;
+}
+
+.tileLabel {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-overline);
+  letter-spacing: var(--letter-spacing-tracked-lg);
+  text-transform: uppercase;
+  color: var(--color-text-placeholder);
+  margin: 0;
+}
+
+.tileBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.darkSurface {
+  background: var(--color-surface-dark);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  width: 100%;
+}
+
+.swatchRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 84px;
+}
+
+.swatchColor {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  border: var(--border-width-default) solid var(--color-border-default);
+}
+
+.swatchLabel {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.typeSample {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.typeSampleLabel {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-placeholder);
+}

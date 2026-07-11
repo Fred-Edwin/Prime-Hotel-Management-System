@@ -2,7 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/supabase/types";
 
+// Unauthenticated-only: signed-in users get redirected away to their
+// role landing page (doesn't make sense to see the login screen while
+// already logged in).
 const PUBLIC_PATHS = ["/login"];
+
+// Always accessible, regardless of auth state — dev-only, no business
+// data, not part of the product's own navigation. See
+// app/style-guide/page.tsx.
+const ALWAYS_ACCESSIBLE_PATHS = ["/style-guide"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -34,6 +42,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
+  const isAlwaysAccessible = ALWAYS_ACCESSIBLE_PATHS.includes(pathname);
+
+  if (isAlwaysAccessible) {
+    return response;
+  }
 
   if (!authUser) {
     if (!isPublicPath) {
