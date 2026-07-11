@@ -88,3 +88,57 @@ export const staffCreateSchema = z.object({
 });
 
 export type StaffCreateInput = z.infer<typeof staffCreateSchema>;
+
+/**
+ * Shared non-negative quantity field for stock/ingredient entry rows —
+ * same rationale as nonNegativeAmount, but for quantities rather than money.
+ */
+const nonNegativeQuantity = z
+  .number({ error: "Enter a valid number" })
+  .nonnegative("Must be 0 or greater");
+
+/**
+ * One item's till/added/sent/wastage line on the daily restaurant entry
+ * screen — see docs/01_DATA_MODEL.md §2 `stock_entries`, §3.4 (till_quantity_sold
+ * is the only field this route writes; quantity_sold is server-derived).
+ */
+export const stockEntryLineSchema = z.object({
+  item_id: z.string().uuid(),
+  till_quantity_sold: nonNegativeQuantity,
+  added_stock: nonNegativeQuantity,
+  sent_out: nonNegativeQuantity,
+  wastage: nonNegativeQuantity,
+  wastage_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type StockEntryLineInput = z.infer<typeof stockEntryLineSchema>;
+
+/** Batch save payload for POST /api/stock-entries — one save per day's sheet. */
+export const stockEntriesSaveSchema = z.object({
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  lines: z.array(stockEntryLineSchema).min(1, "No items to save"),
+});
+
+export type StockEntriesSaveInput = z.infer<typeof stockEntriesSaveSchema>;
+
+/**
+ * One ingredient's received/used/wastage line on the store manager's
+ * ingredient entry screen — see docs/01_DATA_MODEL.md §2 `ingredient_entries`.
+ */
+export const ingredientEntryLineSchema = z.object({
+  ingredient_id: z.string().uuid(),
+  received: nonNegativeQuantity,
+  quantity_used: nonNegativeQuantity,
+  wastage: nonNegativeQuantity,
+  wastage_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type IngredientEntryLineInput = z.infer<typeof ingredientEntryLineSchema>;
+
+/** Batch save payload for POST /api/ingredient-entries. */
+export const ingredientEntriesSaveSchema = z.object({
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  lines: z.array(ingredientEntryLineSchema).min(1, "No ingredients to save"),
+});
+
+export type IngredientEntriesSaveInput = z.infer<typeof ingredientEntriesSaveSchema>;

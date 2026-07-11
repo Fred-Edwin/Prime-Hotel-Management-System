@@ -1,0 +1,131 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-bottom: var(--space-8);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.title {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.dateLabel {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.chipsRow {
+  overflow-x: auto;
+}
+
+.loading {
+  padding: var(--space-8) 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+}
+
+.itemList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.itemRow {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.itemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.itemName {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.itemMeta {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stepperRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.storeManagerFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.primaryField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.secondaryField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  opacity: 0.85;
+}
+
+.fieldLabel {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.wastageToggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--color-brand-primary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  min-height: var(--space-touch);
+}
+
+.wastageFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-default);
+}
+
+.wastageStepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

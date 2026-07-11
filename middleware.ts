@@ -50,6 +50,7 @@ export async function middleware(request: NextRequest) {
 
   const isAdmin = (profile as { role: string } | null)?.role === "admin";
   const isAdminRoute = ADMIN_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  const isStaffRoute = STAFF_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   if (isPublicPath) {
     const destination = isAdmin ? "/dashboard" : "/entry";
@@ -58,6 +59,10 @@ export async function middleware(request: NextRequest) {
 
   if (isAdminRoute && !isAdmin) {
     return NextResponse.redirect(new URL("/entry", request.url));
+  }
+
+  if (isStaffRoute && isAdmin) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return response;
@@ -70,6 +75,8 @@ const ADMIN_ROUTE_PREFIXES = [
   "/delivery-locations",
   "/staff",
 ];
+
+const STAFF_ROUTE_PREFIXES = ["/entry", "/store", "/expenses", "/orders", "/summary"];
 
 export const config = {
   matcher: [
