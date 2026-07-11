@@ -94,3 +94,24 @@ export function isIngredientEntryOversold(params: {
   const { openingStock, received, quantityUsed, wastage } = params;
   return quantityUsed + wastage > openingStock + received;
 }
+
+/**
+ * Canteen's weekly entry_date convention (docs/01_DATA_MODEL.md §3.1,
+ * 04_PHASE_PLAN.md Phase 5): entry_date is always the Monday of the
+ * current ISO week, computed from the given date — never client-typed.
+ * Sunday counts as the end of the same week, not the start of a new one.
+ */
+export function weekStartMonday(date: Date): string {
+  const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = utc.getUTCDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  utc.setUTCDate(utc.getUTCDate() + diffToMonday);
+  return utc.toISOString().slice(0, 10);
+}
+
+/** The Sunday that closes the week started by weekStartMonday's output. */
+export function weekEndSunday(weekStartISO: string): string {
+  const start = new Date(`${weekStartISO}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() + 6);
+  return start.toISOString().slice(0, 10);
+}

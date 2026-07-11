@@ -478,6 +478,49 @@ export type Database = {
         }
         Returns: undefined
       }
+      save_canteen_stock_entry: {
+        Args: {
+          p_added_stock_input: number
+          p_buying_price_snapshot: number
+          p_created_by: string
+          p_entry_date: string
+          p_is_canteen_supplied: boolean
+          p_item_id: string
+          p_selling_price_snapshot: number
+          p_till_quantity_sold: number
+          p_wastage: number
+          p_wastage_note?: string
+        }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       save_ingredient_entry: {
         Args: {
           p_buying_price_snapshot: number

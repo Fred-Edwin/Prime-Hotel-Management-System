@@ -142,3 +142,44 @@ export const ingredientEntriesSaveSchema = z.object({
 });
 
 export type IngredientEntriesSaveInput = z.infer<typeof ingredientEntriesSaveSchema>;
+
+/**
+ * One item's line on the canteen weekly reconciliation screen — see
+ * docs/01_DATA_MODEL.md §3.1. No sent_out (canteen never forwards stock).
+ * added_stock is only accepted from the client for canteen_independent
+ * items; the route ignores it for canteen_supplied items and derives the
+ * value server-side via canteen_supplied_total() instead (never trusted
+ * from the client, same principle as opening_stock).
+ */
+export const canteenStockEntryLineSchema = z.object({
+  item_id: z.string().uuid(),
+  till_quantity_sold: nonNegativeQuantity,
+  added_stock: nonNegativeQuantity,
+  wastage: nonNegativeQuantity,
+  wastage_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type CanteenStockEntryLineInput = z.infer<typeof canteenStockEntryLineSchema>;
+
+/** Batch save payload for POST /api/stock-entries when called by canteen staff. */
+export const canteenStockEntriesSaveSchema = z.object({
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  lines: z.array(canteenStockEntryLineSchema).min(1, "No items to save"),
+});
+
+export type CanteenStockEntriesSaveInput = z.infer<typeof canteenStockEntriesSaveSchema>;
+
+export const expenseCategorySchema = z.enum(["electricity", "gas", "charcoal", "other"]);
+
+/**
+ * Expense log entry — see docs/01_DATA_MODEL.md §2 `expenses`. Submitted
+ * one at a time (not a batch sheet like stock_entries), scoped server-side
+ * to the caller's own location — see app/api/expenses/route.ts.
+ */
+export const expenseSchema = z.object({
+  category: expenseCategorySchema,
+  amount: nonNegativeAmount,
+  note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type ExpenseInput = z.infer<typeof expenseSchema>;

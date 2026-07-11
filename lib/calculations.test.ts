@@ -5,6 +5,8 @@ import {
   isIngredientEntryOversold,
   isStockEntryOversold,
   totalStock,
+  weekEndSunday,
+  weekStartMonday,
 } from "./calculations";
 
 describe("totalStock", () => {
@@ -112,5 +114,34 @@ describe("isIngredientEntryOversold", () => {
         wastage: 1,
       }),
     ).toBe(false);
+  });
+});
+
+describe("weekStartMonday", () => {
+  it("returns the same date when given a Monday", () => {
+    expect(weekStartMonday(new Date("2026-07-06T12:00:00Z"))).toBe("2026-07-06");
+  });
+
+  it("returns the prior Monday for a mid-week date", () => {
+    expect(weekStartMonday(new Date("2026-07-09T08:00:00Z"))).toBe("2026-07-06");
+  });
+
+  it("treats Sunday as the end of the same week, not a new one", () => {
+    expect(weekStartMonday(new Date("2026-07-12T23:00:00Z"))).toBe("2026-07-06");
+  });
+
+  it("correctly carries a week across a month boundary", () => {
+    // 2026-07-27 is a Monday; the week containing 2026-07-30 (Thursday) starts there.
+    expect(weekStartMonday(new Date("2026-07-30T00:00:00Z"))).toBe("2026-07-27");
+  });
+});
+
+describe("weekEndSunday", () => {
+  it("returns the Sunday six days after a Monday week start", () => {
+    expect(weekEndSunday("2026-07-06")).toBe("2026-07-12");
+  });
+
+  it("correctly crosses a month boundary", () => {
+    expect(weekEndSunday("2026-07-27")).toBe("2026-08-02");
   });
 });
