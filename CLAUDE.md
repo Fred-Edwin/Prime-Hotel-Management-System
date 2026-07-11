@@ -69,11 +69,31 @@ Phase 1 of the build (`docs/04_PHASE_PLAN.md`) implements this system as CSS cus
 - Run the `02_PATTERNS_AND_CHECKLIST.md` §6 review checklist before considering any new screen done.
 - If a screen needs a UI pattern the design system doesn't cover, **flag it explicitly** in that phase's context file as a gap for a human design decision — do not silently invent a new pattern and call it consistent.
 
+### Building a real screen (Phases 3 onward — not Phase 1's token/component layer)
+
+Whenever a phase involves designing and building an actual screen (not the reusable component library itself), work through it in this order:
+
+1. **Adopt the mindset of the relevant domain expert for that specific screen** before writing any UI code — not just an engineer translating `docs/SCREENS.md` into JSX. Pick the expert lens that actually fits: e.g., a POS/retail UX specialist for the till entry screen (`/entry`), a data-visualization/reporting specialist for the admin dashboard (`/dashboard`), a forms/CRUD specialist for the catalog management screens (`/items`, `/ingredients`). State which lens you're using in your plan-back to the human before you start.
+2. **Implement the screen** using that expert judgment — composition, information hierarchy, and interaction sequencing — while staying strictly within the design system's tokens/components (this step doesn't loosen the conformance rules above; it's about *how* those components get assembled into a screen, not license to deviate from them).
+3. **Self-review the result against `02_PATTERNS_AND_CHECKLIST.md` §6** — both the aesthetic/philosophy checks and the functional/product-critical checks — as that expert would critique it, not just a mechanical pass/fail.
+4. **Recommend improvements where you see a real opportunity**, distinct from the "flag it explicitly" design-system-gap rule above: that rule covers patterns the system *doesn't* cover; this is for things the system *already covers* but where a genuinely better screen-level decision exists (e.g., a clearer information hierarchy, a better default sort order, a more forgiving error-recovery flow). **Raise these directly to the human in conversation before moving on** — as explicit, numbered suggestions, asking whether to apply them now or defer — not just noted in the phase context file where they're easy to miss. **Do not silently build them.** Once the human responds, record the decision (applied / deferred / rejected, and why) in that phase's context file for the record — the context file documents the outcome of the conversation, it doesn't substitute for having it.
+
+### Verifying layout/visual fixes — don't guess, look
+
+A real incident during Phase 4 (see `docs/phases/phase4_context.md`): a sticky/fixed-positioning bug (a running-total bar not staying pinned to the viewport) was "fixed" three times based on reasoning about CSS box-model behavior from the source alone, reported as done each time, and was still broken on live testing all three times. The actual defect — a wrapper `<div>` whose CSS class existed but was never applied in the component's JSX — would have been visible in under a minute of real DOM inspection at any point. Each failed round cost a full edit → claim-fixed → human re-tests → still-broken cycle.
+
+**The rule this produced:** for any layout, positioning, or visual bug — not just when a fix has already failed once — verify against the actual rendered page before claiming it's fixed, not against a mental model of what the CSS/markup *should* do:
+- Use the `verify` or `run` skill, a headless browser (Playwright is available in this environment — install it into the scratchpad directory if it isn't already present, not into the project's own `package.json`), or ask the human for real devtools output (computed styles, `getBoundingClientRect()`, a screenshot).
+- If a first attempt at a visual fix doesn't hold up, the next move is to **inspect why**, not to add another layer of complexity on top of an unconfirmed diagnosis. Escalating solution complexity (e.g., `sticky` → `fixed` with a hand-computed offset → a whole new state-management layer) without new diagnostic information is a sign to stop and look, not to try harder.
+- This applies beyond CSS: any claim of the form "this should now work" that's cheap to actually verify and expensive to get wrong — a build passing, an API returning the right shape, a redirect firing — should be verified, not asserted, before reporting it to the human as done.
+
 ---
 
 ## Stack, one line each
 
 Next.js 14 (App Router, TypeScript strict) · CSS Modules (no Tailwind) · Supabase (Postgres + Auth + RLS) · Vercel hosting · Zod validation · pnpm.
+
+The GitHub CLI (`gh`) is available and authenticated — use it directly for GitHub operations (PRs, issues, CI run status) rather than assuming it's unavailable.
 
 ---
 
@@ -86,6 +106,7 @@ prime-hotel-management-system/
 ├── CLAUDE.md
 ├── docs/
 │   ├── PRD.md                      # Product requirements — read once per engagement
+│   ├── SCREENS.md                  # Full screen/route inventory — who sees each screen, which phase builds it
 │   ├── 00_ARCHITECTURE.md          # Stack rationale, auth model, environments, concurrency/orders commitments
 │   ├── 01_DATA_MODEL.md            # Single source of truth for the database schema + calculations
 │   ├── 04_PHASE_PLAN.md            # Build sequence, phase specs, gating checklist
@@ -158,6 +179,7 @@ prime-hotel-management-system/
 | Doc | Read when... |
 |---|---|
 | `docs/PRD.md` | You need the business "why" — user journeys, success criteria, non-goals |
+| `docs/SCREENS.md` | You need the full list of screens/routes, who sees each one, and which phase builds it |
 | `docs/00_ARCHITECTURE.md` | You need stack rationale, auth model detail, environment/hosting setup, or the concurrency/orders architectural commitments |
 | `docs/01_DATA_MODEL.md` | You're touching the database — full SQL schema, RLS policies, calculation formulas, the §3.4 concurrency mechanism |
 | `docs/04_PHASE_PLAN.md` | You need the whole build sequence, or the detailed spec/acceptance criteria for the phase you're on |
@@ -207,6 +229,7 @@ A session starting Phase N reads `docs/phases/phase{N-1}_context.md` — not the
 - **Never edit a previous phase's context file.** If something from an earlier phase turns out to be wrong, note the correction in the current phase's file — the record should read like a diary, not a wiki.
 - **A phase is not done until its context file exists and its gating checklist is honestly filled in.** Don't write "Complete" if a checklist item actually failed — write "Partial" or "Blocked" and say exactly what's missing.
 - **If a phase's acceptance criteria genuinely can't be met** (a dependency doesn't exist, a prior phase left something broken), stop and report — log it as "Blocked," don't work around it silently.
+- **At the end of each phase, push the code to the GitHub `main` branch** (commit the phase's changes, including its `docs/phases/phaseX_context.md`, then `git push origin main`) and confirm the CI run is green (`gh run list --branch main --limit 1`) before considering the phase done.
 
 ---
 

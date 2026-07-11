@@ -20,6 +20,9 @@ import {
   PinKeypad,
   Select,
   Dropdown,
+  Icon,
+  SearchBar,
+  type IconName,
 } from "@/components";
 import styles from "./style-guide.module.css";
 
@@ -38,6 +41,39 @@ const NAV_SECTIONS = [
   { id: "overlays", label: "Modal & Toast" },
   { id: "empty", label: "Empty State" },
   { id: "wordmark", label: "Wordmark" },
+  { id: "icons", label: "Icons" },
+  { id: "bottomnav", label: "Bottom Nav" },
+  { id: "search", label: "Search Bar" },
+];
+
+const ALL_ICONS: { name: IconName; label: string }[] = [
+  { name: "entry", label: "Entry" },
+  { name: "store", label: "Store" },
+  { name: "expenses", label: "Expenses" },
+  { name: "orders", label: "Orders" },
+  { name: "summary", label: "Summary" },
+  { name: "dashboard", label: "Dashboard" },
+  { name: "items", label: "Items" },
+  { name: "ingredients", label: "Ingredients" },
+  { name: "delivery", label: "Delivery" },
+  { name: "staff", label: "Staff" },
+  { name: "search", label: "Search" },
+  { name: "close", label: "Close" },
+];
+
+const STAFF_NAV_PREVIEW: { icon: IconName; label: string }[] = [
+  { icon: "entry", label: "Entry" },
+  { icon: "store", label: "Store" },
+  { icon: "expenses", label: "Expenses" },
+  { icon: "summary", label: "Summary" },
+];
+
+const ADMIN_NAV_PREVIEW: { icon: IconName; label: string }[] = [
+  { icon: "dashboard", label: "Dashboard" },
+  { icon: "items", label: "Items" },
+  { icon: "ingredients", label: "Ingredients" },
+  { icon: "delivery", label: "Delivery" },
+  { icon: "staff", label: "Staff" },
 ];
 
 /**
@@ -58,6 +94,8 @@ export default function StyleGuidePage() {
   const [toastVisible, setToastVisible] = useState(false);
   const [dropdownValue, setDropdownValue] = useState("");
   const [selectValue, setSelectValue] = useState("");
+  const [searchValue, setSearchValue] = useState("");
+  const [activeNavItem, setActiveNavItem] = useState("Entry");
 
   return (
     <div className={styles.page}>
@@ -384,6 +422,78 @@ export default function StyleGuidePage() {
               <p className={styles.tileLabel}>Dark surface</p>
               <Wordmark onDark />
             </div>
+          </div>
+        </section>
+
+        <section id="icons" className={styles.section}>
+          <h2 className={styles.sectionHeading}>Icons</h2>
+          <p className={styles.sectionDescription}>
+            Components §4.21 — hand-authored line icons, Foundations §2.7&apos;s spec (24×24
+            grid, ~2px stroke, rounded caps), used by the bottom nav and Search Bar.
+          </p>
+          <div className={styles.tile} style={{ gridColumn: "1 / -1" }}>
+            <div className={styles.iconGrid}>
+              {ALL_ICONS.map((icon) => (
+                <div key={icon.name} className={styles.iconTile}>
+                  <Icon name={icon.name} size={24} />
+                  <span className={styles.iconLabel}>{icon.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="bottomnav" className={styles.section}>
+          <h2 className={styles.sectionHeading}>Bottom Nav</h2>
+          <p className={styles.sectionDescription}>
+            Components §4.12 — icon above caption label, `neutral-700` inactive /
+            `color-brand-primary` active. Rendered in isolation here; see{" "}
+            <code>app/(staff)/StaffShell.tsx</code> and <code>app/(admin)/AdminShell.tsx</code>{" "}
+            for the real fixed-to-viewport implementation.
+          </p>
+          <div className={styles.grid}>
+            <div className={styles.tile}>
+              <p className={styles.tileLabel}>Staff (Entry / Store / Expenses / Summary)</p>
+              <nav className={styles.navPreview}>
+                {STAFF_NAV_PREVIEW.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className={[
+                      styles.navPreviewItem,
+                      activeNavItem === item.label ? styles.navPreviewItemActive : "",
+                    ].join(" ")}
+                    onClick={() => setActiveNavItem(item.label)}
+                  >
+                    <Icon name={item.icon} size={22} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+            <div className={styles.tile}>
+              <p className={styles.tileLabel}>Admin (Dashboard / Items / Ingredients / Delivery / Staff)</p>
+              <nav className={styles.navPreview}>
+                {ADMIN_NAV_PREVIEW.map((item) => (
+                  <button key={item.label} type="button" className={styles.navPreviewItem}>
+                    <Icon name={item.icon} size={22} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
+        </section>
+
+        <section id="search" className={styles.section}>
+          <h2 className={styles.sectionHeading}>Search Bar</h2>
+          <p className={styles.sectionDescription}>
+            Components §4.20 — filter-as-you-type for long lists, used on <code>/entry</code> and{" "}
+            <code>/store</code>. Built on Input&apos;s (§4.3) border/focus token language, leading
+            search glyph, trailing clear affordance once there&apos;s a value.
+          </p>
+          <div className={styles.tile} style={{ maxWidth: 360 }}>
+            <SearchBar value={searchValue} onChange={setSearchValue} placeholder="Search items…" />
           </div>
         </section>
       </main>

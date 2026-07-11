@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Stepper } from "@/components/Stepper";
 import { TillStrip } from "@/components/TillStrip";
 import { Input } from "@/components/Input";
+import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import type { Database } from "@/lib/supabase/types";
 import styles from "../entry/entry.module.css";
 
@@ -32,6 +34,7 @@ export function StoreClient() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [savedEntries, setSavedEntries] = useState<Record<string, IngredientEntryRow>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
@@ -96,6 +99,12 @@ export function StoreClient() {
     setLines((prev) => ({ ...prev, [ingredientId]: { ...(prev[ingredientId] ?? emptyLine()), ...patch } }));
   }
 
+  const visibleIngredients = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return ingredients;
+    return ingredients.filter((ingredient) => ingredient.name.toLowerCase().includes(term));
+  }, [ingredients, searchTerm]);
+
   const itemCount = useMemo(
     () => Object.values(lines).reduce((sum, line) => sum + line.received, 0),
     [lines],
@@ -147,6 +156,18 @@ export function StoreClient() {
     setToast({ message: "Today's ingredient entries saved", status: "success" });
   }
 
+  useTillStripSlot(
+    !loading && ingredients.length > 0 ? (
+      <TillStrip
+        itemCount={itemCount}
+        totalValueLabel={`KES ${totalValue.toFixed(2)} used`}
+        onSave={handleSave}
+        saving={saving}
+      />
+    ) : null,
+    `${loading}:${ingredients.length}:${itemCount}:${totalValue}:${saving}`,
+  );
+
   if (loading) {
     return <p className={styles.loading}>Loading today&apos;s ingredients…</p>;
   }
@@ -168,8 +189,14 @@ export function StoreClient() {
         <p className={styles.dateLabel}>{entryDate}</p>
       </div>
 
+      <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search ingredients…" />
+
+      {visibleIngredients.length === 0 && (
+        <p className={styles.noResults}>No ingredients match &ldquo;{searchTerm}&rdquo;.</p>
+      )}
+
       <ul className={styles.itemList}>
-        {ingredients.map((ingredient) => {
+        {visibleIngredients.map((ingredient) => {
           const line = lines[ingredient.id] ?? emptyLine();
           const opening = openingStockFor(ingredient.id);
           const remaining = remainingFor(ingredient.id);
@@ -239,13 +266,6 @@ export function StoreClient() {
           );
         })}
       </ul>
-
-      <TillStrip
-        itemCount={itemCount}
-        totalValueLabel={`KES ${totalValue.toFixed(2)} used`}
-        onSave={handleSave}
-        saving={saving}
-      />
 
       {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
     </div>

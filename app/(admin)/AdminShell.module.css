@@ -45,7 +45,9 @@
 .content {
   flex: 1;
   padding: var(--space-5);
-  padding-bottom: calc(var(--space-touch) + var(--space-6));
+  /* Clears .bottomNav's height (space-touch + space-4, see .navItem
+     below) plus a comfortable margin. */
+  padding-bottom: calc(var(--space-touch) + var(--space-4) + var(--space-6));
   max-width: 1080px;
   width: 100%;
   margin: 0 auto;
@@ -65,18 +67,26 @@
 .navItem {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: var(--space-touch);
+  gap: var(--space-1);
+  min-height: calc(var(--space-touch) + var(--space-4));
   padding: var(--space-2) 0;
+  color: var(--neutral-700);
+  text-decoration: none;
+}
+
+.navLabel {
   font-family: var(--font-family-structural);
   font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
-  text-decoration: none;
 }
 
 .navItemActive {
   color: var(--color-brand-primary);
+}
+
+.navItemActive .navLabel {
   font-weight: 600;
 }
 
@@ -96,6 +106,8 @@
 
   .navItem {
     flex: none;
+    flex-direction: row;
+    min-height: var(--space-touch);
     padding: 0 var(--space-4);
   }
 

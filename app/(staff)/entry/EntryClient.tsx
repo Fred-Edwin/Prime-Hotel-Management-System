@@ -6,8 +6,10 @@ import { TillStrip } from "@/components/TillStrip";
 import { CategoryChips } from "@/components/CategoryChips";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { Input } from "@/components/Input";
+import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./entry.module.css";
 
@@ -49,6 +51,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   const [savedEntries, setSavedEntries] = useState<Record<string, StockEntryRow>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
@@ -105,10 +108,13 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     return Array.from(present).map((c) => ({ value: c, label: CATEGORY_LABELS[c] }));
   }, [items]);
 
-  const visibleItems = useMemo(
-    () => (activeCategory === "all" ? items : items.filter((item) => item.category === activeCategory)),
-    [items, activeCategory],
-  );
+  const visibleItems = useMemo(() => {
+    const byCategory =
+      activeCategory === "all" ? items : items.filter((item) => item.category === activeCategory);
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return byCategory;
+    return byCategory.filter((item) => item.name.toLowerCase().includes(term));
+  }, [items, activeCategory, searchTerm]);
 
   function openingStockFor(itemId: string): number {
     return savedEntries[itemId]?.opening_stock ?? 0;
@@ -178,6 +184,18 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     setToast({ message: "Today's entries saved", status: "success" });
   }
 
+  useTillStripSlot(
+    !loading && items.length > 0 ? (
+      <TillStrip
+        itemCount={itemCount}
+        totalValueLabel={`KES ${totalValue.toFixed(2)}`}
+        onSave={handleSave}
+        saving={saving}
+      />
+    ) : null,
+    `${loading}:${items.length}:${itemCount}:${totalValue}:${saving}`,
+  );
+
   if (loading) {
     return <p className={styles.loading}>Loading today&apos;s items…</p>;
   }
@@ -199,6 +217,8 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
         <p className={styles.dateLabel}>{entryDate}</p>
       </div>
 
+      <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search items…" />
+
       {categories.length > 1 && (
         <div className={styles.chipsRow}>
           <CategoryChips
@@ -207,6 +227,10 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
             onChange={setActiveCategory}
           />
         </div>
+      )}
+
+      {visibleItems.length === 0 && (
+        <p className={styles.noResults}>No items match &ldquo;{searchTerm}&rdquo;.</p>
       )}
 
       <ul className={styles.itemList}>
@@ -224,6 +248,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                   <p className={styles.itemName}>{item.name}</p>
                   <p className={styles.itemMeta}>
                     KES {item.selling_price.toFixed(2)} · Opening: {opening}
+                    {!isStoreManager && ` · Available: ${remaining}`}
                     {isLow && <LowStockIndicator variant="dot" />}
                   </p>
                 </div>
@@ -265,7 +290,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                   <Stepper
                     value={line.tillQuantitySold}
                     onChange={(next) => updateLine(item.id, { tillQuantitySold: next })}
-                    max={opening - line.wastage}
+                    max={opening + line.addedStock - line.sentOut - line.wastage}
                     limitMessage={`Only ${remaining} left`}
                     aria-label={`${item.name} quantity sold`}
                   />
@@ -302,13 +327,6 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
           );
         })}
       </ul>
-
-      <TillStrip
-        itemCount={itemCount}
-        totalValueLabel={`KES ${totalValue.toFixed(2)}`}
-        onSave={handleSave}
-        saving={saving}
-      />
 
       {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
     </div>

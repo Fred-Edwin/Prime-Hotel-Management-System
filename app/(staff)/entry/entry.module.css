@@ -2,7 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  padding-bottom: var(--space-8);
 }
 
 .header {
@@ -26,6 +25,14 @@
 
 .chipsRow {
   overflow-x: auto;
+}
+
+.noResults {
+  padding: var(--space-6) 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
 }
 
 .loading {

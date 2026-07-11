@@ -147,7 +147,7 @@ Density: `comfortable` (48px row height) as default for admin ledger views; `com
 Sized to this product's actual surface count — a handful of screens, not a sprawling multi-section app:
 
 - **Top bar**: `color-surface-raised` or `color-brand-primary` (admin dashboard uses the dark variant for visual distinction from entry screens — see `02_PATTERNS_AND_CHECKLIST.md` §5), wordmark/logotype left, role/location badge (§4.6) and staff name right.
-- **Bottom tab bar** (mobile primary navigation): 3–4 destinations depending on role (e.g. staff: Entry, Deliveries, Expenses; admin adds Dashboard, Catalog). Icons from the standard set (Foundations §2.7), `neutral-700` inactive / `color-brand-primary` active, label in `caption` below each icon.
+- **Bottom tab bar** (mobile primary navigation): 3–4 destinations depending on role (staff: Entry, Store [store-manager-flagged only], Expenses, Summary; admin: Dashboard, Items, Ingredients, Delivery, Staff). Icon (§4.21) above a `caption`-size label per destination, `neutral-700` inactive / `color-brand-primary` active (label goes semibold on active too, not just the icon). Each tap target is a minimum of `space-touch` (44px) tall on top of the icon+label content — in practice the two-line stack needs `space-touch + space-4` (60px) to sit comfortably, not the bare 44px minimum; a bottom nav sized to exactly 44px is a conformance gap, not a valid minimal implementation (found and fixed in Phase 4 — see `docs/phases/phase4_context.md`). Fixed to the viewport bottom on mobile widths (`position: fixed`, not `sticky` — nesting sticky elements inside other sticky/fixed ancestors is fragile, see the same context file), reflows to a horizontal top-aligned strip at `768px+` per the existing admin desktop-nav placeholder (icon beside label, not stacked, at that width).
 - No sidebar — this product's mobile-first, single-role-per-session nature doesn't call for a persistent desktop sidebar; one may be added later as a desktop-only enhancement for the admin dashboard if needed, not specified here.
 
 ### 4.13 Modals
@@ -227,3 +227,42 @@ A slim band at the bottom of the login screen — the one place besides the head
 **Error state:** on a rejected PIN, the dots shift to `color-status-error` fill/border and a `body-sm` error message appears below the display row — same message-placement convention as every other form error in this system (§4.3, §4.7). No `motion-shake`, consistent with §4.1/§4.16's existing rule that shake stays reserved for oversell.
 
 **Why this superseded the boxed-digit pattern:** in review, the boxed `PinInput` still relied on the device's own numeric keyboard appearing and disappearing, which shifts the whole page layout on mobile and reintroduces exactly the "typing on a small phone keyboard" friction a PIN-entry moment should avoid. A fully custom on-screen keypad removes the device keyboard from the interaction entirely, at the cost of the "no POS aesthetic" principle — judged worth it for a control used many times a day, in the same spirit as the Stepper being allowed a purpose-built interaction rather than a generic number input.
+
+### 4.20 Search Bar
+
+*Added Phase 4, for filtering long item/ingredient lists on `/entry` and `/store` — flagged as a real gap during that phase's review (the category-chip filter alone doesn't help once a category itself has many rows) rather than silently improvised. Built on Input's (§4.3) token language, not a new visual system.*
+
+**Structure:** a single-line text field, no label-above (search fields conventionally don't need one — the leading icon plus placeholder carry that context), leading search icon (§4.21) at `color-text-secondary`, placeholder text ("Search items…"), trailing clear ("×", §4.21 `close`) button that only renders once the field has a value.
+
+| State | Spec |
+|---|---|
+| Default | Same as Input default (§4.3): white fill, `color-border-default` 1px border, `radius-md` |
+| Focus | Border shifts to `color-border-focus` (2px), same as Input |
+| Has value | Trailing clear button appears, `space-touch`-minimum tap target, clears the field and returns focus to filtering the full list |
+
+**Behavior:** filters the visible list client-side, case-insensitive substring match against item/ingredient name, live as the user types — no submit step, no network round trip (the full location-scoped catalog is already fetched for the entry screen; search never re-queries the server). Combines with the existing category-chip filter (§CategoryChips) as an *and* — narrowing by category and by search term both apply together, not one replacing the other. When the combined filter produces zero rows, the screen shows a plain-language empty message ("No items match…"), not a blank list — same "never a blank page" principle as §4.15's Empty States, though this is a lighter-weight inline message rather than the full Empty State treatment, since it's a transient filter state, not a genuinely empty catalog.
+
+### 4.21 Icon set
+
+*Added Phase 4, replacing Foundations §2.7's abstract "recommended set: Phosphor or Lucide" with a concrete, small, hand-authored vocabulary — flagged as a real gap when the bottom nav (§4.12) needed real icons and none existed anywhere in the codebase. A full icon package was deliberately not installed for ~10 glyphs; disproportionate against `CLAUDE.md`'s lean-dependency, no-recurring-cost posture for a product this size. Matches Foundations §2.7's stroke spec exactly (24×24 viewBox, ~1.8-2px stroke, `stroke="currentColor"`, rounded caps/joins, no fill) and follows the same hand-drawn-inline-SVG pattern already established by the login footer's WhatsApp/email glyphs and the Dropdown's chevron, rather than inventing a new authoring approach.*
+
+**Component:** `components/Icon` — `<Icon name="entry" size={24} />`. Color is inherited via `currentColor`, so an icon recolors for free wherever it's placed (inactive/active nav states, dark-surface contexts) with no separate color prop.
+
+**Current vocabulary** (12 glyphs, one per current consumer — extend deliberately, don't grow this speculatively ahead of an actual screen needing a new glyph):
+
+| Name | Used for |
+|---|---|
+| `entry` | Staff bottom nav — Entry |
+| `store` | Staff bottom nav — Store |
+| `expenses` | Staff bottom nav — Expenses |
+| `orders` | Reserved for Phase 6's Orders nav item (not yet wired into any shell) |
+| `summary` | Staff bottom nav — Summary |
+| `dashboard` | Admin bottom nav — Dashboard |
+| `items` | Admin bottom nav — Items |
+| `ingredients` | Admin bottom nav — Ingredients |
+| `delivery` | Admin bottom nav — Delivery Locations |
+| `staff` | Admin bottom nav — Staff |
+| `search` | Search Bar (§4.20) leading glyph |
+| `close` | Search Bar (§4.20) clear-field button |
+
+**Sizing convention:** 22px in the bottom nav (slightly under the full 24px grid so the icon+caption stack doesn't feel top-heavy against the small label beneath it), 18px inside Search Bar (a smaller, denser control), 24px (the native grid size) everywhere else including the style guide's reference grid — call sites choose via the `size` prop, the underlying paths don't change.

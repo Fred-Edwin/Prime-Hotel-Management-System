@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { stockEntriesSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { describeSaveError } from "@/lib/errors";
 
 /**
  * GET /api/stock-entries?date=YYYY-MM-DD
@@ -110,11 +111,8 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      const isOversell = error.message.includes("oversell");
-      return NextResponse.json(
-        { error: isOversell ? "That's more than the available stock for this item." : error.message },
-        { status: isOversell ? 409 : 500 },
-      );
+      const { message, status } = describeSaveError(error);
+      return NextResponse.json({ error: message }, { status });
     }
 
     savedRows.push(data);

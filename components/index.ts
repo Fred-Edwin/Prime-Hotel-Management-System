@@ -17,3 +17,5 @@ export * from "./PinKeypad";
 export * from "./Select";
 export * from "./Dropdown";
 export * from "./AppFooter";
+export * from "./Icon";
+export * from "./SearchBar";

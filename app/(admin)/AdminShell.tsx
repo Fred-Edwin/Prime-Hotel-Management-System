@@ -4,14 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
 import { RoleLocationBadge } from "@/components/RoleLocationBadge";
+import { Icon, type IconName } from "@/components/Icon";
 import styles from "./AdminShell.module.css";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/items", label: "Items" },
-  { href: "/ingredients", label: "Ingredients" },
-  { href: "/delivery-locations", label: "Delivery" },
-  { href: "/staff", label: "Staff" },
+const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/items", label: "Items", icon: "items" },
+  { href: "/ingredients", label: "Ingredients", icon: "ingredients" },
+  { href: "/delivery-locations", label: "Delivery", icon: "delivery" },
+  { href: "/staff", label: "Staff", icon: "staff" },
 ];
 
 export function AdminShell({
@@ -54,7 +55,8 @@ export function AdminShell({
               href={item.href}
               className={[styles.navItem, active ? styles.navItemActive : ""].join(" ")}
             >
-              {item.label}
+              <Icon name={item.icon} size={22} />
+              <span className={styles.navLabel}>{item.label}</span>
             </Link>
           );
         })}

@@ -46,38 +46,74 @@
 .content {
   flex: 1;
   padding: var(--space-5);
-  padding-bottom: calc(var(--space-touch) + var(--space-6));
+  /* Generous fixed clearance for .bottomDock below — the dock's real
+     height varies (till strip present or not, its content), so this is
+     deliberately oversized rather than pixel-matched to it. Any content
+     that would collide with the dock is exceptionally rare (a handful
+     of trailing item rows at most) and errs toward too much whitespace
+     over a clipped control. */
+  padding-bottom: calc(var(--space-touch) * 3);
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
 }
 
-.bottomNav {
+/*
+ * Wraps the till-strip slot + bottom nav together as ONE fixed-position
+ * flex column, so the browser's layout stacks them correctly regardless
+ * of either one's actual height — no hand-computed pixel offset between
+ * two independently-positioned elements. Stays fixed at all widths,
+ * including 768px+ (see the media query below — only .bottomNav's own
+ * internal row/column layout changes there, not .bottomDock's position).
+ */
+.bottomDock {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   display: flex;
+  flex-direction: column;
+  z-index: var(--z-index-sticky);
+}
+
+.tillStripSlot {
+  width: 100%;
+}
+
+.tillStripSlot > * {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.bottomNav {
+  display: flex;
   background: var(--color-surface-raised);
   border-top: 1px solid var(--color-border-default);
-  z-index: var(--z-index-sticky);
 }
 
 .navItem {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: var(--space-touch);
+  gap: var(--space-1);
+  min-height: calc(var(--space-touch) + var(--space-4));
   padding: var(--space-2) 0;
+  color: var(--neutral-700);
+  text-decoration: none;
+}
+
+.navLabel {
   font-family: var(--font-family-structural);
   font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
-  text-decoration: none;
 }
 
 .navItemActive {
   color: var(--color-brand-primary);
+}
+
+.navItemActive .navLabel {
   font-weight: 600;
 }
 
@@ -86,10 +122,12 @@
     display: inline;
   }
 
+  /* Desktop/admin-width staff view stays mobile-first per CLAUDE.md (no
+     dedicated desktop staff design), so the dock stays fixed to the
+     viewport bottom exactly as at mobile widths — only the nav's own
+     internal layout (row instead of column) changes, matching the
+     pattern already established for the admin shell's nav reflow. */
   .bottomNav {
-    position: sticky;
-    bottom: auto;
-    order: -1;
     justify-content: flex-start;
     gap: var(--space-2);
     padding: 0 var(--space-5);
@@ -97,10 +135,8 @@
 
   .navItem {
     flex: none;
+    flex-direction: row;
+    min-height: var(--space-touch);
     padding: 0 var(--space-4);
-  }
-
-  .content {
-    padding-bottom: var(--space-5);
   }
 }

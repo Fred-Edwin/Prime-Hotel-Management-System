@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ingredientEntriesSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { describeSaveError } from "@/lib/errors";
 
 function requireStoreManager(user: Awaited<ReturnType<typeof getCurrentUser>>) {
   return !!user && user.role === "staff" && user.location === "restaurant" && user.is_store_manager;
@@ -92,15 +93,8 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      const isOversell = error.message.includes("oversell");
-      return NextResponse.json(
-        {
-          error: isOversell
-            ? "That's more than the available stock for this ingredient."
-            : error.message,
-        },
-        { status: isOversell ? 409 : 500 },
-      );
+      const { message, status } = describeSaveError(error);
+      return NextResponse.json({ error: message }, { status });
     }
 
     savedRows.push(data);
