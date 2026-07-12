@@ -19,3 +19,4 @@ export * from "./Dropdown";
 export * from "./AppFooter";
 export * from "./Icon";
 export * from "./SearchBar";
+export * from "./ItemEntryCard";

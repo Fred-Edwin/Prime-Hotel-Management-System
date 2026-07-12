@@ -101,8 +101,38 @@ CSS class is actually applied in the rendered DOM) — not to add another
 layer of complexity on an unconfirmed diagnosis. See CLAUDE.md's full
 incident writeup for why this matters.
 
+## Durable reference screenshots — `docs/screenshots/`
+
+Ad-hoc verification screenshots (checking a specific fix, a bounding box,
+an in-progress iteration) are scratch — save them wherever's convenient
+and delete them once you're done with them in that session.
+
+But once a screen or component reaches a state worth showing the human
+or a client — a redesign just finished, a phase's screens are done, a
+"here's the current state of X" moment — save a clean copy into
+`docs/screenshots/<route-or-component>/<variant>.png` (checked into the
+repo, not gitignored). This is a durable gallery, not a scratch dir:
+
+- Organize by route/component, one subfolder each (e.g.
+  `docs/screenshots/entry/`, `docs/screenshots/style-guide/`).
+- Name files by the role/variant they show, not by date or session
+  (e.g. `restaurant-cashier.png`, `restaurant-store-manager.png`,
+  `canteen-weekly.png`) — a filename should tell you what's in it
+  without opening it.
+- Use `--full` for screens with scrollable content so the whole thing is
+  visible in one image, matching how it was captured for `/entry` in
+  Phase 5's design pass.
+- Overwrite in place when a screen changes — this reflects *current*
+  state, not a history of every iteration. Git history is the changelog
+  if older versions are ever needed.
+- Don't create a durable copy for every ad-hoc check — only when the
+  screen is at a point worth persisting (the human asked to see it, or
+  it just reached a done/reviewed state).
+
 ## Cleaning up
 
 Kill the dev server / stop the local Supabase stack when you're done
 verifying if nothing else in the session needs them running — but this
-is optional housekeeping, not required for the skill itself.
+is optional housekeeping, not required for the skill itself. Do **not**
+delete anything under `docs/screenshots/` as part of this cleanup — only
+scratch screenshots outside that folder are fair game.

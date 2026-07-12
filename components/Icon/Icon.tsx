@@ -22,7 +22,8 @@ export type IconName =
   | "delivery"
   | "staff"
   | "search"
-  | "close";
+  | "close"
+  | "wastage";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -114,6 +115,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
   close: (
     <>
       <path d="m6 6 12 12M18 6 6 18" />
+    </>
+  ),
+  // Wastage — a bin, the item-card wastage entry affordance
+  wastage: (
+    <>
+      <path d="M5 7h14" />
+      <path d="M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2" />
+      <path d="M6.5 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7" />
+      <path d="M10.5 11v6M13.5 11v6" />
     </>
   ),
 };

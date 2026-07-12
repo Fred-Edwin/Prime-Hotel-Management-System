@@ -73,6 +73,11 @@
   right: 0;
   display: flex;
   flex-direction: column;
+  /* Visible seam between the till strip and the nav below it — both are
+     color-surface-raised with their own border-top, so with zero gap they
+     read as one continuous white block instead of two stacked surfaces. */
+  gap: 1px;
+  background: var(--color-surface-sunken);
   z-index: var(--z-index-sticky);
 }
 

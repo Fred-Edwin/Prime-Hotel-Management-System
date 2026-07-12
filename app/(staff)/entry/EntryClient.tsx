@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Stepper } from "@/components/Stepper";
 import { TillStrip } from "@/components/TillStrip";
 import { CategoryChips } from "@/components/CategoryChips";
-import { LowStockIndicator } from "@/components/LowStockIndicator";
-import { Input } from "@/components/Input";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./entry.module.css";
@@ -55,7 +53,6 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
-  const [wastageOpenFor, setWastageOpenFor] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,92 +235,64 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
           const line = lines[item.id] ?? emptyLine();
           const opening = openingStockFor(item.id);
           const remaining = remainingStockFor(item.id);
-          const isLow = remaining <= LOW_STOCK_THRESHOLD;
-          const wastageOpen = wastageOpenFor === item.id || line.wastage > 0;
+          const isLow = !isStoreManager && remaining <= LOW_STOCK_THRESHOLD;
+
+          const fields: ItemEntryField[] = isStoreManager
+            ? [
+                {
+                  key: "addedStock",
+                  label: "Added stock",
+                  stepper: { value: line.addedStock, onChange: (next) => updateLine(item.id, { addedStock: next }) },
+                },
+                {
+                  key: "sentOut",
+                  label: "Sent to canteen",
+                  stepper: {
+                    value: line.sentOut,
+                    onChange: (next) => updateLine(item.id, { sentOut: next }),
+                    max: opening + line.addedStock - line.tillQuantitySold - line.wastage,
+                    limitMessage: `Only ${remaining} left`,
+                  },
+                },
+                {
+                  key: "quantitySold",
+                  label: "Quantity sold",
+                  stepper: {
+                    value: line.tillQuantitySold,
+                    onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
+                    max: opening + line.addedStock - line.sentOut - line.wastage,
+                    limitMessage: `Only ${remaining} left`,
+                  },
+                },
+              ]
+            : [
+                {
+                  key: "quantitySold",
+                  label: "quantity sold",
+                  stepper: {
+                    value: line.tillQuantitySold,
+                    onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
+                    max: opening + line.addedStock - line.sentOut - line.wastage,
+                    limitMessage: `Only ${remaining} left`,
+                  },
+                },
+              ];
 
           return (
-            <li key={item.id} className={styles.itemRow}>
-              <div className={styles.itemHeader}>
-                <div>
-                  <p className={styles.itemName}>{item.name}</p>
-                  <p className={styles.itemMeta}>
-                    KES {item.selling_price.toFixed(2)} · Opening: {opening}
-                    {!isStoreManager && ` · Available: ${remaining}`}
-                    {isLow && <LowStockIndicator variant="dot" />}
-                  </p>
-                </div>
-              </div>
-
-              {isStoreManager ? (
-                <div className={styles.storeManagerFields}>
-                  <div className={styles.primaryField}>
-                    <span className={styles.fieldLabel}>Added stock</span>
-                    <Stepper
-                      value={line.addedStock}
-                      onChange={(next) => updateLine(item.id, { addedStock: next })}
-                      aria-label={`${item.name} added stock`}
-                    />
-                  </div>
-                  <div className={styles.primaryField}>
-                    <span className={styles.fieldLabel}>Sent to canteen</span>
-                    <Stepper
-                      value={line.sentOut}
-                      onChange={(next) => updateLine(item.id, { sentOut: next })}
-                      max={opening + line.addedStock - line.tillQuantitySold - line.wastage}
-                      limitMessage={`Only ${remaining} left`}
-                      aria-label={`${item.name} sent to canteen`}
-                    />
-                  </div>
-                  <div className={styles.secondaryField}>
-                    <span className={styles.fieldLabel}>Quantity sold</span>
-                    <Stepper
-                      value={line.tillQuantitySold}
-                      onChange={(next) => updateLine(item.id, { tillQuantitySold: next })}
-                      max={opening + line.addedStock - line.sentOut - line.wastage}
-                      limitMessage={`Only ${remaining} left`}
-                      aria-label={`${item.name} quantity sold`}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className={styles.stepperRow}>
-                  <Stepper
-                    value={line.tillQuantitySold}
-                    onChange={(next) => updateLine(item.id, { tillQuantitySold: next })}
-                    max={opening + line.addedStock - line.sentOut - line.wastage}
-                    limitMessage={`Only ${remaining} left`}
-                    aria-label={`${item.name} quantity sold`}
-                  />
-                </div>
-              )}
-
-              <button
-                type="button"
-                className={styles.wastageToggle}
-                onClick={() => setWastageOpenFor(wastageOpenFor === item.id ? null : item.id)}
-              >
-                {wastageOpen ? "Hide wastage" : "Log wastage"}
-              </button>
-
-              {wastageOpen && (
-                <div className={styles.wastageFields}>
-                  <div className={styles.wastageStepper}>
-                    <span className={styles.fieldLabel}>Wastage</span>
-                    <Stepper
-                      value={line.wastage}
-                      onChange={(next) => updateLine(item.id, { wastage: next })}
-                      aria-label={`${item.name} wastage`}
-                    />
-                  </div>
-                  <Input
-                    label="Note (optional)"
-                    value={line.wastageNote}
-                    onChange={(e) => updateLine(item.id, { wastageNote: e.target.value })}
-                    placeholder="e.g. left out overnight"
-                  />
-                </div>
-              )}
-            </li>
+            <ItemEntryCard
+              key={item.id}
+              name={item.name}
+              priceLabel={`KES ${item.selling_price.toFixed(2)}`}
+              openingLabel={isStoreManager ? `Opening: ${opening}` : undefined}
+              availableLabel={isStoreManager ? undefined : `Available: ${remaining}`}
+              isLow={isLow}
+              fields={fields}
+              wastageValue={line.wastage}
+              onWastageChange={(next) => updateLine(item.id, { wastage: next })}
+              wastageMax={opening + line.addedStock - line.tillQuantitySold - line.sentOut}
+              wastageNote={line.wastageNote}
+              onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}
+            />
           );
         })}
       </ul>

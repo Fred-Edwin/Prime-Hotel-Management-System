@@ -22,6 +22,7 @@ import {
   Dropdown,
   Icon,
   SearchBar,
+  ItemEntryCard,
   type IconName,
 } from "@/components";
 import styles from "./style-guide.module.css";
@@ -34,6 +35,7 @@ const NAV_SECTIONS = [
   { id: "dropdown", label: "Dropdown" },
   { id: "pin", label: "PIN entry (comparison)" },
   { id: "stepper", label: "Stepper" },
+  { id: "itementrycard", label: "Item Entry Card" },
   { id: "tillstrip", label: "Till Strip" },
   { id: "cards", label: "Cards & Metrics" },
   { id: "badges", label: "Badges & Indicators" },
@@ -96,6 +98,17 @@ export default function StyleGuidePage() {
   const [selectValue, setSelectValue] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [activeNavItem, setActiveNavItem] = useState("Entry");
+  const [cashierSold, setCashierSold] = useState(0);
+  const [cashierWastage, setCashierWastage] = useState(0);
+  const [cashierNote, setCashierNote] = useState("");
+  const [storeAdded, setStoreAdded] = useState(0);
+  const [storeSentOut, setStoreSentOut] = useState(0);
+  const [storeSold, setStoreSold] = useState(0);
+  const [storeWastage, setStoreWastage] = useState(2);
+  const [storeNote, setStoreNote] = useState("left out overnight");
+  const [canteenSold, setCanteenSold] = useState(0);
+  const [canteenWastage, setCanteenWastage] = useState(0);
+  const [canteenNote, setCanteenNote] = useState("");
 
   return (
     <div className={styles.page}>
@@ -279,6 +292,90 @@ export default function StyleGuidePage() {
           <p className={styles.sectionDescription}>Components §4.4 — the core till/reconciliation control.</p>
           <div className={styles.tile} style={{ gridColumn: "1 / -1" }}>
             <Stepper value={stepperValue} onChange={setStepperValue} max={5} aria-label="Chapati quantity" />
+          </div>
+        </section>
+
+        <section id="itementrycard" className={styles.section}>
+          <h2 className={styles.sectionHeading}>Item Entry Card</h2>
+          <p className={styles.sectionDescription}>
+            Redesigned for density (see the entry-screen critique) — name, price, and the primary
+            stepper share one row instead of stacking with dead space; wastage collapses to a
+            small icon-button instead of a full-width row.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-6)" }}>
+            <div className={styles.tile} style={{ width: 360, flex: "0 0 auto" }}>
+              <p className={styles.tileLabel}>Cashier — single stepper (restaurant daily / non-store-manager)</p>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <ItemEntryCard
+                  name="African Tea"
+                  priceLabel="KES 30.00"
+                  openingLabel="Opening: 12"
+                  availableLabel={`Available: ${12 - cashierSold - cashierWastage}`}
+                  isLow={12 - cashierSold - cashierWastage <= 5}
+                  fields={[
+                    {
+                      key: "sold",
+                      label: "quantity sold",
+                      stepper: { value: cashierSold, onChange: setCashierSold, max: 12 - cashierWastage },
+                    },
+                  ]}
+                  wastageValue={cashierWastage}
+                  onWastageChange={setCashierWastage}
+                  wastageMax={12 - cashierSold}
+                  wastageNote={cashierNote}
+                  onWastageNoteChange={setCashierNote}
+                />
+              </ul>
+            </div>
+            <div className={styles.tile} style={{ width: 360, flex: "0 0 auto" }}>
+              <p className={styles.tileLabel}>Store manager — three fields (Added / Sent to canteen / Sold)</p>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <ItemEntryCard
+                  name="Samosa"
+                  priceLabel="KES 35.00"
+                  openingLabel="Opening: 20"
+                  fields={[
+                    { key: "added", label: "Added stock", stepper: { value: storeAdded, onChange: setStoreAdded } },
+                    {
+                      key: "sentOut",
+                      label: "Sent to canteen",
+                      stepper: { value: storeSentOut, onChange: setStoreSentOut, max: 20 + storeAdded - storeSold - storeWastage },
+                    },
+                    {
+                      key: "sold",
+                      label: "Quantity sold",
+                      stepper: { value: storeSold, onChange: setStoreSold, max: 20 + storeAdded - storeSentOut - storeWastage },
+                    },
+                  ]}
+                  wastageValue={storeWastage}
+                  onWastageChange={setStoreWastage}
+                  wastageNote={storeNote}
+                  onWastageNoteChange={setStoreNote}
+                />
+              </ul>
+            </div>
+            <div className={styles.tile} style={{ width: 360, flex: "0 0 auto" }}>
+              <p className={styles.tileLabel}>Canteen — read-only supplied total (canteen_supplied item)</p>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <ItemEntryCard
+                  name="Chapati"
+                  priceLabel="KES 25.00"
+                  openingLabel="Opening: 8"
+                  fields={[
+                    { key: "added", label: "Added stock (from restaurant)", readOnlyValue: 15 },
+                    {
+                      key: "sold",
+                      label: "Quantity sold",
+                      stepper: { value: canteenSold, onChange: setCanteenSold, max: 8 + 15 - canteenWastage },
+                    },
+                  ]}
+                  wastageValue={canteenWastage}
+                  onWastageChange={setCanteenWastage}
+                  wastageNote={canteenNote}
+                  onWastageNoteChange={setCanteenNote}
+                />
+              </ul>
+            </div>
           </div>
         </section>
 
