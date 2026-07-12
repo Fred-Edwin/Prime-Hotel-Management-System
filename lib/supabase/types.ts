@@ -533,6 +533,14 @@ export type Database = {
         }
       }
       is_admin: { Args: never; Returns: boolean }
+      lock_stock_entry_row: {
+        Args: {
+          p_entry_date: string
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: undefined
+      }
       login_roster: {
         Args: never
         Returns: {
