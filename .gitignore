@@ -46,5 +46,10 @@ supabase/.branches
 supabase/.temp
 supabase/.env
 
-# claude code local runtime state
-.claude/
+# claude code local runtime state — but keep committed project skills and
+# the verify-tooling *config* (not its downloaded output, see the nested
+# .claude/tools/.gitignore) so future sessions inherit them from the repo
+# instead of re-deriving/reinstalling from scratch every time.
+.claude/*
+!.claude/skills/
+!.claude/tools/

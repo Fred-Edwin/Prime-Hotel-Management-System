@@ -4,6 +4,7 @@ import {
   calculateStockEntryTotals,
   isIngredientEntryOversold,
   isStockEntryOversold,
+  orderTotal,
   totalStock,
   weekEndSunday,
   weekStartMonday,
@@ -143,5 +144,27 @@ describe("weekEndSunday", () => {
 
   it("correctly crosses a month boundary", () => {
     expect(weekEndSunday("2026-07-27")).toBe("2026-08-02");
+  });
+});
+
+describe("orderTotal", () => {
+  it("sums item lines plus the delivery fee snapshot", () => {
+    const total = orderTotal({
+      items: [
+        { quantity: 2, sellingPriceSnapshot: 50 },
+        { quantity: 1, sellingPriceSnapshot: 120 },
+      ],
+      deliveryFeeSnapshot: 100,
+    });
+    // (2*50) + (1*120) + 100 = 320
+    expect(total).toBe(320);
+  });
+
+  it("is unaffected by fee for pickup orders (fee snapshot 0)", () => {
+    const total = orderTotal({
+      items: [{ quantity: 3, sellingPriceSnapshot: 40 }],
+      deliveryFeeSnapshot: 0,
+    });
+    expect(total).toBe(120);
   });
 });

@@ -115,3 +115,19 @@ export function weekEndSunday(weekStartISO: string): string {
   start.setUTCDate(start.getUTCDate() + 6);
   return start.toISOString().slice(0, 10);
 }
+
+/**
+ * Order total (docs/01_DATA_MODEL.md §6): sum(order_items.quantity *
+ * selling_price_snapshot) + delivery_fee_snapshot. delivery_fee_snapshot
+ * is 0 for pickup orders (schema default) — same formula either way.
+ */
+export function orderTotal(params: {
+  items: { quantity: number; sellingPriceSnapshot: number }[];
+  deliveryFeeSnapshot: number;
+}): number {
+  const itemsTotal = params.items.reduce(
+    (sum, item) => sum + item.quantity * item.sellingPriceSnapshot,
+    0,
+  );
+  return itemsTotal + params.deliveryFeeSnapshot;
+}

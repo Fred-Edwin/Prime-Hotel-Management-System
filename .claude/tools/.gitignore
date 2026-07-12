@@ -1,0 +1,8 @@
+# The playwright/ subfolder's package.json (pinning the version) is
+# committed so every session installs the same thing — but its
+# node_modules and lockfile are large, environment-specific, and
+# trivially reinstallable (`pnpm install` from this directory), so they
+# stay ignored like any other dependency tree.
+playwright/node_modules/
+playwright/pnpm-lock.yaml
+playwright/package-lock.json

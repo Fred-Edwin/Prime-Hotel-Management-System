@@ -455,9 +455,82 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_order_to_stock_entry: {
+        Args: {
+          p_buying_price_snapshot: number
+          p_created_by: string
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_order_date: string
+          p_selling_price_snapshot: number
+        }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       canteen_supplied_total: {
         Args: { p_item_id: string; p_week_end: string; p_week_start: string }
         Returns: number
+      }
+      create_order: {
+        Args: {
+          p_buying_prices: Json
+          p_client_request_id: string
+          p_created_by: string
+          p_customer_name: string
+          p_delivery_fee_snapshot?: number
+          p_delivery_location_id?: string
+          p_fulfillment_type: Database["public"]["Enums"]["order_fulfillment_type"]
+          p_items: Json
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_order_date: string
+          p_total_amount: number
+        }
+        Returns: {
+          client_request_id: string
+          created_at: string
+          created_by: string
+          customer_name: string
+          delivery_fee_snapshot: number
+          delivery_location_id: string | null
+          fulfillment_type: Database["public"]["Enums"]["order_fulfillment_type"]
+          id: string
+          location: Database["public"]["Enums"]["location_type"]
+          order_date: string
+          total_amount: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       is_admin: { Args: never; Returns: boolean }
       login_roster: {

@@ -1,0 +1,8 @@
+{
+  "name": "prime-hotel-verify-tools",
+  "private": true,
+  "description": "Persistent headless-browser install for the verify skill — not a project dependency, never imported by app code. See .claude/skills/verify/SKILL.md.",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

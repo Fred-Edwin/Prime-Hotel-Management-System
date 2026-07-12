@@ -10,6 +10,7 @@ import styles from "./StaffShell.module.css";
 
 const BASE_NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   { href: "/entry", label: "Entry", icon: "entry" },
+  { href: "/orders", label: "Orders", icon: "orders" },
   { href: "/expenses", label: "Expenses", icon: "expenses" },
   { href: "/summary", label: "Summary", icon: "summary" },
 ];

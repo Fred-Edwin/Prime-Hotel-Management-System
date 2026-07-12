@@ -169,6 +169,37 @@ export const canteenStockEntriesSaveSchema = z.object({
 
 export type CanteenStockEntriesSaveInput = z.infer<typeof canteenStockEntriesSaveSchema>;
 
+/**
+ * Delivery/pickup order — see docs/01_DATA_MODEL.md §6, §3.4. `items` mirrors
+ * a receipt's line items; `client_request_id` is the idempotency key the
+ * client generates once per submit attempt and resends unchanged on retry
+ * (§3.4 "Duplicate-submission protection"). Per-item location eligibility
+ * (an item must be sellable at the order's own location) is checked in the
+ * route handler against real item data, not here — this schema only
+ * validates shape.
+ */
+export const orderItemLineSchema = z.object({
+  item_id: z.string().uuid(),
+  quantity: z.number({ error: "Enter a valid quantity" }).positive("Quantity must be greater than 0"),
+});
+
+export const orderFulfillmentTypeSchema = z.enum(["delivery", "pickup"]);
+
+export const orderSchema = z
+  .object({
+    customer_name: z.string().trim().min(1, "Customer name is required"),
+    fulfillment_type: orderFulfillmentTypeSchema,
+    delivery_location_id: z.string().uuid().nullable(),
+    items: z.array(orderItemLineSchema).min(1, "Add at least one item"),
+    client_request_id: z.string().uuid(),
+  })
+  .refine((data) => data.fulfillment_type !== "delivery" || data.delivery_location_id !== null, {
+    message: "Select a delivery zone",
+    path: ["delivery_location_id"],
+  });
+
+export type OrderInput = z.infer<typeof orderSchema>;
+
 export const expenseCategorySchema = z.enum(["electricity", "gas", "charcoal", "other"]);
 
 /**

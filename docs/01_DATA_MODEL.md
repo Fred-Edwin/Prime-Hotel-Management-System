@@ -449,50 +449,13 @@ This section exists because `orders` (§6) and the till-sale entry screen (`04_P
 
 - **`stock_entries.till_quantity_sold`** — written *only* by the stock-entries route (Phase 4's stepper/till-strip flow). This is the number a staff member directly taps in. It is fine for this column to be replaced wholesale on each "Save entry," because only one flow ever writes it and only one person is editing a given location's sheet on a given day in practice.
 - **`stock_entries.quantity_sold`** — the total sold, `till_quantity_sold + sum(order_items.quantity)` for that item/location/date. This is the figure `closing_stock`, `sales_value`, and `cost_value` are calculated from (§3) — nothing downstream changes.
-- **Neither write-path ever sends an absolute "new total" for `quantity_sold`.** Both go through one Postgres function:
+- **Neither write-path ever sends an absolute "new total" for `quantity_sold`.**
 
-```sql
--- Recomputes quantity_sold (and the values derived from it) for one
--- stock_entries row from its two inputs. Called after any write to
--- till_quantity_sold, and after any order_items insert/delete that
--- touches this item/location/date. Never called with a client-supplied
--- total -- it always re-derives from the two source numbers itself,
--- so two concurrent writers can never clobber each other.
-create or replace function public.recalculate_stock_entry(
-  p_item_id uuid,
-  p_location location_type,
-  p_entry_date date
-)
-returns void
-language plpgsql
-security definer
-as $$
-declare
-  v_order_total numeric(10,2);
-begin
-  select coalesce(sum(oi.quantity), 0) into v_order_total
-  from public.order_items oi
-  join public.orders o on o.id = oi.order_id
-  where oi.item_id = p_item_id
-    and o.location = p_location
-    and o.order_date = p_entry_date;
+**Implementation note (Phase 6, superseding the originally-planned `recalculate_stock_entry()` call below):** the original plan was for the orders route to call a plain `UPDATE`-only `recalculate_stock_entry(item_id, location, entry_date)` function after inserting `order_items`. That function still exists in the schema (defined in `20260710110003_rls_and_functions.sql`) but Phase 6 found it insufficient and built `public.apply_order_to_stock_entry()` instead — see `20260712080310_orders_write_function.sql`. The reason: `recalculate_stock_entry()`'s `UPDATE` assumes a `stock_entries` row already exists for that item/location/date, which is only true once a till entry has been saved. An order can easily be the **first** write of the period for an item (a delivery placed before the till sheet is ever touched that day) — there is no row to `UPDATE`, and `closing_stock`/`sales_value`/`cost_value`/`closing_stock_value`/`wastage_value` have no column defaults to fall back on. `apply_order_to_stock_entry()` does the same opening-stock-carry-forward-and-upsert work `save_stock_entry()`/`save_canteen_stock_entry()` already do, except it never writes `till_quantity_sold`, `sent_out`, or `wastage` (those remain whatever the till-entry flow last saved, or 0/defaults) — only `quantity_sold` and its downstream values move, always re-derived from a **fresh** sum of `order_items` for that item/location/period (never incremented by "this order's quantity"), so concurrent writers still can't clobber each other. It is also cadence-aware: for a `canteen` order it resolves `order_date` to that week's Monday `entry_date` before touching `stock_entries` (mirroring `save_canteen_stock_entry()`'s convention) and re-derives `added_stock` via `canteen_supplied_total()` for `canteen_supplied` items — otherwise a canteen order would create a stray extra daily row instead of folding into the existing weekly one (a real bug caught during this phase's own live testing, not part of the original design). `recalculate_stock_entry()` itself remains unused/dead code as of this phase — a future phase could remove it, but it's harmless left in place and this doc isn't asserting it should be deleted.
 
-  update public.stock_entries
-  set quantity_sold = till_quantity_sold + v_order_total
-  where item_id = p_item_id
-    and location = p_location
-    and entry_date = p_entry_date;
-
-  -- closing_stock / sales_value / cost_value are then recalculated
-  -- from the updated quantity_sold in the same route handler
-  -- transaction, via lib/calculations.ts -- not duplicated here in SQL.
-end;
-$$;
-```
-
-- The **stock-entries route** (Phase 4) writes `till_quantity_sold` directly (client sends the day's absolute stepper values, as originally designed — only one person edits their own location's till sheet, so this remains safe), then calls `recalculate_stock_entry()` for each affected item.
-- The **orders route** (§6) inserts the order + `order_items`, then calls `recalculate_stock_entry()` for each item on the order. It never touches `till_quantity_sold` or writes `quantity_sold` directly.
-- Both routes run their writes inside a single database transaction (insert/update + the recalculate call), so a crash or network drop mid-write can't leave `quantity_sold` out of sync with its two inputs.
+- The **stock-entries route** (Phase 4) writes `till_quantity_sold` directly (client sends the day's absolute stepper values, as originally designed — only one person edits their own location's till sheet, so this remains safe).
+- The **orders route** (§6) inserts the order + `order_items`, then calls `apply_order_to_stock_entry()` for each distinct item on the order. It never touches `till_quantity_sold`, `sent_out`, or `wastage`, and never writes `quantity_sold` directly.
+- Both routes run their writes inside a single database transaction (a single Postgres function call per save — `save_stock_entry()`/`save_canteen_stock_entry()`/`create_order()` — since PostgREST/the Supabase JS client has no client-driven multi-statement transaction), so a crash or network drop mid-write can't leave `quantity_sold` out of sync with its two inputs.
 
 ### Duplicate-submission protection (orders)
 
@@ -725,7 +688,7 @@ This section documents a genuine V1 scope addition made after initial planning, 
 
 An order is a **single customer transaction** — closer to a receipt than to a stock-entry row. It is distinct from `stock_entries` (location-level daily/weekly aggregates) but **feeds into it**: every item quantity on an order counts toward that day's `stock_entries.quantity_sold` for that item + location. An order is a second write-path into the existing stock ledger, not a parallel untracked record — if it didn't deduct from stock, closing stock and profit would silently stop reconciling with what was actually sold, the exact failure mode wastage tracking (§3.3) already exists to prevent.
 
-**Critically, an order never writes `quantity_sold` directly** — it inserts into `order_items` and then calls `public.recalculate_stock_entry()`, the same function the till-sale flow calls, so the two write-paths can never race and clobber each other. See §3.4 for the full mechanism and why it's necessary (two independent flows writing the same row is a lost-update hazard if handled naively).
+**Critically, an order never writes `quantity_sold` directly** — it inserts into `order_items` and then calls `public.apply_order_to_stock_entry()` (Phase 6's atomic upsert function — see §3.4's implementation note for why it replaced the originally-planned plain `recalculate_stock_entry()` call), which always re-derives the combined total from its two source numbers, so the two write-paths can never race and clobber each other. See §3.4 for the full mechanism and why it's necessary (two independent flows writing the same row is a lost-update hazard if handled naively).
 
 - **Walk-in till sales are unaffected.** The existing stepper-based `quantity_sold` entry flow (Phase 4) stays exactly as-is. Orders are only for the delivery/pickup channel that used to go through WhatsApp — not a redesign of the core entry screen, not a replacement for how walk-in sales are logged.
 - **Logged as already-completed**, same mental model as a till sale entered at time of sale. No status/workflow field (no pending → fulfilled lifecycle), no rider/driver assignment, no customer accounts or order history beyond the flat log. These are deliberate V1 exclusions — see below.

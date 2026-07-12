@@ -83,9 +83,18 @@ Whenever a phase involves designing and building an actual screen (not the reusa
 A real incident during Phase 4 (see `docs/phases/phase4_context.md`): a sticky/fixed-positioning bug (a running-total bar not staying pinned to the viewport) was "fixed" three times based on reasoning about CSS box-model behavior from the source alone, reported as done each time, and was still broken on live testing all three times. The actual defect — a wrapper `<div>` whose CSS class existed but was never applied in the component's JSX — would have been visible in under a minute of real DOM inspection at any point. Each failed round cost a full edit → claim-fixed → human re-tests → still-broken cycle.
 
 **The rule this produced:** for any layout, positioning, or visual bug — not just when a fix has already failed once — verify against the actual rendered page before claiming it's fixed, not against a mental model of what the CSS/markup *should* do:
-- Use the `verify` or `run` skill, a headless browser (Playwright is available in this environment — install it into the scratchpad directory if it isn't already present, not into the project's own `package.json`), or ask the human for real devtools output (computed styles, `getBoundingClientRect()`, a screenshot).
+- Use the `verify` skill (`.claude/skills/verify/SKILL.md`) — a persistent, gitignored Playwright install lives at `.claude/tools/playwright/` (not the scratchpad, not the project's own `package.json`, so it survives across sessions instead of being reinstalled every time), driven via `scripts/verify-screenshot.mjs` to log in as a real seeded roster account and screenshot/inspect a route in one command. The `run` skill is the alternative for driving the app more generally. Or ask the human for real devtools output (computed styles, `getBoundingClientRect()`, a screenshot).
 - If a first attempt at a visual fix doesn't hold up, the next move is to **inspect why**, not to add another layer of complexity on top of an unconfirmed diagnosis. Escalating solution complexity (e.g., `sticky` → `fixed` with a hand-computed offset → a whole new state-management layer) without new diagnostic information is a sign to stop and look, not to try harder.
 - This applies beyond CSS: any claim of the form "this should now work" that's cheap to actually verify and expensive to get wrong — a build passing, an API returning the right shape, a redirect firing — should be verified, not asserted, before reporting it to the human as done.
+
+### Verifying data/logic/RLS correctness — curl, not a browser
+
+The visual-verification rule above (headless browser, real DOM) is for questions only a rendered page can answer. Most correctness risk in this product is the *other* kind — RLS scoping, calculation formulas, oversell/idempotency checks, cross-location aggregation — and for that kind, a direct API call is the right tool, not a heavier browser-driven one:
+
+- Use `curl` (or an equivalent direct HTTP call) against the route handlers, logging in via `POST /api/auth/login` with a real seeded roster account (see `scripts/seed-staff.ts` for the name/PIN pairs) and reading the raw JSON response / HTTP status code. This is how every RLS and calculation bug found in Phases 4–5 was actually caught — e.g. a same-day/same-week re-save returning `403` instead of `200`, an oversell attempt returning `409` with the right message, a cross-location aggregate summing correctly. None of these needed a browser.
+- For anything requiring direct Postgres-level confirmation beyond what the API surfaces (e.g. proving RLS blocks a table read even though a `security definer` function built on that same data works) — impersonate the user's session directly against the local Supabase stack: `set role authenticated; select set_config('request.jwt.claims', '{"sub":"<uid>","role":"authenticated"}', true);` then query the table. This confirms the policy itself, not just what one route handler happens to expose.
+- **Rule of thumb:** if the question is "did the write/calculation/access-check happen correctly," use `curl` (or direct SQL). If the question is "does a human looking at the rendered screen see the right thing," use the `verify` skill. Don't reach for Playwright to check a data/RLS claim — it's slower and adds no signal a JSON response doesn't already give you; don't reach for `curl` to check a visual claim — it can't see layout, contrast, or whether an element is actually pinned.
+- Both are equally mandatory, not optional extras: a phase whose gating checklist says "RLS re-verified by testing" is not satisfied by reading the policy SQL and reasoning it looks correct, same as a layout claim isn't satisfied by reading the CSS and reasoning it should work.
 
 ---
 
@@ -185,6 +194,8 @@ prime-hotel-management-system/
 | `docs/04_PHASE_PLAN.md` | You need the whole build sequence, or the detailed spec/acceptance criteria for the phase you're on |
 | `docs/design/*.md` | You're building or touching any UI — see the Design System section above for which of the three files to read |
 | `docs/phases/phaseX_context.md` | Always — the immediately-previous phase's file is required reading before starting the next one |
+| `.claude/skills/verify/SKILL.md` | You're about to check a layout/positioning/visual claim against the real running app — see "Verifying layout/visual fixes" above |
+| `scripts/seed-staff.ts` | You need the real roster's name/PIN pairs to log in via `curl` for an RLS/data-correctness check — see "Verifying data/logic/RLS correctness" above |
 
 ---
 

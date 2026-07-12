@@ -10,6 +10,11 @@ export interface TillStripProps {
   onSave: () => void;
   saveLabel?: string;
   saving?: boolean;
+  /** Disables the save action without claiming a save is in progress —
+   * distinct from `saving`, which also swaps the button label to
+   * "Saving…". Use for "form isn't valid yet" states (e.g. no customer
+   * name/items on an order) where showing "Saving…" would be misleading. */
+  disabled?: boolean;
 }
 
 export function TillStrip({
@@ -18,6 +23,7 @@ export function TillStrip({
   onSave,
   saveLabel = "Save",
   saving = false,
+  disabled = false,
 }: TillStripProps) {
   const [flash, setFlash] = useState(false);
   const isFirstRender = useRef(true);
@@ -40,7 +46,7 @@ export function TillStrip({
         </span>
         <span className={styles.totalValue}>{totalValueLabel}</span>
       </div>
-      <Button variant="primary" onClick={onSave} disabled={saving}>
+      <Button variant="primary" onClick={onSave} disabled={saving || disabled}>
         {saving ? "Saving…" : saveLabel}
       </Button>
     </div>
