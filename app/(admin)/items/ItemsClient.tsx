@@ -23,6 +23,12 @@ const CATEGORY_LABELS: Record<ItemCategory, string> = {
   cyber: "Cyber",
   retail: "Retail",
   ingredients: "Ingredients",
+  stationery: "Stationery",
+  dawa: "Dawa",
+  sweets: "Sweets",
+  biscuits: "Biscuits",
+  packing_supplies: "Packing Supplies",
+  others: "Others",
 };
 
 const SUPPLY_TYPE_LABELS: Record<ItemSupplyType, string> = {

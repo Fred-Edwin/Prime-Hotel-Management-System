@@ -1,0 +1,1190 @@
+[
+  {
+    "name": "Black / White Milo",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 60.0,
+    "buying_price": 10.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Black Tea",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 30.0,
+    "buying_price": 49.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Black/White Coffee",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 30.0,
+    "buying_price": 15.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Black/White Coffee (40)",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 40.0,
+    "buying_price": 15.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "African Tea",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 30.0,
+    "buying_price": 16.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Chocolate Tea",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 40.0,
+    "buying_price": 25.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Dasani 1lit",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 70.0,
+    "buying_price": 45.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Ice cream",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 30.0,
+    "buying_price": 16.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Kefir Milk",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 60.0,
+    "buying_price": 33.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Kefir Milk (180)",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 180.0,
+    "buying_price": 99.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Milk Glass",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 50.0,
+    "buying_price": 32.5,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Minute maid",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 80.0,
+    "buying_price": 67.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Porridge",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 20.0,
+    "buying_price": 9.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Porridge (30)",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 30.0,
+    "buying_price": 9.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Soda 200ml",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 30.0,
+    "buying_price": 32.5,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Soda 300ml",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 45.0,
+    "buying_price": 42.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Soda 350ml",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 60.0,
+    "buying_price": 42.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Soda 500ml",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 55.0,
+    "buying_price": 30.25,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Soda 500ml TA",
+    "category": "beverages",
+    "supply_type": "restaurant_only",
+    "selling_price": 55.0,
+    "buying_price": 30.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Yoghurt 250ml",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 60.0,
+    "buying_price": 30.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Yoghurt 500ml",
+    "category": "beverages",
+    "supply_type": "canteen_supplied",
+    "selling_price": 100.0,
+    "buying_price": 45.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Eggs Layers",
+    "category": "snacks",
+    "supply_type": "restaurant_only",
+    "selling_price": 30.0,
+    "buying_price": 16.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Eggs Kienyenji",
+    "category": "snacks",
+    "supply_type": "restaurant_only",
+    "selling_price": 40.0,
+    "buying_price": 22.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mandazi",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 15.0,
+    "buying_price": 8.25,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Chapati",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 20.0,
+    "buying_price": 11.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Samosa",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 35.0,
+    "buying_price": 19.25,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Sausage",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 50.0,
+    "buying_price": 27.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Smokies",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 40.0,
+    "buying_price": 40.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Nduma",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 80.0,
+    "buying_price": 60.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Toast Siagi 4pcs",
+    "category": "snacks",
+    "supply_type": "restaurant_only",
+    "selling_price": 40.0,
+    "buying_price": 22.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Toast Mayai 2 4pcs",
+    "category": "snacks",
+    "supply_type": "restaurant_only",
+    "selling_price": 100.0,
+    "buying_price": 45.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Sweetpotatoes",
+    "category": "snacks",
+    "supply_type": "canteen_supplied",
+    "selling_price": 60.0,
+    "buying_price": 18.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Beef Stew",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 200.0,
+    "buying_price": 110.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Chicken Stew",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 200.0,
+    "buying_price": 110.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Chips Full",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 100.0,
+    "buying_price": 55.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Chips Mlima",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 150.0,
+    "buying_price": 82.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Githeri Vegetables",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 80.0,
+    "buying_price": 44.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Githeri Vegetables (120)",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 120.0,
+    "buying_price": 66.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mchele Vegetables",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 80.0,
+    "buying_price": 44.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mukimo Beef",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 280.0,
+    "buying_price": 154.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mukimo Stew",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 140.0,
+    "buying_price": 77.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mukimo Stew (180)",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 180.0,
+    "buying_price": 99.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mukimo Vegetables",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 100.0,
+    "buying_price": 55.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Pilau Beef",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 300.0,
+    "buying_price": 165.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Pilau Stew",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 150.0,
+    "buying_price": 82.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Pilau Veges",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 120.0,
+    "buying_price": 66.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Stew Minji & Vegetables",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 100.0,
+    "buying_price": 55.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Ugali Beef",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 260.0,
+    "buying_price": 143.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Ugali Vegetables",
+    "category": "meals",
+    "supply_type": "restaurant_only",
+    "selling_price": 80.0,
+    "buying_price": 44.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Binding",
+    "category": "cyber",
+    "supply_type": "restaurant_only",
+    "selling_price": 50.0,
+    "buying_price": 17.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Binding (70)",
+    "category": "cyber",
+    "supply_type": "restaurant_only",
+    "selling_price": 70.0,
+    "buying_price": 24.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Blue Forms",
+    "category": "cyber",
+    "supply_type": "canteen_supplied",
+    "selling_price": 15.0,
+    "buying_price": 5.25,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Logbook Assessment",
+    "category": "cyber",
+    "supply_type": "restaurant_only",
+    "selling_price": 300.0,
+    "buying_price": 105.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Logbook HSA",
+    "category": "cyber",
+    "supply_type": "restaurant_only",
+    "selling_price": 240.0,
+    "buying_price": 84.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Logbook Industrial",
+    "category": "cyber",
+    "supply_type": "canteen_supplied",
+    "selling_price": 120.0,
+    "buying_price": 42.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Paste",
+    "category": "cyber",
+    "supply_type": "restaurant_only",
+    "selling_price": 390.0,
+    "buying_price": 136.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Photocopy",
+    "category": "cyber",
+    "supply_type": "canteen_supplied",
+    "selling_price": 5.0,
+    "buying_price": 1.75,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Printing/Papers",
+    "category": "cyber",
+    "supply_type": "canteen_supplied",
+    "selling_price": 10.0,
+    "buying_price": 3.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Research",
+    "category": "cyber",
+    "supply_type": "canteen_supplied",
+    "selling_price": 7.0,
+    "buying_price": 2.45,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "SHA & Others",
+    "category": "cyber",
+    "supply_type": "restaurant_only",
+    "selling_price": 50.0,
+    "buying_price": 17.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "#15",
+    "category": "packing_supplies",
+    "supply_type": "canteen_supplied",
+    "selling_price": 5.0,
+    "buying_price": 3.25,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "#22",
+    "category": "packing_supplies",
+    "supply_type": "canteen_supplied",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "#25",
+    "category": "packing_supplies",
+    "supply_type": "canteen_supplied",
+    "selling_price": 20.0,
+    "buying_price": 13.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Envelops 10",
+    "category": "packing_supplies",
+    "supply_type": "canteen_supplied",
+    "selling_price": 10.0,
+    "buying_price": 16.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Envelops 5",
+    "category": "packing_supplies",
+    "supply_type": "canteen_supplied",
+    "selling_price": 5.0,
+    "buying_price": 2.5,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Take away Coffee cups",
+    "category": "packing_supplies",
+    "supply_type": "restaurant_only",
+    "selling_price": 15.0,
+    "buying_price": 9.75,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Take away dishes",
+    "category": "packing_supplies",
+    "supply_type": "restaurant_only",
+    "selling_price": 20.0,
+    "buying_price": 6.0,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Take away folks / Spoons",
+    "category": "packing_supplies",
+    "supply_type": "restaurant_only",
+    "selling_price": 5.0,
+    "buying_price": 7.5,
+    "source": "restaurant",
+    "placeholder_price": false
+  },
+  {
+    "name": "Tumblers all",
+    "category": "packing_supplies",
+    "supply_type": "restaurant_only",
+    "selling_price": 100.0,
+    "buying_price": 65.0,
+    "source": "restaurant",
+    "placeholder_price": true
+  },
+  {
+    "name": "Dasani 500ml",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 40.0,
+    "buying_price": 10.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Milk 200ml",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 65.0,
+    "buying_price": 49.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Milk 500ml",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 60.0,
+    "buying_price": 15.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Milo",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 50.0,
+    "buying_price": 16.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Minute maid 400g",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 80.0,
+    "buying_price": 25.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Nescafe",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 45.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Yoghurt 150ml",
+    "category": "beverages",
+    "supply_type": "canteen_independent",
+    "selling_price": 40.0,
+    "buying_price": 32.5,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Eggs 2",
+    "category": "snacks",
+    "supply_type": "canteen_independent",
+    "selling_price": 25.0,
+    "buying_price": 30.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Cakes",
+    "category": "snacks",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 8.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Logbook",
+    "category": "cyber",
+    "supply_type": "canteen_independent",
+    "selling_price": 240.0,
+    "buying_price": 84.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Spiral Binding",
+    "category": "cyber",
+    "supply_type": "canteen_independent",
+    "selling_price": 70.0,
+    "buying_price": 24.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Tape Binding",
+    "category": "cyber",
+    "supply_type": "canteen_independent",
+    "selling_price": 50.0,
+    "buying_price": 17.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "A4 120pg",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 80.0,
+    "buying_price": 52.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "A4 200pg",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 115.0,
+    "buying_price": 74.75,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "A4 80pg",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 55.0,
+    "buying_price": 35.75,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "A5 120pg",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 45.0,
+    "buying_price": 29.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "A5 200pg",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 65.0,
+    "buying_price": 42.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "A5 80pg",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 19.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Obama",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Sharpener",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 5.0,
+    "buying_price": 3.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Foolscaps",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 2.5,
+    "buying_price": 1.62,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Bic Pen",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 25.0,
+    "buying_price": 16.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Eraser",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 5.0,
+    "buying_price": 3.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Pencil",
+    "category": "stationery",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 9.75,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "ENO Tabs",
+    "category": "dawa",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 9.75,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "ENO Sachet",
+    "category": "dawa",
+    "supply_type": "canteen_independent",
+    "selling_price": 20.0,
+    "buying_price": 13.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mara Moja",
+    "category": "dawa",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Panandol Extra",
+    "category": "dawa",
+    "supply_type": "canteen_independent",
+    "selling_price": 20.0,
+    "buying_price": 13.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Panandol Advance",
+    "category": "dawa",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 9.75,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "#44",
+    "category": "packing_supplies",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 19.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Fresh",
+    "category": "sweets",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 4.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Lollipop",
+    "category": "sweets",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Lotta",
+    "category": "sweets",
+    "supply_type": "canteen_independent",
+    "selling_price": 1.67,
+    "buying_price": 1.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Patco",
+    "category": "sweets",
+    "supply_type": "canteen_independent",
+    "selling_price": 2.5,
+    "buying_price": 1.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Sweets",
+    "category": "sweets",
+    "supply_type": "canteen_independent",
+    "selling_price": 5.0,
+    "buying_price": 1.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Tropical",
+    "category": "sweets",
+    "supply_type": "canteen_independent",
+    "selling_price": 5.0,
+    "buying_price": 2.5,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Bisc za 5/=",
+    "category": "biscuits",
+    "supply_type": "canteen_independent",
+    "selling_price": 5.0,
+    "buying_price": 4.5,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Bisc za 10/=",
+    "category": "biscuits",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 8.75,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Bisc za 15/=",
+    "category": "biscuits",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 9.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Bisc za 20/=",
+    "category": "biscuits",
+    "supply_type": "canteen_independent",
+    "selling_price": 20.0,
+    "buying_price": 17.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Bisc za 25/=",
+    "category": "biscuits",
+    "supply_type": "canteen_independent",
+    "selling_price": 25.0,
+    "buying_price": 18.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Avocados",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 8.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Bananas",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.0,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Fruit Juice/Smoothie",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 50.0,
+    "buying_price": 2.5,
+    "source": "canteen",
+    "placeholder_price": false
+  },
+  {
+    "name": "Oranges",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 16.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "PawPaw",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 16.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Pineaple",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 20.0,
+    "buying_price": 11.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Pudding",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 50.0,
+    "buying_price": 27.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mangoes",
+    "category": "fruits",
+    "supply_type": "canteen_independent",
+    "selling_price": 35.0,
+    "buying_price": 19.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Airtime",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Glucose 10g",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Handkerchief 30",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 19.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Handkerchief 50",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 50.0,
+    "buying_price": 32.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Kibuyu 2lit",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 30.0,
+    "buying_price": 19.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Masks",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mitungi 10lit",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 50.0,
+    "buying_price": 32.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Mitungi 20lit",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 100.0,
+    "buying_price": 65.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Softcare Pads",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 80.0,
+    "buying_price": 52.0,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Spoons",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 15.0,
+    "buying_price": 9.75,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Sunny Girl Pads",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 65.0,
+    "buying_price": 42.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Toilex",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 45.0,
+    "buying_price": 29.25,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Bottles",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  },
+  {
+    "name": "Serviettes",
+    "category": "others",
+    "supply_type": "canteen_independent",
+    "selling_price": 10.0,
+    "buying_price": 6.5,
+    "source": "canteen",
+    "placeholder_price": true
+  }
+]

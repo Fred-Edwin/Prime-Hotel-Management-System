@@ -34,7 +34,13 @@ Do not add tables speculatively beyond what's listed here (e.g., a generic `loca
 create type user_role as enum ('admin', 'staff');
 create type location_type as enum ('restaurant', 'canteen');
 create type item_category as enum (
-  'beverages', 'snacks', 'meals', 'fruits', 'cyber', 'retail', 'ingredients'
+  'beverages', 'snacks', 'meals', 'fruits', 'cyber', 'retail', 'ingredients',
+  -- Added Phase 8 (supabase/migrations/20260713120000_add_item_categories.sql)
+  -- when seeding the client's real catalog (hotel-menu-items.json /
+  -- canteen-items.json) surfaced canteen categories the original 7 values
+  -- didn't cover. Kept as distinct values rather than collapsed into
+  -- 'retail', per explicit client/user decision.
+  'stationery', 'dawa', 'sweets', 'biscuits', 'packing_supplies', 'others'
 );
 create type expense_category as enum ('electricity', 'gas', 'charcoal', 'other');
 

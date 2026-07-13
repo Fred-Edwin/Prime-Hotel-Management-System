@@ -33,6 +33,12 @@ export const itemCategorySchema = z.enum([
   "cyber",
   "retail",
   "ingredients",
+  "stationery",
+  "dawa",
+  "sweets",
+  "biscuits",
+  "packing_supplies",
+  "others",
 ]);
 
 export const itemSupplyTypeSchema = z.enum([
