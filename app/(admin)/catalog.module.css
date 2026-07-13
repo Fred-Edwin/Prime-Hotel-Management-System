@@ -15,6 +15,10 @@
 .tableCard {
   padding: 0;
   overflow-x: auto;
+  /* Phase 8: fade the right edge so a scrollable table signals there's
+     more content off-screen, instead of just cutting off mid-column. */
+  mask-image: linear-gradient(to right, black calc(100% - var(--space-6)), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--space-6)), transparent 100%);
 }
 
 .table {
