@@ -11,7 +11,12 @@
 .box {
   flex: 1;
   aspect-ratio: 1;
-  min-height: var(--space-touch);
+  /* Tap-target height (--space-touch, 44px) is a floor for 4-6 boxes at
+     comfortable widths, but must be allowed to shrink below it on narrow
+     viewports (6 boxes @44px + gaps exceeds a ~280px card on a 375px
+     screen) -- a smaller-but-still-tappable box beats a clipped one. */
+  min-height: 36px;
+  max-height: var(--space-touch);
   border: var(--border-width-default) solid var(--color-border-default);
   border-radius: var(--radius-md);
   display: flex;
@@ -19,6 +24,12 @@
   justify-content: center;
   background: var(--color-surface-raised);
   transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+@media (min-width: 400px) {
+  .box {
+    min-height: var(--space-touch);
+  }
 }
 
 .filled {
