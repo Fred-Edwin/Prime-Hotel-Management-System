@@ -63,27 +63,32 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
     }
 
     setSubmitting(true);
-    const url = editingId ? `/api/ingredients/${editingId}` : "/api/ingredients";
-    const method = editingId ? "PATCH" : "POST";
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
-    });
-    const data = await res.json().catch(() => ({}));
-    setSubmitting(false);
+    try {
+      const url = editingId ? `/api/ingredients/${editingId}` : "/api/ingredients";
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setFieldErrors({ name: data.error ?? "Something went wrong" });
-      return;
+      if (!res.ok) {
+        setFieldErrors({ name: data.error ?? "Something went wrong" });
+        return;
+      }
+
+      const saved: Ingredient = data.ingredient;
+      setIngredients((prev) =>
+        editingId ? prev.map((i) => (i.id === saved.id ? saved : i)) : [...prev, saved],
+      );
+      setModalOpen(false);
+      setToast(editingId ? "Ingredient updated" : "Ingredient added");
+    } catch {
+      setFieldErrors({ name: "Couldn't reach the server — check your connection and try again." });
+    } finally {
+      setSubmitting(false);
     }
-
-    const saved: Ingredient = data.ingredient;
-    setIngredients((prev) =>
-      editingId ? prev.map((i) => (i.id === saved.id ? saved : i)) : [...prev, saved],
-    );
-    setModalOpen(false);
-    setToast(editingId ? "Ingredient updated" : "Ingredient added");
   }
 
   return (

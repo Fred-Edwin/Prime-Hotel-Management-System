@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { ingredientSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { serverErrorResponse } from "@/lib/errors";
 
 export async function GET() {
   const admin = await requireAdmin();
@@ -11,7 +12,7 @@ export async function GET() {
   const query = supabase.from("ingredients").select("*").order("name");
   const { data, error }: Awaited<typeof query> = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverErrorResponse(error, "ingredients");
   return NextResponse.json({ ingredients: data });
 }
 
@@ -36,6 +37,6 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverErrorResponse(error, "ingredients");
   return NextResponse.json({ ingredient: data }, { status: 201 });
 }

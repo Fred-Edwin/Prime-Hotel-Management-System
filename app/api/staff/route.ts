@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { staffCreateSchema } from "@/lib/validation";
 import { nextStaffCode, staffCodeToSyntheticEmail } from "@/lib/staffCode";
 import { createServerSupabaseClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { serverErrorResponse } from "@/lib/errors";
 
 export async function GET() {
   const admin = await requireAdmin();
@@ -15,7 +16,7 @@ export async function GET() {
     .order("staff_code");
   const { data, error }: Awaited<typeof query> = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverErrorResponse(error, "staff");
   return NextResponse.json({ staff: data });
 }
 
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     .select("staff_code");
 
   if (codesError) {
-    return NextResponse.json({ error: codesError.message }, { status: 500 });
+    return serverErrorResponse(codesError, "staff");
   }
 
   const staffCode = nextStaffCode((existingCodes ?? []).map((row) => row.staff_code));
@@ -75,8 +76,9 @@ export async function POST(request: Request) {
   });
 
   if (createError || !created.user) {
+    console.error("[staff] createUser failed", createError);
     return NextResponse.json(
-      { error: createError?.message ?? "Could not create staff account" },
+      { error: "Something went wrong on our end — please try again." },
       { status: 500 },
     );
   }
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
     // Roll back the orphaned auth user so a failed staff creation doesn't
     // leave an auth.users row with no matching public.users row.
     await serviceClient.auth.admin.deleteUser(created.user.id);
-    return NextResponse.json({ error: profileError.message }, { status: 500 });
+    return serverErrorResponse(profileError, "staff");
   }
 
   return NextResponse.json({ staff: profile }, { status: 201 });

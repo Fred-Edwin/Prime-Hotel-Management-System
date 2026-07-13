@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { orderSchema } from "@/lib/validation";
 import { orderTotal, weekStartMonday } from "@/lib/calculations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { describeSaveError } from "@/lib/errors";
+import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/orders?date=YYYY-MM-DD
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     .order("category")
     .order("name");
   const { data: items, error: itemsError }: Awaited<typeof itemsQuery> = await itemsQuery;
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
+  if (itemsError) return serverErrorResponse(itemsError, "orders");
 
   const zonesQuery = supabase
     .from("delivery_locations")
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     .eq("active", true)
     .order("name");
   const { data: deliveryLocations, error: zonesError }: Awaited<typeof zonesQuery> = await zonesQuery;
-  if (zonesError) return NextResponse.json({ error: zonesError.message }, { status: 500 });
+  if (zonesError) return serverErrorResponse(zonesError, "orders");
 
   const ordersQuery = supabase
     .from("orders")
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     .eq("order_date", date)
     .order("created_at", { ascending: false });
   const { data: orders, error: ordersError }: Awaited<typeof ordersQuery> = await ordersQuery;
-  if (ordersError) return NextResponse.json({ error: ordersError.message }, { status: 500 });
+  if (ordersError) return serverErrorResponse(ordersError, "orders");
 
   // Today's (or, for canteen, this week's) stock_entries rows -- lets the
   // screen show remaining stock per item and cap the quantity stepper at
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     .eq("entry_date", entryDate);
   const { data: stockEntries, error: stockEntriesError }: Awaited<typeof stockEntriesQuery> =
     await stockEntriesQuery;
-  if (stockEntriesError) return NextResponse.json({ error: stockEntriesError.message }, { status: 500 });
+  if (stockEntriesError) return serverErrorResponse(stockEntriesError, "orders");
 
   return NextResponse.json({ items, deliveryLocations, orders, stockEntries });
 }
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     .select("id, selling_price, buying_price, supply_type, active")
     .in("id", itemIds);
   const { data: itemRows, error: itemsError }: Awaited<typeof itemsQuery> = await itemsQuery;
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
+  if (itemsError) return serverErrorResponse(itemsError, "orders");
 
   const itemById = new Map((itemRows ?? []).map((row) => [row.id, row]));
 
@@ -204,7 +204,7 @@ export async function POST(request: Request) {
   const orderItemsQuery = supabase.from("order_items").select("*").eq("order_id", data.id);
   const { data: savedItems, error: savedItemsError }: Awaited<typeof orderItemsQuery> =
     await orderItemsQuery;
-  if (savedItemsError) return NextResponse.json({ error: savedItemsError.message }, { status: 500 });
+  if (savedItemsError) return serverErrorResponse(savedItemsError, "orders");
 
   return NextResponse.json({ order: { ...data, order_items: savedItems } }, { status: 201 });
 }

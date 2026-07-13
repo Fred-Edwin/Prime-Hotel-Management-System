@@ -61,27 +61,32 @@ export function DeliveryLocationsClient({
     }
 
     setSubmitting(true);
-    const url = editingId ? `/api/delivery-locations/${editingId}` : "/api/delivery-locations";
-    const method = editingId ? "PATCH" : "POST";
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
-    });
-    const data = await res.json().catch(() => ({}));
-    setSubmitting(false);
+    try {
+      const url = editingId ? `/api/delivery-locations/${editingId}` : "/api/delivery-locations";
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setFieldErrors({ name: data.error ?? "Something went wrong" });
-      return;
+      if (!res.ok) {
+        setFieldErrors({ name: data.error ?? "Something went wrong" });
+        return;
+      }
+
+      const saved: DeliveryLocation = data.deliveryLocation;
+      setLocations((prev) =>
+        editingId ? prev.map((l) => (l.id === saved.id ? saved : l)) : [...prev, saved],
+      );
+      setModalOpen(false);
+      setToast(editingId ? "Delivery location updated" : "Delivery location added");
+    } catch {
+      setFieldErrors({ name: "Couldn't reach the server — check your connection and try again." });
+    } finally {
+      setSubmitting(false);
     }
-
-    const saved: DeliveryLocation = data.deliveryLocation;
-    setLocations((prev) =>
-      editingId ? prev.map((l) => (l.id === saved.id ? saved : l)) : [...prev, saved],
-    );
-    setModalOpen(false);
-    setToast(editingId ? "Delivery location updated" : "Delivery location added");
   }
 
   return (

@@ -50,23 +50,28 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
     }
 
     setSubmitting(true);
-    const res = await fetch("/api/staff", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
-    });
-    const data = await res.json().catch(() => ({}));
-    setSubmitting(false);
+    try {
+      const res = await fetch("/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setFieldErrors({ form: data.error ?? "Something went wrong" });
-      return;
+      if (!res.ok) {
+        setFieldErrors({ form: data.error ?? "Something went wrong" });
+        return;
+      }
+
+      const saved: StaffRow = data.staff;
+      setStaff((prev) => [...prev, saved].sort((a, b) => a.staff_code.localeCompare(b.staff_code)));
+      setModalOpen(false);
+      setToast(`${saved.name} can now log in (code ${saved.staff_code})`);
+    } catch {
+      setFieldErrors({ form: "Couldn't reach the server — check your connection and try again." });
+    } finally {
+      setSubmitting(false);
     }
-
-    const saved: StaffRow = data.staff;
-    setStaff((prev) => [...prev, saved].sort((a, b) => a.staff_code.localeCompare(b.staff_code)));
-    setModalOpen(false);
-    setToast(`${saved.name} can now log in (code ${saved.staff_code})`);
   }
 
   return (

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { expenseSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/expenses?date=YYYY-MM-DD
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false });
   const { data: expenses, error }: Awaited<typeof expensesQuery> = await expensesQuery;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverErrorResponse(error, "expenses");
 
   return NextResponse.json({ expenses });
 }

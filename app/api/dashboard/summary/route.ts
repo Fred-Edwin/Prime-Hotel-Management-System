@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { dashboardPeriodRange, netProfit, type DashboardPeriod } from "@/lib/calculations";
+import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/dashboard/summary?period=today|week|month
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
     lowStockItemsRes,
     lowStockIngredientsRes,
   ]) {
-    if (res.error) return NextResponse.json({ error: res.error.message }, { status: 500 });
+    if (res.error) return serverErrorResponse(res.error, "dashboard/summary");
   }
 
   const stockByLocation = stockSummaryRes.data ?? [];

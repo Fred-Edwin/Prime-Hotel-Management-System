@@ -159,26 +159,30 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
       }),
     };
 
-    const res = await fetch("/api/stock-entries", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await res.json();
+    try {
+      const res = await fetch("/api/stock-entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json();
 
-    setSaving(false);
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't save today's entries", status: "error" });
+        return;
+      }
 
-    if (!res.ok) {
-      setToast({ message: body.error ?? "Couldn't save today's entries", status: "error" });
-      return;
+      const nextSaved: Record<string, StockEntryRow> = {};
+      for (const entry of body.entries as StockEntryRow[]) {
+        nextSaved[entry.item_id] = entry;
+      }
+      setSavedEntries(nextSaved);
+      setToast({ message: "Today's entries saved", status: "success" });
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setSaving(false);
     }
-
-    const nextSaved: Record<string, StockEntryRow> = {};
-    for (const entry of body.entries as StockEntryRow[]) {
-      nextSaved[entry.item_id] = entry;
-    }
-    setSavedEntries(nextSaved);
-    setToast({ message: "Today's entries saved", status: "success" });
   }
 
   useTillStripSlot(

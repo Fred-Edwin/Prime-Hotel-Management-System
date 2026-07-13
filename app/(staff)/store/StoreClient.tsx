@@ -134,26 +134,30 @@ export function StoreClient() {
       }),
     };
 
-    const res = await fetch("/api/ingredient-entries", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await res.json();
+    try {
+      const res = await fetch("/api/ingredient-entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json();
 
-    setSaving(false);
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't save today's ingredients", status: "error" });
+        return;
+      }
 
-    if (!res.ok) {
-      setToast({ message: body.error ?? "Couldn't save today's ingredients", status: "error" });
-      return;
+      const nextSaved: Record<string, IngredientEntryRow> = {};
+      for (const entry of body.entries as IngredientEntryRow[]) {
+        nextSaved[entry.ingredient_id] = entry;
+      }
+      setSavedEntries(nextSaved);
+      setToast({ message: "Today's ingredient entries saved", status: "success" });
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setSaving(false);
     }
-
-    const nextSaved: Record<string, IngredientEntryRow> = {};
-    for (const entry of body.entries as IngredientEntryRow[]) {
-      nextSaved[entry.ingredient_id] = entry;
-    }
-    setSavedEntries(nextSaved);
-    setToast({ message: "Today's ingredient entries saved", status: "success" });
   }
 
   useTillStripSlot(

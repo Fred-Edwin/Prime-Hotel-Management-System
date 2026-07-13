@@ -1,4 +1,19 @@
+import { NextResponse } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
+
+/**
+ * Standard response for an unexpected database/server error. Never surface
+ * error.message (a raw Postgres/PostgREST string) to the client — logged
+ * server-side for diagnosis, but the UI only ever sees a plain-language
+ * fallback.
+ */
+export function serverErrorResponse(error: PostgrestError, context: string) {
+  console.error(`[${context}]`, error);
+  return NextResponse.json(
+    { error: "Something went wrong on our end — please try again." },
+    { status: 500 },
+  );
+}
 
 /**
  * Translates a Postgres/PostgREST error from the entry-save RPCs

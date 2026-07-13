@@ -88,27 +88,32 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
     }
 
     setSubmitting(true);
-    const url = editingId ? `/api/items/${editingId}` : "/api/items";
-    const method = editingId ? "PATCH" : "POST";
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
-    });
-    const data = await res.json().catch(() => ({}));
-    setSubmitting(false);
+    try {
+      const url = editingId ? `/api/items/${editingId}` : "/api/items";
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setFieldErrors({ name: data.error ?? "Something went wrong" });
-      return;
+      if (!res.ok) {
+        setFieldErrors({ name: data.error ?? "Something went wrong" });
+        return;
+      }
+
+      const saved: Item = data.item;
+      setItems((prev) =>
+        editingId ? prev.map((i) => (i.id === saved.id ? saved : i)) : [...prev, saved],
+      );
+      setModalOpen(false);
+      setToast(editingId ? "Item updated" : "Item added");
+    } catch {
+      setFieldErrors({ name: "Couldn't reach the server — check your connection and try again." });
+    } finally {
+      setSubmitting(false);
     }
-
-    const saved: Item = data.item;
-    setItems((prev) =>
-      editingId ? prev.map((i) => (i.id === saved.id ? saved : i)) : [...prev, saved],
-    );
-    setModalOpen(false);
-    setToast(editingId ? "Item updated" : "Item added");
   }
 
   return (

@@ -149,28 +149,33 @@ export function OrdersClient() {
     if (!canSave) return;
     setSubmitting(true);
 
-    const res = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customer_name: customerName.trim(),
-        fulfillment_type: fulfillmentType,
-        delivery_location_id: fulfillmentType === "delivery" ? deliveryLocationId : null,
-        items: cartLines.map((line) => ({ item_id: line.item.id, quantity: line.quantity })),
-        client_request_id: clientRequestId,
-      }),
-    });
-    const body = await res.json();
-    setSubmitting(false);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_name: customerName.trim(),
+          fulfillment_type: fulfillmentType,
+          delivery_location_id: fulfillmentType === "delivery" ? deliveryLocationId : null,
+          items: cartLines.map((line) => ({ item_id: line.item.id, quantity: line.quantity })),
+          client_request_id: clientRequestId,
+        }),
+      });
+      const body = await res.json();
 
-    if (!res.ok) {
-      setToast({ message: body.error ?? "Couldn't save the order", status: "error" });
-      return;
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't save the order", status: "error" });
+        return;
+      }
+
+      setOrders((prev) => [body.order as OrderRow, ...prev]);
+      setToast({ message: "Order saved", status: "success" });
+      resetForm();
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setSubmitting(false);
     }
-
-    setOrders((prev) => [body.order as OrderRow, ...prev]);
-    setToast({ message: "Order saved", status: "success" });
-    resetForm();
   }
 
   useTillStripSlot(

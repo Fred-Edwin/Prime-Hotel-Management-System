@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { dashboardPeriodRange, type DashboardPeriod } from "@/lib/calculations";
+import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/dashboard/ledger?period=today|week|month&location=restaurant|canteen
@@ -38,10 +39,10 @@ export async function GET(request: Request) {
   ]);
 
   if (itemLedgerRes.error) {
-    return NextResponse.json({ error: itemLedgerRes.error.message }, { status: 500 });
+    return serverErrorResponse(itemLedgerRes.error, "dashboard/ledger");
   }
   if (ingredientLedgerRes.error) {
-    return NextResponse.json({ error: ingredientLedgerRes.error.message }, { status: 500 });
+    return serverErrorResponse(ingredientLedgerRes.error, "dashboard/ledger");
   }
 
   return NextResponse.json({

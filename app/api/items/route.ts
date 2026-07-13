@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { itemSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { serverErrorResponse } from "@/lib/errors";
 
 export async function GET() {
   const admin = await requireAdmin();
@@ -11,7 +12,7 @@ export async function GET() {
   const query = supabase.from("items").select("*").order("category").order("name");
   const { data, error }: Awaited<typeof query> = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverErrorResponse(error, "items");
   return NextResponse.json({ items: data });
 }
 
@@ -32,6 +33,6 @@ export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.from("items").insert(parsed.data).select().single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverErrorResponse(error, "items");
   return NextResponse.json({ item: data }, { status: 201 });
 }

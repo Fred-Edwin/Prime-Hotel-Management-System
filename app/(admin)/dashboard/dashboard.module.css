@@ -35,7 +35,7 @@
 }
 
 .heroError {
-  color: var(--color-status-error);
+  color: var(--color-status-error-on-dark);
   opacity: 1;
 }
 

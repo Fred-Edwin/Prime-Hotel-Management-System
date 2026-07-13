@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { canteenStockEntriesSaveSchema, stockEntriesSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { describeSaveError } from "@/lib/errors";
+import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 import { weekEndSunday, weekStartMonday } from "@/lib/calculations";
 
 /**
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     .order("name");
   const { data: items, error: itemsError }: Awaited<typeof itemsQuery> = await itemsQuery;
 
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
+  if (itemsError) return serverErrorResponse(itemsError, "stock-entries");
 
   const entryDate = user.location === "canteen" ? weekStartMonday(new Date(date)) : date;
 
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     .eq("entry_date", entryDate);
   const { data: entries, error: entriesError }: Awaited<typeof entriesQuery> = await entriesQuery;
 
-  if (entriesError) return NextResponse.json({ error: entriesError.message }, { status: 500 });
+  if (entriesError) return serverErrorResponse(entriesError, "stock-entries");
 
   if (user.location !== "canteen") {
     return NextResponse.json({ items, entries, entry_date: entryDate });
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       p_week_start: entryDate,
       p_week_end: weekEnd,
     });
-    if (totalError) return NextResponse.json({ error: totalError.message }, { status: 500 });
+    if (totalError) return serverErrorResponse(totalError, "stock-entries");
     suppliedTotals[item.id] = total ?? 0;
   }
 
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
   const priceQuery = supabase.from("items").select("id, selling_price, buying_price").in("id", itemIds);
   const { data: priceRows, error: priceError }: Awaited<typeof priceQuery> = await priceQuery;
 
-  if (priceError) return NextResponse.json({ error: priceError.message }, { status: 500 });
+  if (priceError) return serverErrorResponse(priceError, "stock-entries");
 
   const priceById = new Map((priceRows ?? []).map((row) => [row.id, row]));
 
@@ -185,7 +185,7 @@ async function saveCanteenEntries(
     .in("id", itemIds);
   const { data: itemRows, error: itemsError }: Awaited<typeof itemsQuery> = await itemsQuery;
 
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
+  if (itemsError) return serverErrorResponse(itemsError, "stock-entries");
 
   const itemById = new Map((itemRows ?? []).map((row) => [row.id, row]));
 

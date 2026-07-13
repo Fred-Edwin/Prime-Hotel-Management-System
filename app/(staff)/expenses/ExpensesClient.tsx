@@ -77,27 +77,32 @@ export function ExpensesClient() {
     }
 
     setSubmitting(true);
-    const res = await fetch("/api/expenses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        category,
-        amount: parsedAmount,
-        note: note.trim() ? note.trim() : null,
-      }),
-    });
-    const body = await res.json();
-    setSubmitting(false);
+    try {
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          amount: parsedAmount,
+          note: note.trim() ? note.trim() : null,
+        }),
+      });
+      const body = await res.json();
 
-    if (!res.ok) {
-      setToast({ message: body.error ?? "Couldn't save the expense", status: "error" });
-      return;
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't save the expense", status: "error" });
+        return;
+      }
+
+      setExpenses((prev) => [body.expense as ExpenseRow, ...prev]);
+      setAmount("");
+      setNote("");
+      setToast({ message: "Expense logged", status: "success" });
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setSubmitting(false);
     }
-
-    setExpenses((prev) => [body.expense as ExpenseRow, ...prev]);
-    setAmount("");
-    setNote("");
-    setToast({ message: "Expense logged", status: "success" });
   }
 
   const todayTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);

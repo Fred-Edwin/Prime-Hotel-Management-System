@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ingredientEntriesSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { describeSaveError } from "@/lib/errors";
+import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 
 function requireStoreManager(user: Awaited<ReturnType<typeof getCurrentUser>>) {
   return !!user && user.role === "staff" && user.location === "restaurant" && user.is_store_manager;
@@ -31,12 +31,12 @@ export async function GET(request: Request) {
   const { data: ingredients, error: ingredientsError }: Awaited<typeof ingredientsQuery> =
     await ingredientsQuery;
 
-  if (ingredientsError) return NextResponse.json({ error: ingredientsError.message }, { status: 500 });
+  if (ingredientsError) return serverErrorResponse(ingredientsError, "ingredient-entries");
 
   const entriesQuery = supabase.from("ingredient_entries").select("*").eq("entry_date", date);
   const { data: entries, error: entriesError }: Awaited<typeof entriesQuery> = await entriesQuery;
 
-  if (entriesError) return NextResponse.json({ error: entriesError.message }, { status: 500 });
+  if (entriesError) return serverErrorResponse(entriesError, "ingredient-entries");
 
   return NextResponse.json({ ingredients, entries });
 }
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   const priceQuery = supabase.from("ingredients").select("id, buying_price").in("id", ingredientIds);
   const { data: priceRows, error: priceError }: Awaited<typeof priceQuery> = await priceQuery;
 
-  if (priceError) return NextResponse.json({ error: priceError.message }, { status: 500 });
+  if (priceError) return serverErrorResponse(priceError, "ingredient-entries");
 
   const priceById = new Map((priceRows ?? []).map((row) => [row.id, row]));
 
