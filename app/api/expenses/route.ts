@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { nairobiToday } from "@/lib/calculations";
 import { expenseSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { serverErrorResponse } from "@/lib/errors";
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     .from("expenses")
     .insert({
       location: user.location,
-      expense_date: new Date().toISOString().slice(0, 10),
+      expense_date: nairobiToday(),
       category,
       amount,
       note: note ?? null,

@@ -3,6 +3,27 @@
  * Never re-implement this math in a route handler or component.
  */
 
+/**
+ * Prime Hotel operates in Nairobi (Africa/Nairobi, UTC+3, no DST — this
+ * offset never changes). All "what date/day is it right now" logic in this
+ * app — server routes and client components alike — must go through
+ * nairobiNow()/nairobiToday(), never raw `new Date()`/`toISOString()`.
+ * Vercel serverless functions default to UTC, so a bare `new Date()` on the
+ * server is up to 3 hours behind Nairobi wall-clock time — e.g. an order
+ * placed at 1am Nairobi time would otherwise be dated to the previous day.
+ */
+const NAIROBI_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** Current instant, shifted so its UTC getters read as Nairobi wall-clock time. */
+export function nairobiNow(): Date {
+  return new Date(Date.now() + NAIROBI_OFFSET_MS);
+}
+
+/** Today's date in Nairobi, as YYYY-MM-DD. */
+export function nairobiToday(): string {
+  return nairobiNow().toISOString().slice(0, 10);
+}
+
 export interface StockEntryTotals {
   closingStock: number;
   salesValue: number;
@@ -129,7 +150,7 @@ export type DashboardPeriod = "today" | "week" | "month";
  * framing in the PRD.
  */
 export function dashboardPeriodRange(period: DashboardPeriod): { from: string; to: string } {
-  const now = new Date();
+  const now = nairobiNow();
   const todayISO = now.toISOString().slice(0, 10);
 
   if (period === "today") {

@@ -8,6 +8,7 @@ import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
+import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./entry.module.css";
 
@@ -42,7 +43,7 @@ interface LineState {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return nairobiToday();
 }
 
 function emptyLine(): LineState {

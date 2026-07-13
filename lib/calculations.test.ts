@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   calculateIngredientEntryTotals,
   calculateStockEntryTotals,
+  dashboardPeriodRange,
   isIngredientEntryOversold,
   isLowStock,
   isStockEntryOversold,
+  nairobiNow,
+  nairobiToday,
   netProfit,
   orderTotal,
   totalStock,
@@ -194,5 +197,57 @@ describe("isLowStock", () => {
 
   it("does not flag closing stock above the threshold", () => {
     expect(isLowStock(6, 5)).toBe(false);
+  });
+});
+
+describe("nairobiNow / nairobiToday", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reads as Nairobi wall-clock time (UTC+3), not raw server UTC", () => {
+    // Server (UTC) clock at 22:00 on the 12th is already 01:00 on the
+    // 13th in Nairobi — the whole point of this helper.
+    vi.setSystemTime(new Date("2026-07-12T22:00:00Z"));
+    expect(nairobiToday()).toBe("2026-07-13");
+    expect(nairobiNow().toISOString().slice(11, 16)).toBe("01:00");
+  });
+
+  it("does not roll over early: UTC evening that's still the same Nairobi day", () => {
+    vi.setSystemTime(new Date("2026-07-12T15:00:00Z")); // 18:00 Nairobi, same day
+    expect(nairobiToday()).toBe("2026-07-12");
+  });
+
+  it("matches plain UTC date well away from the midnight boundary", () => {
+    vi.setSystemTime(new Date("2026-07-12T09:00:00Z")); // 12:00 Nairobi
+    expect(nairobiToday()).toBe("2026-07-12");
+  });
+});
+
+describe("dashboardPeriodRange", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("'today' reflects the Nairobi date even during the UTC-lag window after midnight EAT", () => {
+    // 2026-07-12T22:00:00Z is 2026-07-13 01:00 in Nairobi — raw UTC would
+    // wrongly report "today" as the 12th here.
+    vi.setSystemTime(new Date("2026-07-12T22:00:00Z"));
+    expect(dashboardPeriodRange("today")).toEqual({ from: "2026-07-13", to: "2026-07-13" });
+  });
+
+  it("'week' uses the Nairobi-local Monday, not the UTC one", () => {
+    // Sunday 22:00 UTC is already Monday in Nairobi — the new week should
+    // have started.
+    vi.setSystemTime(new Date("2026-07-12T22:00:00Z")); // Sun 22:00 UTC = Mon 01:00 EAT
+    expect(dashboardPeriodRange("week")).toEqual({ from: "2026-07-13", to: "2026-07-19" });
   });
 });

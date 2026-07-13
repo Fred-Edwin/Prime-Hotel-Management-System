@@ -7,7 +7,7 @@ import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
-import { weekStartMonday } from "@/lib/calculations";
+import { nairobiNow, nairobiToday, weekStartMonday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./entry.module.css";
 
@@ -26,7 +26,7 @@ function emptyLine(): LineState {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return nairobiToday();
 }
 
 function formatWeekLabel(weekStart: string, weekEnd: string): string {
@@ -55,7 +55,7 @@ export function CanteenEntryClient() {
   const [savedEntries, setSavedEntries] = useState<Record<string, StockEntryRow>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [suppliedTotals, setSuppliedTotals] = useState<Record<string, number>>({});
-  const [weekStart, setWeekStart] = useState<string>(() => weekStartMonday(new Date()));
+  const [weekStart, setWeekStart] = useState<string>(() => weekStartMonday(nairobiNow()));
   const [weekEnd, setWeekEnd] = useState<string>(weekStart);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);

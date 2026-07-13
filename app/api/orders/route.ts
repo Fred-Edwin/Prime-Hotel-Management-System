@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { orderSchema } from "@/lib/validation";
-import { orderTotal, weekStartMonday } from "@/lib/calculations";
+import { nairobiToday, orderTotal, weekStartMonday } from "@/lib/calculations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 
@@ -169,7 +169,7 @@ export async function POST(request: Request) {
   }));
   const totalAmount = orderTotal({ items: orderItemsForTotal, deliveryFeeSnapshot });
 
-  const orderDate = new Date().toISOString().slice(0, 10);
+  const orderDate = nairobiToday();
 
   const itemsPayload = items.map((line) => ({
     item_id: line.item_id,

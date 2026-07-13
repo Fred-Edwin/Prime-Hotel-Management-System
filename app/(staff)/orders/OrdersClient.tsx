@@ -9,7 +9,7 @@ import { Stepper } from "@/components/Stepper";
 import { TillStrip } from "@/components/TillStrip";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
-import { orderTotal } from "@/lib/calculations";
+import { nairobiToday, orderTotal } from "@/lib/calculations";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./orders.module.css";
@@ -22,7 +22,7 @@ type StockEntryRow = Database["public"]["Tables"]["stock_entries"]["Row"];
 type FulfillmentType = Database["public"]["Enums"]["order_fulfillment_type"];
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return nairobiToday();
 }
 
 /**

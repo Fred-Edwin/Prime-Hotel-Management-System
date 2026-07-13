@@ -6,6 +6,7 @@ import { CategoryChips } from "@/components/CategoryChips";
 import { Input } from "@/components/Input";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./expenses.module.css";
 
@@ -20,7 +21,7 @@ const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
 ];
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return nairobiToday();
 }
 
 /**

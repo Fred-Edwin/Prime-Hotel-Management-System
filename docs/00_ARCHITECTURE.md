@@ -123,6 +123,18 @@ SUPABASE_SERVICE_ROLE_KEY=       # server-only, never exposed to client
 
 ---
 
+## 7.1 Timezone: everything is Nairobi time, not server time
+
+The business operates entirely in Nairobi (Africa/Nairobi, UTC+3, no DST — the offset never changes). Vercel serverless functions default to **UTC**, and a bare `new Date()`/`toISOString()` on the server is therefore up to 3 hours behind Nairobi wall-clock time — e.g. an order placed at 01:00 Nairobi time would be dated to the previous day if the server used raw UTC.
+
+**The rule:** any code that needs "what is today's date / this week / this instant, right now" — not a date already supplied by the client or read from the database — must go through `nairobiNow()` / `nairobiToday()` in `lib/calculations.ts`, never `new Date()` directly. This applies on both the server (API routes) and the client (staff-facing forms defaulting to "today"), so a phone whose system timezone isn't set to Nairobi doesn't silently disagree with the server either.
+
+`nairobiNow()` returns a `Date` shifted by a fixed +3h so its UTC getters (`getUTCFullYear()`, etc.) read as Nairobi wall-clock time — the same pattern `weekStartMonday`/`weekEndSunday` already use internally for date-only math (see §3.1 in `01_DATA_MODEL.md`). Because Nairobi has no DST, this fixed offset never needs to change and doesn't require ICU timezone data or a library.
+
+This does **not** apply to formatting an already-known date-only value (a stored `date` column, a `YYYY-MM-DD` string) for display — those are correctly formatted with `timeZone: "UTC"` against a synthetic UTC-midnight `Date`, treating the string as a calendar date with no timezone component of its own, not as an instant needing a real-world timezone conversion.
+
+---
+
 ## 8. Free-tier limits to be aware of (revisit if the business grows)
 
 - **Supabase free tier**: project pauses after 7 days of inactivity (auto-resumes on next request, ~few seconds cold start) — acceptable for a daily-use business tool. 500MB database storage — far more than this app will need for years at this data volume.
