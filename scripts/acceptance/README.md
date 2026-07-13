@@ -15,6 +15,7 @@ pnpm dev                 # in another terminal, leave running
 node scripts/acceptance/phase4-entry.mjs
 node scripts/acceptance/phase5-canteen-expenses.mjs
 node scripts/acceptance/phase6-orders.mjs
+node scripts/acceptance/phase7-dashboard.mjs
 ```
 
 Each script logs in as the real seeded roster accounts (`scripts/seed-staff.ts`'s names/PINs — same roster `scripts/verify-screenshot.mjs` uses), prints `PASS`/`FAIL` per check, and exits non-zero if anything failed.

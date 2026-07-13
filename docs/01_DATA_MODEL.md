@@ -102,6 +102,13 @@ create table public.items (
   supply_type item_supply_type not null default 'restaurant_only',  -- see §3.1
   buying_price numeric(10,2) not null check (buying_price >= 0),
   selling_price numeric(10,2) not null check (selling_price >= 0),
+  -- Added Phase 7 (supabase/migrations/20260712120000_low_stock_threshold.sql):
+  -- a stock_entries row's closing_stock at or below this value surfaces the
+  -- item on the admin dashboard's "Needs attention" section. Admin-editable
+  -- on the existing Item Master screen (Phase 3). Was NOT part of the
+  -- original schema -- the PRD only described "low stock" qualitatively
+  -- (§4.6), with no threshold field to source it from. Defaults to 5.
+  low_stock_threshold numeric(10,2) not null default 5 check (low_stock_threshold >= 0),
   active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

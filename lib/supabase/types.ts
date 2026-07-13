@@ -208,6 +208,7 @@ export type Database = {
           category: Database["public"]["Enums"]["item_category"]
           created_at: string
           id: string
+          low_stock_threshold: number
           name: string
           selling_price: number
           supply_type: Database["public"]["Enums"]["item_supply_type"]
@@ -219,6 +220,7 @@ export type Database = {
           category: Database["public"]["Enums"]["item_category"]
           created_at?: string
           id?: string
+          low_stock_threshold?: number
           name: string
           selling_price: number
           supply_type?: Database["public"]["Enums"]["item_supply_type"]
@@ -230,6 +232,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["item_category"]
           created_at?: string
           id?: string
+          low_stock_threshold?: number
           name?: string
           selling_price?: number
           supply_type?: Database["public"]["Enums"]["item_supply_type"]
@@ -531,6 +534,101 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      dashboard_daily_trend: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          cost_value: number
+          entry_date: string
+          sales_value: number
+          wastage_value: number
+        }[]
+      }
+      dashboard_expenses_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          location: Database["public"]["Enums"]["location_type"]
+          total_amount: number
+        }[]
+      }
+      dashboard_ingredient_ledger: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          closing_stock: number
+          closing_stock_value: number
+          entry_date: string
+          ingredient_id: string
+          ingredient_name: string
+          opening_stock: number
+          quantity_used: number
+          received: number
+          unit: string
+          wastage: number
+          wastage_value: number
+        }[]
+      }
+      dashboard_ingredient_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          closing_stock_value: number
+          wastage_value: number
+        }[]
+      }
+      dashboard_item_ledger: {
+        Args: {
+          p_from: string
+          p_location?: Database["public"]["Enums"]["location_type"]
+          p_to: string
+        }
+        Returns: {
+          added_stock: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          entry_date: string
+          item_id: string
+          item_name: string
+          location: Database["public"]["Enums"]["location_type"]
+          low_stock_threshold: number
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          sent_out: number
+          till_quantity_sold: number
+          wastage: number
+          wastage_value: number
+        }[]
+      }
+      dashboard_low_stock_ingredients: {
+        Args: { p_threshold?: number }
+        Returns: {
+          closing_stock: number
+          entry_date: string
+          ingredient_id: string
+          ingredient_name: string
+          unit: string
+        }[]
+      }
+      dashboard_low_stock_items: {
+        Args: never
+        Returns: {
+          closing_stock: number
+          entry_date: string
+          item_id: string
+          item_name: string
+          location: Database["public"]["Enums"]["location_type"]
+          low_stock_threshold: number
+        }[]
+      }
+      dashboard_stock_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          closing_stock_value: number
+          cost_value: number
+          location: Database["public"]["Enums"]["location_type"]
+          sales_value: number
+          wastage_value: number
+        }[]
       }
       is_admin: { Args: never; Returns: boolean }
       lock_stock_entry_row: {

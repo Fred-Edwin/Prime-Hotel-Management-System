@@ -48,6 +48,7 @@ export const itemSchema = z.object({
   supply_type: itemSupplyTypeSchema,
   buying_price: nonNegativeAmount,
   selling_price: nonNegativeAmount,
+  low_stock_threshold: nonNegativeAmount,
   active: z.boolean(),
 });
 

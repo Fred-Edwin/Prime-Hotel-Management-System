@@ -40,6 +40,7 @@ const emptyForm: ItemInput = {
   supply_type: "restaurant_only",
   buying_price: 0,
   selling_price: 0,
+  low_stock_threshold: 5,
   active: true,
 };
 
@@ -67,6 +68,7 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
       supply_type: item.supply_type,
       buying_price: item.buying_price,
       selling_price: item.selling_price,
+      low_stock_threshold: item.low_stock_threshold,
       active: item.active,
     });
     setFieldErrors({});
@@ -136,6 +138,7 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                 <th>Supply type</th>
                 <th className={styles.numeric}>Buying</th>
                 <th className={styles.numeric}>Selling</th>
+                <th className={styles.numeric}>Low stock at</th>
                 <th>Status</th>
                 <th aria-label="Actions" />
               </tr>
@@ -148,6 +151,7 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                   <td>{SUPPLY_TYPE_LABELS[item.supply_type]}</td>
                   <td className={styles.numeric}>KES {item.buying_price.toFixed(2)}</td>
                   <td className={styles.numeric}>KES {item.selling_price.toFixed(2)}</td>
+                  <td className={styles.numeric}>{item.low_stock_threshold}</td>
                   <td>
                     <span className={item.active ? styles.badgeActive : styles.badgeInactive}>
                       {item.active ? "Active" : "Inactive"}
@@ -244,6 +248,17 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
             value={form.selling_price}
             onChange={(e) => setForm({ ...form, selling_price: Number(e.target.value) })}
             error={fieldErrors.selling_price}
+          />
+
+          <Input
+            label="Low stock alert threshold"
+            type="number"
+            min="0"
+            step="1"
+            numeric
+            value={form.low_stock_threshold}
+            onChange={(e) => setForm({ ...form, low_stock_threshold: Number(e.target.value) })}
+            error={fieldErrors.low_stock_threshold}
           />
 
           <label className={styles.checkboxField}>

@@ -3,7 +3,9 @@ import {
   calculateIngredientEntryTotals,
   calculateStockEntryTotals,
   isIngredientEntryOversold,
+  isLowStock,
   isStockEntryOversold,
+  netProfit,
   orderTotal,
   totalStock,
   weekEndSunday,
@@ -166,5 +168,31 @@ describe("orderTotal", () => {
       deliveryFeeSnapshot: 0,
     });
     expect(total).toBe(120);
+  });
+});
+
+describe("netProfit", () => {
+  it("subtracts cost, expenses, and combined wastage from sales (§3.3)", () => {
+    // sales 1000, cost 400, expenses 150, wastage (stock 30 + ingredient 20) = 50
+    expect(
+      netProfit({ salesValue: 1000, costValue: 400, expenses: 150, wastageValue: 50 }),
+    ).toBe(400);
+  });
+
+  it("can go negative when costs exceed sales", () => {
+    expect(
+      netProfit({ salesValue: 100, costValue: 200, expenses: 50, wastageValue: 10 }),
+    ).toBe(-160);
+  });
+});
+
+describe("isLowStock", () => {
+  it("flags closing stock at or below the threshold", () => {
+    expect(isLowStock(5, 5)).toBe(true);
+    expect(isLowStock(4, 5)).toBe(true);
+  });
+
+  it("does not flag closing stock above the threshold", () => {
+    expect(isLowStock(6, 5)).toBe(false);
   });
 });

@@ -116,6 +116,38 @@ export function weekEndSunday(weekStartISO: string): string {
   return start.toISOString().slice(0, 10);
 }
 
+export type DashboardPeriod = "today" | "week" | "month";
+
+/**
+ * Admin dashboard period boundaries (Components §4.8 Period Toggle,
+ * 04_PHASE_PLAN.md Phase 7). Shared by both dashboard API routes
+ * (summary + ledger) so "today/week/month" means exactly the same date
+ * range everywhere — never reimplemented per route. Week reuses
+ * weekStartMonday/weekEndSunday above (same convention canteen's cadence
+ * already uses). Month is calendar-month-to-date-bounded (1st through the
+ * month's last day), matching the Period Toggle's plain "this month"
+ * framing in the PRD.
+ */
+export function dashboardPeriodRange(period: DashboardPeriod): { from: string; to: string } {
+  const now = new Date();
+  const todayISO = now.toISOString().slice(0, 10);
+
+  if (period === "today") {
+    return { from: todayISO, to: todayISO };
+  }
+
+  if (period === "week") {
+    const from = weekStartMonday(now);
+    return { from, to: weekEndSunday(from) };
+  }
+
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const from = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  const to = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+  return { from, to };
+}
+
 /**
  * Order total (docs/01_DATA_MODEL.md §6): sum(order_items.quantity *
  * selling_price_snapshot) + delivery_fee_snapshot. delivery_fee_snapshot
@@ -130,4 +162,35 @@ export function orderTotal(params: {
     0,
   );
   return itemsTotal + params.deliveryFeeSnapshot;
+}
+
+/**
+ * Admin dashboard net profit (04_PHASE_PLAN.md Phase 7, docs/01_DATA_MODEL.md
+ * §3.3): sales_value - cost_value - expenses - wastage_value. All four
+ * inputs are already period/location-aggregated in SQL (sum() over
+ * stock_entries/ingredient_entries/expenses) before reaching this
+ * function — this is a pure combining step, never a re-derivation of any
+ * of its inputs. wastageValue must already include BOTH
+ * stock_entries.wastage_value and ingredient_entries.wastage_value (§3.3)
+ * — this function doesn't know or care which table each unit came from,
+ * the caller sums both first.
+ */
+export function netProfit(params: {
+  salesValue: number;
+  costValue: number;
+  expenses: number;
+  wastageValue: number;
+}): number {
+  return params.salesValue - params.costValue - params.expenses - params.wastageValue;
+}
+
+/**
+ * Low-stock check (docs/01_DATA_MODEL.md §2 items.low_stock_threshold,
+ * added Phase 7 — see that migration's comment for why no such field
+ * existed before this phase). A stock/ingredient row is "low" when its
+ * closing_stock is at or below the item/ingredient's own threshold —
+ * matches Components §4.9's indicator, shown wherever stock is displayed.
+ */
+export function isLowStock(closingStock: number, lowStockThreshold: number): boolean {
+  return closingStock <= lowStockThreshold;
 }

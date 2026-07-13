@@ -247,6 +247,42 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
   --color-status-info: #4A4453;
   --color-status-info-bg: #F2F0F5;
 
+  /* Color — status, dark-surface tints (added Phase 7). The plain
+     status-success/status-error tokens above are tuned for light
+     surfaces and fail WCAG text contrast on --color-surface-dark
+     (2.7:1 / 3.1:1 — found when MetricCard's onDark variant was first
+     combined with its trend prop for the admin dashboard's hero band, a
+     pre-existing gap in the component spec never exercised before this
+     phase, not something this phase introduced). These lightened tints
+     (same hue family) pass ~9:1 on the aubergine surface. Used by
+     MetricCard.tsx's onDark+trend combination — see Components §4.10. */
+  --color-status-success-on-dark: #7FD9AE;
+  --color-status-error-on-dark: #F0B4B4;
+
+  /* Color — chart (added Phase 7, admin dashboard — see 02_PATTERNS_AND_CHECKLIST.md
+     §5's "Admin dashboard" entry for usage rules). This system's brand
+     palette has only two hues (aubergine, gold), not the 8-hue categorical
+     set most chart guidance assumes -- these two slots are a validated
+     two-series-only extension, not a general categorical ramp. Each mode
+     picks the step of its base hue that clears the dataviz palette
+     validator's lightness/chroma/CVD/contrast checks for that mode's
+     surface (see the palette's own note below); never reuse
+     --color-brand-primary or --color-brand-accent directly as a chart mark
+     color -- both are tuned as near-black/near-white UI ink, not
+     mid-tone data marks, and fail the validator's lightness band. */
+  --color-chart-primary-light: #D19F48;   /* deep gold — light surfaces (chart-surface-page) */
+  --color-chart-primary-dark: #B8863A;    /* deep gold — dark surfaces (chart-surface-dark) */
+  --color-chart-secondary-light: #9B78BF; /* aubergine-family violet — light surfaces */
+  --color-chart-secondary-dark: #9B78BF;  /* aubergine-family violet — dark surfaces */
+  /* Validated via .claude/../dataviz skill's scripts/validate_palette.js:
+     light mode ("#D19F48,#9B78BF" on #FAF9FB) and dark mode
+     ("#B8863A,#9B78BF" on #331642) both pass lightness band, chroma
+     floor, and CVD separation; both carry a contrast WARN on the gold
+     slot against its surface, which is why every chart using these colors
+     MUST ship direct value labels (never color-only identification) per
+     the dataviz skill's non-negotiables — see the chart usage note in
+     02_PATTERNS_AND_CHECKLIST.md §5. */
+
   /* Typography */
   --font-family-structural: "Manrope", -apple-system, sans-serif;
   --font-family-data: "IBM Plex Sans", "Inter", -apple-system, sans-serif;

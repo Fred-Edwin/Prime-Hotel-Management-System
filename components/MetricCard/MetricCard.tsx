@@ -17,6 +17,15 @@ const trendClassName: Record<MetricTrend, string> = {
   neutral: "trendNeutral",
 };
 
+// Dark-surface tints (Phase 7) — the plain trend colors fail WCAG text
+// contrast on --color-surface-dark, see globals.css's
+// --color-status-success-on-dark/--color-status-error-on-dark note.
+const trendClassNameOnDark: Record<MetricTrend, string> = {
+  up: "trendUpOnDark",
+  down: "trendDownOnDark",
+  neutral: "trendNeutralOnDark",
+};
+
 export function MetricCard({ label, value, trend, trendLabel, onDark = false }: MetricCardProps) {
   const body = (
     <>
@@ -27,7 +36,14 @@ export function MetricCard({ label, value, trend, trendLabel, onDark = false }: 
         {value}
       </p>
       {trend && trendLabel && (
-        <p className={[styles.trend, styles[trendClassName[trend]]].join(" ")}>{trendLabel}</p>
+        <p
+          className={[
+            styles.trend,
+            styles[onDark ? trendClassNameOnDark[trend] : trendClassName[trend]],
+          ].join(" ")}
+        >
+          {trendLabel}
+        </p>
       )}
     </>
   );

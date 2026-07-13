@@ -56,3 +56,19 @@
 .trendNeutral {
   color: var(--color-text-secondary);
 }
+
+/* Dark-surface tints (Phase 7) — see globals.css's
+   --color-status-success-on-dark/--color-status-error-on-dark note. The
+   plain trend colors above fail WCAG text contrast on the aubergine
+   hero band. */
+.trendUpOnDark {
+  color: var(--color-status-success-on-dark);
+}
+
+.trendDownOnDark {
+  color: var(--color-status-error-on-dark);
+}
+
+.trendNeutralOnDark {
+  color: rgba(255, 255, 255, 0.72);
+}

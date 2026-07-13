@@ -24,3 +24,17 @@
   background: var(--color-brand-primary);
   color: var(--color-text-on-brand);
 }
+
+/* Dark-surface variant — admin dashboard hero band (Components §4.8, added Phase 7) */
+.toggleOnDark {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.segmentOnDark {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.activeOnDark {
+  background: var(--color-brand-accent);
+  color: var(--color-brand-primary);
+}

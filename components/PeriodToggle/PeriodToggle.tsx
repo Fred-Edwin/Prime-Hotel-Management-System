@@ -11,11 +11,16 @@ export interface PeriodToggleProps {
   options: PeriodOption[];
   value: string;
   onChange: (value: string) => void;
+  /** Dark-surface variant — see admin dashboard's hero band (Components §4.8). */
+  onDark?: boolean;
 }
 
-export function PeriodToggle({ options, value, onChange }: PeriodToggleProps) {
+export function PeriodToggle({ options, value, onChange, onDark = false }: PeriodToggleProps) {
   return (
-    <div className={styles.toggle} role="tablist">
+    <div
+      className={[styles.toggle, onDark ? styles.toggleOnDark : ""].filter(Boolean).join(" ")}
+      role="tablist"
+    >
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -24,7 +29,13 @@ export function PeriodToggle({ options, value, onChange }: PeriodToggleProps) {
             type="button"
             role="tab"
             aria-selected={active}
-            className={[styles.segment, active ? styles.active : ""].filter(Boolean).join(" ")}
+            className={[
+              styles.segment,
+              onDark ? styles.segmentOnDark : "",
+              active ? (onDark ? styles.activeOnDark : styles.active) : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             onClick={() => onChange(option.value)}
           >
             {option.label}

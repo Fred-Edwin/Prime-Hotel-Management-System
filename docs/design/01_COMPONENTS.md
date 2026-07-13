@@ -136,6 +136,8 @@ A small `color-status-warning` dot or `caption`-sized pill ("Low stock") attache
 | Stat card (admin dashboard) | Same structure; large figure in `figure-lg`, Plex Sans, `color-brand-primary`; `overline` label above; small trend indicator using semantic color tokens below |
 | Interactive/clickable card | `shadow-elevation-1` on hover/tap only |
 
+**MetricCard's `onDark` + `trend` combination (Phase 7 fix):** when a stat card sits on `color-surface-dark` (the admin dashboard's hero band, `02_PATTERNS_AND_CHECKLIST.md` §5) and shows a trend indicator, it must use `--color-status-success-on-dark`/`--color-status-error-on-dark` (Foundations §3), not the plain `--color-status-success`/`--color-status-error` tokens — those fail WCAG text contrast on the aubergine surface (2.7:1 / 3.1:1, need 4.5:1). `MetricCard.tsx` picks the correct pair automatically based on its `onDark` prop; don't pass a raw status color inline.
+
 ### 4.11 Tables
 
 Header row distinguished by weight not fill, quiet row dividers, status badges using semantic tokens. Numeric columns (quantity, price, totals) right-aligned, Plex Sans tabular figures; text columns (item name, staff name) left-aligned, Manrope.
