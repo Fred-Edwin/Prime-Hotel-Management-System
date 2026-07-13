@@ -177,6 +177,7 @@ export type Database = {
           buying_price: number
           created_at: string
           id: string
+          low_stock_threshold: number
           name: string
           unit: string
           updated_at: string
@@ -186,6 +187,7 @@ export type Database = {
           buying_price: number
           created_at?: string
           id?: string
+          low_stock_threshold?: number
           name: string
           unit: string
           updated_at?: string
@@ -195,6 +197,7 @@ export type Database = {
           buying_price?: number
           created_at?: string
           id?: string
+          low_stock_threshold?: number
           name?: string
           unit?: string
           updated_at?: string
@@ -559,6 +562,7 @@ export type Database = {
           entry_date: string
           ingredient_id: string
           ingredient_name: string
+          low_stock_threshold: number
           opening_stock: number
           quantity_used: number
           received: number
@@ -600,12 +604,13 @@ export type Database = {
         }[]
       }
       dashboard_low_stock_ingredients: {
-        Args: { p_threshold?: number }
+        Args: never
         Returns: {
           closing_stock: number
           entry_date: string
           ingredient_id: string
           ingredient_name: string
+          low_stock_threshold: number
           unit: string
         }[]
       }
@@ -648,14 +653,6 @@ export type Database = {
       my_location: {
         Args: never
         Returns: Database["public"]["Enums"]["location_type"]
-      }
-      recalculate_stock_entry: {
-        Args: {
-          p_entry_date: string
-          p_item_id: string
-          p_location: Database["public"]["Enums"]["location_type"]
-        }
-        Returns: undefined
       }
       save_canteen_stock_entry: {
         Args: {

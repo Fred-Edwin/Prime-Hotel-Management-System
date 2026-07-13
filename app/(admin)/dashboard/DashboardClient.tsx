@@ -40,6 +40,7 @@ interface LowStockIngredient {
   ingredient_id: string;
   ingredient_name: string;
   closing_stock: number;
+  low_stock_threshold: number;
   unit: string;
   entry_date: string;
 }

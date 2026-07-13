@@ -44,6 +44,7 @@ interface IngredientLedgerRow {
   closing_stock: number;
   closing_stock_value: number;
   wastage_value: number;
+  low_stock_threshold: number;
 }
 
 interface LedgerResponse {
@@ -248,7 +249,15 @@ export function LedgerClient() {
                             {qty(row.wastage)} {row.unit}
                           </td>
                           <td className={catalogStyles.numeric}>
-                            {qty(row.closing_stock)} {row.unit}
+                            <span
+                              className={
+                                isLowStock(row.closing_stock, row.low_stock_threshold)
+                                  ? styles.lowValue
+                                  : undefined
+                              }
+                            >
+                              {qty(row.closing_stock)} {row.unit}
+                            </span>
                           </td>
                           <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
                           <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>

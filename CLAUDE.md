@@ -162,7 +162,7 @@ prime-hotel-management-system/
 │   ├── calculations.ts              # THE single source of stock/profit calculation math
 │   ├── validation.ts                 # Zod schemas for all writes
 │   └── auth.ts                       # Session helpers, role/location checks
-├── middleware.ts                    # Route protection: auth redirect, role-gate admin routes
+├── proxy.ts                          # Route protection: auth redirect, role-gate admin routes (renamed from middleware.ts in Phase 8 — Next.js 16's stable convention)
 ├── .env.local                       # Never committed
 ├── .env.example                     # Committed, no real values
 ├── package.json / pnpm-lock.yaml / tsconfig.json

@@ -17,6 +17,7 @@ const emptyForm: IngredientInput = {
   name: "",
   unit: "",
   buying_price: 0,
+  low_stock_threshold: 5,
   active: true,
 };
 
@@ -44,6 +45,7 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
       name: ingredient.name,
       unit: ingredient.unit,
       buying_price: ingredient.buying_price,
+      low_stock_threshold: ingredient.low_stock_threshold,
       active: ingredient.active,
     });
     setFieldErrors({});
@@ -116,6 +118,7 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
                 <th>Name</th>
                 <th>Unit</th>
                 <th className={styles.numeric}>Buying price</th>
+                <th className={styles.numeric}>Low stock at</th>
                 <th>Status</th>
                 <th aria-label="Actions" />
               </tr>
@@ -126,6 +129,7 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
                   <td>{ingredient.name}</td>
                   <td>{ingredient.unit}</td>
                   <td className={styles.numeric}>KES {ingredient.buying_price.toFixed(2)}</td>
+                  <td className={styles.numeric}>{ingredient.low_stock_threshold}</td>
                   <td>
                     <span
                       className={ingredient.active ? styles.badgeActive : styles.badgeInactive}
@@ -188,6 +192,17 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
             value={form.buying_price}
             onChange={(e) => setForm({ ...form, buying_price: Number(e.target.value) })}
             error={fieldErrors.buying_price}
+          />
+
+          <Input
+            label="Low stock alert threshold"
+            type="number"
+            min="0"
+            step="1"
+            numeric
+            value={form.low_stock_threshold}
+            onChange={(e) => setForm({ ...form, low_stock_threshold: Number(e.target.value) })}
+            error={fieldErrors.low_stock_threshold}
           />
 
           <label className={styles.checkboxField}>

@@ -12,7 +12,7 @@ const PUBLIC_PATHS = ["/login"];
 // app/style-guide/page.tsx.
 const ALWAYS_ACCESSIBLE_PATHS = ["/style-guide"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(

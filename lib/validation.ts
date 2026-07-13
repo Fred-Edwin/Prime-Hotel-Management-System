@@ -59,6 +59,7 @@ export const ingredientSchema = z.object({
   name: z.string().min(1, "Name is required"),
   unit: z.string().min(1, "Unit is required"),
   buying_price: nonNegativeAmount,
+  low_stock_threshold: nonNegativeAmount,
   active: z.boolean(),
 });
 
