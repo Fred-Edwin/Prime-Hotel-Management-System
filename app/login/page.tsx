@@ -9,7 +9,8 @@ import { Button } from "@/components/Button";
 import { AppFooter } from "@/components/AppFooter";
 import styles from "./login.module.css";
 
-const PIN_LENGTH = 4;
+const MAX_PIN_LENGTH = 6;
+const MIN_PIN_LENGTH = 4;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function LoginPage() {
   }, []);
 
   async function submitLogin(pinValue: string) {
-    if (!selectedName || pinValue.length < PIN_LENGTH) return;
+    if (!selectedName || pinValue.length < MIN_PIN_LENGTH) return;
 
     setSubmitting(true);
     setError(null);
@@ -87,7 +88,7 @@ export default function LoginPage() {
             {selectedName && (
               <div className={styles.pinSection}>
                 <PinInput
-                  length={PIN_LENGTH}
+                  length={MAX_PIN_LENGTH}
                   value={pin}
                   onChange={setPin}
                   onComplete={submitLogin}
@@ -99,7 +100,7 @@ export default function LoginPage() {
                   type="button"
                   variant="primary"
                   fullWidth
-                  disabled={submitting || pin.length < PIN_LENGTH}
+                  disabled={submitting || pin.length < MIN_PIN_LENGTH}
                   onClick={() => submitLogin(pin)}
                 >
                   {submitting ? "Signing in…" : "Sign in"}
