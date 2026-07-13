@@ -1,0 +1,363 @@
+/* PRIME HOTEL — film base. Tokens mirror app/globals.css exactly. */
+:root {
+  --brand: #331642;
+  --brand-deep: #1C0B25;
+  --brand-mid: #260F32;
+  --gold: #EABF63;
+  --gold-deep: #D19F48;
+  --page: #FAF9FB;
+  --raised: #FFFFFF;
+  --sunken: #F2F0F5;
+  --ink: #1A1620;
+  --ink-2: #4A4453;
+  --ink-3: #7C7686;
+  --border: #DBD7E0;
+  --success: #2E7D5B;
+  --success-bg: #E6F2EC;
+  --warning: #C17F1E;
+  --warning-bg: #FBF0DD;
+  --error: #B23B3B;
+
+  --f-display: 'Fraunces', Georgia, serif;
+  --f-struct: 'Manrope', sans-serif;
+  --f-data: 'IBM Plex Sans', sans-serif;
+
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 24px; --r-full: 9999px;
+  --sh-2: 0 4px 12px rgba(26,22,32,0.10);
+  --sh-3: 0 12px 28px rgba(26,22,32,0.16);
+  --sh-4: 0 20px 40px rgba(26,22,32,0.20);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+body { font-family: var(--f-struct); }
+
+#stage {
+  position: absolute; left: 50%; top: 50%;
+  transform-origin: center center;
+  overflow: hidden;
+  background: var(--brand-deep);
+}
+.scene { position: absolute; inset: 0; }
+
+#hud {
+  position: fixed; right: 10px; bottom: 8px; z-index: 99;
+  color: #888; font: 12px monospace;
+}
+
+/* ---------- ambient cinematic backdrop ---------- */
+.amb {
+  position: absolute; inset: -12%;
+  background:
+    radial-gradient(58% 70% at var(--ax, 30%) var(--ay, 25%), #3E1B4F 0%, transparent 62%),
+    radial-gradient(55% 62% at var(--bx, 75%) var(--by, 80%), #2A1038 0%, transparent 65%),
+    linear-gradient(160deg, #23102E 0%, #180922 55%, #130718 100%);
+}
+.vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 105% at 50% 42%, transparent 55%, rgba(8,3,12,0.55) 100%);
+}
+
+/* ---------- the golden thread ---------- */
+.threadWrap { position: absolute; inset: 0; pointer-events: none; }
+.thread { position: absolute; overflow: visible; }
+.thread path {
+  fill: none; stroke: var(--gold); stroke-width: 3.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(234,191,99,0.85)) drop-shadow(0 0 18px rgba(234,191,99,0.45));
+}
+.orb {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #FFF3D6 0%, var(--gold) 55%, var(--gold-deep) 100%);
+  box-shadow: 0 0 12px 4px rgba(234,191,99,0.75), 0 0 40px 14px rgba(234,191,99,0.30);
+}
+
+/* ---------- captions ---------- */
+.cap {
+  position: absolute; font-family: var(--f-display);
+  color: #F6F1FA; font-weight: 500; letter-spacing: 0.1px;
+}
+.cap .goldWord { color: var(--gold); }
+.capBar {
+  position: absolute; width: 44px; height: 3px; border-radius: 2px;
+  background: var(--gold); box-shadow: 0 0 10px rgba(234,191,99,0.6);
+}
+.capSmall {
+  position: absolute; font-family: var(--f-struct); font-weight: 600;
+  font-size: 21px; letter-spacing: 3.5px; text-transform: uppercase; color: #B9A8C8;
+}
+
+/* ---------- phone rig ---------- */
+.rig { position: absolute; inset: 0; perspective: 2200px; perspective-origin: 50% 46%; }
+.phone {
+  position: absolute; width: 420px; height: 880px;
+  border-radius: 58px; background: #0D0612;
+  padding: 13px; transform-style: preserve-3d;
+  box-shadow:
+    0 60px 110px rgba(5,2,8,0.65),
+    0 22px 44px rgba(5,2,8,0.5),
+    inset 0 0 0 2px #241530,
+    inset 0 0 0 5px #050208;
+}
+.phone::after { /* edge light catch */
+  content: ''; position: absolute; inset: 0; border-radius: 58px; pointer-events: none;
+  background: linear-gradient(var(--edge, 115deg), rgba(255,235,190,0.28) 0%, transparent 18%, transparent 78%, rgba(190,150,255,0.12) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  padding: 2.5px;
+}
+.phoneScreen {
+  position: relative; width: 100%; height: 100%;
+  border-radius: 46px; overflow: hidden; background: var(--page);
+}
+.notch {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 110px; height: 26px; border-radius: 14px; background: #0D0612; z-index: 40;
+}
+.phoneGlare {
+  position: absolute; inset: 0; z-index: 39; pointer-events: none; border-radius: 46px;
+  background: linear-gradient(var(--glare, 118deg), rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 24%, transparent 42%);
+}
+
+/* ---------- replica UI: shared app chrome ---------- */
+.appTop {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 40px 18px 12px; background: var(--raised);
+  border-bottom: 1px solid var(--border);
+}
+.appLogo { font-family: var(--f-display); font-weight: 700; font-size: 19px; color: var(--brand); }
+.locBadge {
+  font-family: var(--f-struct); font-weight: 600; font-size: 12.5px; color: var(--ink-2);
+  background: var(--sunken); border-radius: var(--r-full); padding: 5px 12px;
+}
+.appBody { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow: hidden; background: var(--page); }
+.scroller { position: absolute; left: 0; right: 0; will-change: transform; }
+
+.screenTitleRow { padding: 16px 18px 10px; background: var(--sunken); }
+.screenTitle { font-family: var(--f-display); font-weight: 600; font-size: 22px; color: var(--ink); }
+.screenDate { font-family: var(--f-data); font-size: 12px; color: var(--ink-3); float: right; margin-top: 6px; }
+.overlineLbl { font-family: var(--f-struct); font-weight: 700; font-size: 10.5px; letter-spacing: 1.6px; color: var(--ink-3); text-transform: uppercase; }
+
+.searchBar {
+  margin: 10px 16px; height: 40px; border-radius: var(--r-md);
+  background: var(--raised); border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  color: var(--ink-3); font-size: 13.5px;
+}
+.chipsRow { display: flex; gap: 8px; padding: 2px 16px 10px; }
+.chip {
+  font-family: var(--f-struct); font-weight: 600; font-size: 12.5px;
+  padding: 7px 14px; border-radius: var(--r-full);
+  background: var(--raised); border: 1px solid var(--border); color: var(--ink-2);
+}
+.chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* item entry card — mirrors docs/screenshots/entry/restaurant-cashier.png */
+.itemCard {
+  margin: 0 16px 12px; background: var(--raised); border-radius: var(--r-lg);
+  box-shadow: 0 1px 2px rgba(26,22,32,0.06); padding: 14px 14px 10px;
+}
+.itemTop { display: flex; align-items: center; justify-content: space-between; }
+.itemName { font-family: var(--f-struct); font-weight: 700; font-size: 15.5px; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.itemDot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold-deep); }
+.itemMeta { font-family: var(--f-data); font-size: 12px; color: var(--ink-3); margin: 3px 0 0 14px; }
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepBtn {
+  width: 42px; height: 42px; border-radius: var(--r-md); background: var(--sunken);
+  display: flex; align-items: center; justify-content: center;
+  font: 600 20px var(--f-struct); color: var(--ink-3);
+  position: relative;
+}
+.stepBtn.plus { color: var(--ink-2); }
+.stepVal { font-family: var(--f-data); font-weight: 700; font-size: 21px; color: var(--ink); min-width: 30px; text-align: center; }
+.wastageLink { font-family: var(--f-struct); font-size: 12px; color: var(--ink-3); margin: 9px 0 0 2px; }
+.tapRipple {
+  position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; border-radius: 50%;
+  background: rgba(51,22,66,0.25); pointer-events: none;
+}
+
+/* till strip */
+.tillStrip {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: var(--raised); border-top: 1px solid var(--border);
+  padding: 13px 18px 26px; display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 -6px 18px rgba(26,22,32,0.07);
+}
+.tillCount { font-family: var(--f-struct); font-weight: 600; font-size: 12.5px; color: var(--ink-3); }
+.tillTotal { font-family: var(--f-data); font-weight: 700; font-size: 21px; color: var(--brand); margin-top: 2px; }
+.saveBtn {
+  background: var(--brand); color: #fff; font: 700 15px var(--f-struct);
+  border-radius: var(--r-md); padding: 13px 26px; position: relative;
+}
+.toast {
+  position: absolute; left: 16px; right: 16px; bottom: 108px; z-index: 35;
+  background: var(--success-bg); border: 1px solid rgba(46,125,91,0.35); color: var(--success);
+  border-radius: var(--r-md); padding: 12px 14px;
+  font: 600 13.5px var(--f-struct);
+  display: flex; gap: 8px; align-items: center;
+  box-shadow: var(--sh-2);
+}
+
+/* odometer */
+.odo { display: inline-flex; align-items: baseline; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.odoPrefix { margin-right: 0.28ch; }
+.odoSlot { display: inline-block; overflow: hidden; height: 1.18em; max-width: 1ch; vertical-align: bottom; }
+.odoCol { display: inline-flex; flex-direction: column; line-height: 1.18em; will-change: transform; }
+.odoDigit { display: block; height: 1.18em; text-align: center; width: 1ch; }
+.odoComma { display: inline-block; overflow: hidden; }
+
+/* generic small check icon */
+.tick {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--success);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 800; flex: none;
+}
+
+/* ---------- scene 1: excel grid ---------- */
+.scene-coldopen { background: #0B0710; }
+.xlWrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.xlGrid { position: relative; filter: saturate(0.25) brightness(0.9); }
+.xlCell {
+  position: absolute; border: 1px solid #322B3D; background: #171220;
+  font: 500 17px var(--f-data); color: #9A91A6;
+  display: flex; align-items: center; padding: 0 10px;
+  will-change: transform, opacity;
+}
+.xlCell.hdr { background: #1E1830; color: #A79BB5; font-weight: 700; font-size: 12.5px; }
+.xlCell.goldCell {
+  color: var(--gold); border-color: rgba(234,191,99,0.85); background: #201631;
+  box-shadow: 0 0 18px rgba(234,191,99,0.35), inset 0 0 12px rgba(234,191,99,0.12);
+  font-weight: 700; z-index: 5;
+}
+.s1cap {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-family: var(--f-display); color: #F3EDF8; text-align: center; font-weight: 500;
+}
+
+/* ---------- scene 2: brand reveal ---------- */
+.brandName {
+  position: absolute; left: 50%; top: 50%;
+  font-family: var(--f-display); font-weight: 700; color: #F8F4FB;
+  text-align: center; white-space: nowrap;
+}
+.brandUnder { position: absolute; height: 5px; border-radius: 3px; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); box-shadow: 0 0 16px rgba(234,191,99,0.55); }
+.brandSub {
+  position: absolute; left: 50%; font-family: var(--f-struct); font-weight: 600;
+  letter-spacing: 7px; text-transform: uppercase; color: #C9B8D8; text-align: center; white-space: nowrap;
+}
+
+/* ---------- scene 4: split phones ---------- */
+.miniLabel {
+  position: absolute; font-family: var(--f-struct); font-weight: 700; font-size: 19px;
+  letter-spacing: 2.5px; text-transform: uppercase; color: #D8CCE4; text-align: center;
+}
+.miniLabel small { display: block; font-size: 13px; letter-spacing: 1.8px; color: #9C8DAC; margin-top: 5px; }
+.dayFlag {
+  position: absolute; font-family: var(--f-data); font-weight: 600; font-size: 15px;
+  color: var(--gold); letter-spacing: 1px;
+}
+.goldChip {
+  position: absolute; z-index: 60;
+  background: linear-gradient(140deg, #F4D48B, var(--gold) 55%, var(--gold-deep));
+  color: #2A1038; font: 700 15px var(--f-data);
+  border-radius: var(--r-full); padding: 7px 15px;
+  box-shadow: 0 0 22px rgba(234,191,99,0.55), 0 6px 14px rgba(10,4,15,0.4);
+  white-space: nowrap;
+}
+.sentRow {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: 0 16px 10px; background: var(--raised); border-radius: var(--r-lg);
+  padding: 13px 14px; box-shadow: 0 1px 2px rgba(26,22,32,0.06);
+  font-family: var(--f-struct);
+}
+.sentName { font-weight: 700; font-size: 14.5px; color: var(--ink); }
+.sentQty { font-family: var(--f-data); font-weight: 700; font-size: 16px; color: var(--brand); }
+.weekBand { padding: 14px 16px 10px; background: var(--sunken); }
+.openRow {
+  display: flex; justify-content: space-between; align-items: baseline; margin: 0 16px 10px;
+  background: var(--raised); border-radius: var(--r-lg); padding: 14px; box-shadow: 0 1px 2px rgba(26,22,32,0.06);
+}
+.openLbl { font: 700 14.5px var(--f-struct); color: var(--ink); }
+.openSub { font: 400 11.5px var(--f-data); color: var(--ink-3); display: block; margin-top: 2px; }
+.openVal { font-family: var(--f-data); font-weight: 700; font-size: 24px; color: var(--brand); }
+.autoBadge {
+  font: 700 10px var(--f-struct); letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--gold-deep); background: var(--warning-bg); border-radius: var(--r-full);
+  padding: 4px 10px; display: inline-block; margin-top: 6px;
+}
+
+/* ---------- scene 5: whatsapp → order ---------- */
+.waBubble {
+  position: absolute; width: 460px; border-radius: 22px 22px 22px 6px;
+  background: #144D37; color: #E7F5EC; padding: 20px 24px;
+  font: 400 20px var(--f-struct);
+  box-shadow: 0 24px 60px rgba(4,10,7,0.6);
+}
+.waMeta { display: flex; justify-content: space-between; margin-bottom: 8px; font: 700 14px var(--f-struct); color: #8FD4AE; }
+.waTime { font-weight: 500; color: #6FA98A; }
+.orderCard {
+  position: absolute; width: 460px; background: var(--raised); border-radius: var(--r-xl);
+  box-shadow: var(--sh-4); padding: 24px; font-family: var(--f-struct);
+}
+.ocHead { display: flex; justify-content: space-between; align-items: center; }
+.ocName { font: 700 21px var(--f-struct); color: var(--ink); }
+.ocKind {
+  font: 700 11px var(--f-struct); letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--brand); background: var(--sunken); border-radius: var(--r-full); padding: 6px 13px;
+}
+.ocZone {
+  margin-top: 15px; display: flex; justify-content: space-between; align-items: center;
+  background: var(--sunken); border-radius: var(--r-md); padding: 13px 15px;
+}
+.ocZoneName { font: 600 15.5px var(--f-struct); color: var(--ink-2); display: flex; align-items: center; gap: 9px; }
+.ocFee { font-family: var(--f-data); font-weight: 700; font-size: 16px; color: var(--brand); }
+.ocLine { display: flex; justify-content: space-between; padding: 13px 3px; border-bottom: 1px solid var(--sunken); font: 500 16px var(--f-struct); color: var(--ink); }
+.ocLine b { font-family: var(--f-data); }
+.ocTotal { display: flex; justify-content: space-between; padding: 15px 3px 0; font: 700 17px var(--f-struct); color: var(--ink); }
+.ocTotal b { font-family: var(--f-data); color: var(--brand); font-size: 19px; }
+
+/* ---------- scene 6: dashboard ---------- */
+.dashHero {
+  position: absolute; border-radius: var(--r-xl); background: var(--brand);
+  box-shadow: var(--sh-4); overflow: hidden; padding: 34px 38px;
+}
+.dashHero::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(90% 90% at 85% -10%, rgba(234,191,99,0.13) 0%, transparent 55%);
+}
+.dashTitle { font-family: var(--f-display); font-weight: 600; color: #fff; font-size: 30px; }
+.perToggle { display: inline-flex; background: rgba(255,255,255,0.10); border-radius: var(--r-full); padding: 5px; margin-top: 18px; position: relative; }
+.perOpt { position: relative; z-index: 2; font: 700 15px var(--f-struct); padding: 9px 26px; color: #CBBCDA; border-radius: var(--r-full); }
+.perOpt.lit { color: var(--brand-deep); }
+.perThumb { position: absolute; top: 5px; bottom: 5px; border-radius: var(--r-full); background: var(--gold); z-index: 1; will-change: transform, width; }
+.heroOverline { font: 700 12.5px var(--f-struct); letter-spacing: 2.2px; color: var(--gold); text-transform: uppercase; margin-top: 30px; }
+.heroFigure { font-family: var(--f-data); font-weight: 700; color: #fff; font-size: 66px; line-height: 1.1; margin-top: 6px; }
+.heroNote { font: 500 14.5px var(--f-struct); color: #C9B8D8; margin-top: 6px; }
+.mGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 34px; margin-top: 28px; }
+.mCell .overGold { font: 700 11px var(--f-struct); letter-spacing: 1.8px; color: var(--gold); text-transform: uppercase; }
+.mCell .fig { font-family: var(--f-data); font-weight: 700; color: #fff; font-size: 30px; margin-top: 4px; }
+.locPanel {
+  position: absolute; background: var(--raised); border-radius: var(--r-xl);
+  box-shadow: var(--sh-3); padding: 26px 30px; font-family: var(--f-struct);
+}
+.locTitle { font-family: var(--f-display); font-weight: 600; font-size: 21px; color: var(--ink); margin-bottom: 18px; }
+.locRow { display: grid; grid-template-columns: 110px 1fr 110px; align-items: center; gap: 14px; margin-bottom: 15px; }
+.locName { font: 600 15px var(--f-struct); color: var(--ink-2); }
+.locBarTrack { height: 10px; border-radius: 5px; background: var(--sunken); overflow: hidden; }
+.locBarFill { height: 100%; border-radius: 5px; will-change: width; }
+.locVal { font-family: var(--f-data); font-weight: 700; font-size: 15px; text-align: right; color: var(--ink); }
+.lowRow {
+  display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid var(--sunken); padding-top: 16px; margin-top: 4px;
+}
+.lowName { font: 600 15px var(--f-struct); color: var(--ink); }
+.lowSub { font: 400 12px var(--f-struct); color: var(--ink-3); display: block; }
+.lowBadge {
+  font-family: var(--f-data); font-weight: 700; font-size: 15px; color: var(--warning);
+  display: flex; align-items: center; gap: 7px;
+}
+.lowDot { width: 9px; height: 9px; border-radius: 50%; background: var(--warning); }
+
+/* ---------- scene 7: outro ---------- */
+.outroLine { position: absolute; left: 50%; font-family: var(--f-display); color: #F6F1FA; text-align: center; white-space: nowrap; }
+.outroFoot { position: absolute; left: 50%; font: 600 15px var(--f-struct); letter-spacing: 1px; color: #8E7F9E; text-align: center; white-space: nowrap; }
