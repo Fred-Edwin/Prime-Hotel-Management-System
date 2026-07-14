@@ -9,6 +9,8 @@ import { Stepper } from "@/components/Stepper";
 import { TillStrip } from "@/components/TillStrip";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
+import { InfoTooltip } from "@/components/InfoTooltip";
 import { nairobiToday, orderTotal } from "@/lib/calculations";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import type { Database } from "@/lib/supabase/types";
@@ -199,7 +201,7 @@ export function OrdersClient() {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<span aria-hidden>—</span>}
+        icon={<Icon name="orders" size={48} />}
         heading="No items yet"
         body="Ask an admin to add sellable items before you can log an order."
       />
@@ -242,7 +244,18 @@ export function OrdersClient() {
               onChange={(e) => setDeliveryLocationId(e.target.value)}
               options={deliveryLocations.map((zone) => ({ value: zone.id, label: zone.name }))}
             />
-            <Input label="Fee (KES)" value={selectedZone ? selectedZone.fee.toFixed(2) : ""} readOnly disabled />
+            <Input
+              label="Fee (KES)"
+              labelExtra={
+                <InfoTooltip
+                  label="Delivery fee"
+                  message="Set by admin for this delivery zone — added automatically, you can't change it here."
+                />
+              }
+              value={selectedZone ? selectedZone.fee.toFixed(2) : ""}
+              readOnly
+              disabled
+            />
           </div>
         )}
       </div>
@@ -315,7 +328,7 @@ export function OrdersClient() {
 
         {orders.length === 0 ? (
           <EmptyState
-            icon={<span aria-hidden>—</span>}
+            icon={<Icon name="orders" size={48} />}
             heading="No orders logged yet"
             body="Delivery and pickup orders you log today will show up here."
           />

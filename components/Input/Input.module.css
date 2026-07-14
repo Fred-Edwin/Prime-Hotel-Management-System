@@ -7,6 +7,8 @@
 }
 
 .label {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-family-structural);
   font-size: var(--font-size-label);
   line-height: var(--line-height-label);

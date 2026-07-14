@@ -7,6 +7,7 @@ import { MetricCard } from "@/components/MetricCard";
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
+import { Icon } from "@/components/Icon";
 import styles from "./dashboard.module.css";
 
 type Period = "today" | "week" | "month";
@@ -190,7 +191,7 @@ export function DashboardClient() {
             </div>
             {lowStockCount === 0 ? (
               <EmptyState
-                icon={<span aria-hidden>✓</span>}
+                icon={<Icon name="check" size={48} />}
                 heading="All stocked up"
                 body="No items or ingredients are currently at or below their low-stock threshold."
               />

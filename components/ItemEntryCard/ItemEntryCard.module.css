@@ -33,7 +33,14 @@
   text-overflow: ellipsis;
 }
 
+.metaRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .meta {
+  min-width: 0;
   font-family: var(--font-family-data);
   font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
@@ -61,9 +68,20 @@
 }
 
 .fieldLabel {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-family-structural);
   font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
+}
+
+.primaryFieldLabel {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
 }
 
 .readOnlyValue {

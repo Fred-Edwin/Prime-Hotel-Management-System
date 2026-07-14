@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/Card";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
 import catalogStyles from "../../catalog.module.css";
 import styles from "./orders.module.css";
@@ -129,7 +130,7 @@ export function OrdersClient() {
         <p>Loading…</p>
       ) : data && data.orders.length === 0 ? (
         <EmptyState
-          icon={<span aria-hidden>🧾</span>}
+          icon={<Icon name="orders" size={48} />}
           heading="No orders this period"
           body="Once staff log a delivery or pickup order, it'll show up here."
         />

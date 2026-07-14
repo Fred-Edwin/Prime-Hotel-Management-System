@@ -6,6 +6,7 @@ import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
 import { Modal } from "@/components/Modal";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
 import { deliveryLocationSchema, type DeliveryLocationInput } from "@/lib/validation";
 import type { Database } from "@/lib/supabase/types";
@@ -100,7 +101,7 @@ export function DeliveryLocationsClient({
 
       {locations.length === 0 ? (
         <EmptyState
-          icon={<span aria-hidden>+</span>}
+          icon={<Icon name="delivery" size={48} />}
           heading="No delivery locations yet"
           body="Add your first delivery zone to get started."
           actionLabel="Add location"

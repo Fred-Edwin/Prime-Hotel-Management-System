@@ -6,6 +6,7 @@ import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
 import { Modal } from "@/components/Modal";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
 import { itemSchema, type ItemInput } from "@/lib/validation";
 import type { Database } from "@/lib/supabase/types";
@@ -133,7 +134,7 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
 
       {items.length === 0 ? (
         <EmptyState
-          icon={<span aria-hidden>+</span>}
+          icon={<Icon name="items" size={48} />}
           heading="No items yet"
           body="Add your first menu item to get started."
           actionLabel="Add item"

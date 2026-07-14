@@ -6,6 +6,7 @@ import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
 import { Modal } from "@/components/Modal";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
 import {
   staffCreateSchema,
@@ -197,7 +198,7 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
 
       {staff.length === 0 ? (
         <EmptyState
-          icon={<span aria-hidden>+</span>}
+          icon={<Icon name="staff" size={48} />}
           heading="No staff accounts yet"
           body="Add your first staff account to get started."
           actionLabel="Add staff"

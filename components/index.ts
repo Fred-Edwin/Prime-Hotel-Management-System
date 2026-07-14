@@ -20,3 +20,4 @@ export * from "./AppFooter";
 export * from "./Icon";
 export * from "./SearchBar";
 export * from "./ItemEntryCard";
+export * from "./InfoTooltip";

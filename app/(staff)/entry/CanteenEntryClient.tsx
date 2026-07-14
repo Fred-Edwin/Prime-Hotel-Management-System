@@ -5,6 +5,7 @@ import { TillStrip } from "@/components/TillStrip";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiNow, nairobiToday, weekStartMonday } from "@/lib/calculations";
@@ -209,7 +210,7 @@ export function CanteenEntryClient() {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<span aria-hidden>—</span>}
+        icon={<Icon name="entry" size={48} />}
         heading="No items yet"
         body="Ask an admin to add sellable items before you can log this week's entry."
       />
@@ -240,7 +241,13 @@ export function CanteenEntryClient() {
 
           const fields: ItemEntryField[] = [
             isSupplied
-              ? { key: "addedStock", label: "Added stock (from restaurant)", readOnlyValue: addedStock }
+              ? {
+                  key: "addedStock",
+                  label: "Added stock (from restaurant)",
+                  readOnlyValue: addedStock,
+                  tooltip:
+                    "This item is supplied by the restaurant — the amount sent over today is added automatically. You don't need to enter it.",
+                }
               : {
                   key: "addedStock",
                   label: "Added stock",
@@ -264,9 +271,11 @@ export function CanteenEntryClient() {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={`Opening: ${opening}`}
+              openingTooltip="Carried over automatically from last week's closing stock — you don't enter this."
               fields={fields}
               wastageValue={line.wastage}
               onWastageChange={(next) => updateLine(item.id, { wastage: next })}
+              wastageTooltip="Stock lost to spoilage, breakage, or mistakes — not sold. Add a short note if you can, it helps explain the numbers later."
               wastageMax={opening + addedStock - line.tillQuantitySold}
               wastageNote={line.wastageNote}
               onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}

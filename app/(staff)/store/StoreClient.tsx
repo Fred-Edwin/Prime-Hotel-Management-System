@@ -5,6 +5,7 @@ import { TillStrip } from "@/components/TillStrip";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiToday } from "@/lib/calculations";
@@ -178,7 +179,7 @@ export function StoreClient() {
   if (ingredients.length === 0) {
     return (
       <EmptyState
-        icon={<span aria-hidden>—</span>}
+        icon={<Icon name="store" size={48} />}
         heading="No ingredients yet"
         body="Ask an admin to add ingredients before you can log today's receiving/usage."
       />
@@ -231,12 +232,14 @@ export function StoreClient() {
               name={ingredient.name}
               priceLabel={ingredient.unit}
               openingLabel={`Opening: ${opening}`}
+              openingTooltip="Carried over automatically from yesterday's closing stock — you don't enter this."
               fields={fields}
               wastageValue={line.wastage}
               onWastageChange={(next) => updateLine(ingredient.id, { wastage: next })}
               wastageMax={opening + line.received - line.quantityUsed}
               wastageNote={line.wastageNote}
               onWastageNoteChange={(next) => updateLine(ingredient.id, { wastageNote: next })}
+              wastageTooltip="Ingredients lost to spoilage, breakage, or mistakes — not used in cooking. Add a short note if you can, it helps explain the numbers later."
             />
           );
         })}

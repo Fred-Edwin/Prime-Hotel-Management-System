@@ -6,6 +6,7 @@ import { CategoryChips } from "@/components/CategoryChips";
 import { Input } from "@/components/Input";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./expenses.module.css";
@@ -161,7 +162,7 @@ export function ExpensesClient() {
           <p className={styles.loading}>Loading…</p>
         ) : expenses.length === 0 ? (
           <EmptyState
-            icon={<span aria-hidden>—</span>}
+            icon={<Icon name="expenses" size={48} />}
             heading="No expenses logged yet"
             body="Costs you log today (electricity, gas, charcoal, other) will show up here."
           />

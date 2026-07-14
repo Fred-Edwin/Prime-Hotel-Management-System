@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/Card";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { isLowStock } from "@/lib/calculations";
 import catalogStyles from "../../catalog.module.css";
@@ -141,7 +142,7 @@ export function LedgerClient() {
           <section className={styles.section}>
             {data.items.length === 0 ? (
               <EmptyState
-                icon={<span aria-hidden>Σ</span>}
+                icon={<Icon name="summary" size={48} />}
                 heading="No item entries this period"
                 body="Once staff save till or canteen entries, they'll show up here row by row."
               />
@@ -211,7 +212,7 @@ export function LedgerClient() {
               </div>
               {data.ingredients.length === 0 ? (
                 <EmptyState
-                  icon={<span aria-hidden>Σ</span>}
+                  icon={<Icon name="summary" size={48} />}
                   heading="No ingredient entries this period"
                   body="Once the store manager saves ingredient receiving/usage, they'll show up here."
                 />

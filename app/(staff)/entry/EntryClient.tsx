@@ -6,6 +6,7 @@ import { CategoryChips } from "@/components/CategoryChips";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { Icon } from "@/components/Icon";
 import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiToday } from "@/lib/calculations";
@@ -211,7 +212,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<span aria-hidden>—</span>}
+        icon={<Icon name="entry" size={48} />}
         heading="No items yet"
         body="Ask an admin to add sellable items before you can log today's entry."
       />
@@ -253,11 +254,14 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                 {
                   key: "addedStock",
                   label: "Added stock",
+                  tooltip: "Stock delivered or brought in today. Raises tomorrow's opening balance.",
                   stepper: { value: line.addedStock, onChange: (next) => updateLine(item.id, { addedStock: next }) },
                 },
                 {
                   key: "sentOut",
                   label: "Sent to canteen",
+                  tooltip:
+                    "Stock sent from the restaurant to the canteen today. This becomes the canteen's added stock automatically — the canteen doesn't enter it separately.",
                   stepper: {
                     value: line.sentOut,
                     onChange: (next) => updateLine(item.id, { sentOut: next }),
@@ -268,6 +272,8 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                 {
                   key: "quantitySold",
                   label: "Quantity sold",
+                  tooltip:
+                    "Sales rung up at the till. Delivery/pickup orders are added on top of this automatically — you don't need to include them here.",
                   stepper: {
                     value: line.tillQuantitySold,
                     onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
@@ -295,6 +301,9 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={isStoreManager ? `Opening: ${opening}` : undefined}
+              openingTooltip={
+                isStoreManager ? "Carried over automatically from yesterday's closing stock — you don't enter this." : undefined
+              }
               availableLabel={isStoreManager ? undefined : `Available: ${remaining}`}
               isLow={isLow}
               fields={fields}
@@ -303,6 +312,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               wastageMax={opening + line.addedStock - line.tillQuantitySold - line.sentOut}
               wastageNote={line.wastageNote}
               onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}
+              wastageTooltip="Stock lost to spoilage, breakage, or mistakes — not sold. Add a short note if you can, it helps explain the numbers later."
             />
           );
         })}
