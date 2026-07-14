@@ -74,31 +74,34 @@ export async function POST(request: Request) {
 
   const priceById = new Map((priceRows ?? []).map((row) => [row.id, row]));
 
-  const savedRows = [];
+  const batchLines = [];
   for (const line of lines) {
     const prices = priceById.get(line.ingredient_id);
     if (!prices) {
       return NextResponse.json({ error: "Unknown ingredient in save request" }, { status: 400 });
     }
-
-    const { data, error } = await supabase.rpc("save_ingredient_entry", {
-      p_ingredient_id: line.ingredient_id,
-      p_entry_date: entry_date,
-      p_received: line.received,
-      p_quantity_used: line.quantity_used,
-      p_wastage: line.wastage,
-      p_wastage_note: line.wastage_note ?? undefined,
-      p_buying_price_snapshot: prices.buying_price,
-      p_created_by: user!.id,
+    batchLines.push({
+      ingredient_id: line.ingredient_id,
+      received: line.received,
+      quantity_used: line.quantity_used,
+      wastage: line.wastage,
+      wastage_note: line.wastage_note ?? null,
+      buying_price_snapshot: prices.buying_price,
     });
-
-    if (error) {
-      const { message, status } = describeSaveError(error);
-      return NextResponse.json({ error: message }, { status });
-    }
-
-    savedRows.push(data);
   }
 
-  return NextResponse.json({ entries: savedRows });
+  // Single round trip: save_ingredient_entries_batch() loops server-side
+  // over save_ingredient_entry() per line — same rationale as stock-entries.
+  const { data, error } = await supabase.rpc("save_ingredient_entries_batch", {
+    p_entry_date: entry_date,
+    p_created_by: user!.id,
+    p_lines: batchLines,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entries: data });
 }

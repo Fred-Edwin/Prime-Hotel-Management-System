@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const serviceClient = createServiceRoleClient();
   const query = serviceClient
     .from("users")
-    .select("staff_code")
+    .select("staff_code, active")
     .eq("name", name)
     .order("staff_code", { ascending: true })
     .limit(1);
@@ -38,7 +38,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Name or PIN is incorrect" }, { status: 401 });
   }
 
-  const firstMatch: { staff_code: string } = matches[0];
+  const firstMatch: { staff_code: string; active: boolean } = matches[0];
+
+  // Deactivated accounts (Phase 9 — see docs/01_DATA_MODEL.md §2) can no
+  // longer sign in. Checked before the Supabase Auth attempt, same
+  // "reject early with a clear message" shape as every other 401 in
+  // this route — deliberately the same generic message as a wrong PIN,
+  // not "this account is deactivated", so a deactivated staff member
+  // can't distinguish "wrong PIN" from "account disabled" by probing.
+  if (!firstMatch.active) {
+    return NextResponse.json({ error: "Name or PIN is incorrect" }, { status: 401 });
+  }
+
   const email = staffCodeToSyntheticEmail(firstMatch.staff_code);
 
   const cookieStore = await cookies();

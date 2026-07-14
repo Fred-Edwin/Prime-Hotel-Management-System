@@ -89,13 +89,49 @@ export type DeliveryLocationInput = z.infer<typeof deliveryLocationSchema>;
  */
 export const staffCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4–6 digits"),
+  // Exactly 6 digits, matching Supabase Auth's minimum_password_length=6
+  // (config.toml, mirrored in the production project) — a shorter PIN
+  // passes this schema but fails at the Auth layer, which for
+  // admin.createUser fails silently on account creation (Phase 8 hit
+  // this: production PINs were all reset to 6 characters) and for
+  // admin.updateUserById (Phase 9's PIN reset) throws an
+  // AuthWeakPasswordError. Matching the real constraint here means
+  // staff creation/PIN reset fail fast with a clear message instead of
+  // a confusing 500 three steps later.
+  pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits"),
   role: z.enum(["admin", "staff"]),
   location: z.enum(["restaurant", "canteen"]).nullable(),
   is_store_manager: z.boolean(),
 });
 
 export type StaffCreateInput = z.infer<typeof staffCreateSchema>;
+
+/**
+ * Phase 9 — editing an existing staff account (name/role/location/
+ * store-manager flag, and active status). `pin` is intentionally
+ * excluded here: a PIN reset is a distinct, separate action
+ * (staffPinResetSchema below) so the edit form can never accidentally
+ * clear/overwrite a PIN as a side effect of an unrelated field edit.
+ */
+export const staffUpdateSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  role: z.enum(["admin", "staff"]),
+  location: z.enum(["restaurant", "canteen"]).nullable(),
+  is_store_manager: z.boolean(),
+  active: z.boolean(),
+});
+
+export type StaffUpdateInput = z.infer<typeof staffUpdateSchema>;
+
+/**
+ * Phase 9 — admin-initiated PIN reset for an existing staff account.
+ * Exactly 6 digits — see staffCreateSchema's comment for why.
+ */
+export const staffPinResetSchema = z.object({
+  pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits"),
+});
+
+export type StaffPinResetInput = z.infer<typeof staffPinResetSchema>;
 
 /**
  * Shared non-negative quantity field for stock/ingredient entry rows —

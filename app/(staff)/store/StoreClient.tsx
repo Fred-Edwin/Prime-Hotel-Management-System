@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Stepper } from "@/components/Stepper";
 import { TillStrip } from "@/components/TillStrip";
-import { Input } from "@/components/Input";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
+import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
@@ -39,7 +38,6 @@ export function StoreClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
-  const [wastageOpenFor, setWastageOpenFor] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,69 +203,41 @@ export function StoreClient() {
           const line = lines[ingredient.id] ?? emptyLine();
           const opening = openingStockFor(ingredient.id);
           const remaining = remainingFor(ingredient.id);
-          const wastageOpen = wastageOpenFor === ingredient.id || line.wastage > 0;
+
+          const fields: ItemEntryField[] = [
+            {
+              key: "received",
+              label: "Received",
+              stepper: {
+                value: line.received,
+                onChange: (next) => updateLine(ingredient.id, { received: next }),
+              },
+            },
+            {
+              key: "quantityUsed",
+              label: "Used in cooking",
+              stepper: {
+                value: line.quantityUsed,
+                onChange: (next) => updateLine(ingredient.id, { quantityUsed: next }),
+                max: opening + line.received - line.wastage,
+                limitMessage: `Only ${remaining} left`,
+              },
+            },
+          ];
 
           return (
-            <li key={ingredient.id} className={styles.itemRow}>
-              <div className={styles.itemHeader}>
-                <div>
-                  <p className={styles.itemName}>{ingredient.name}</p>
-                  <p className={styles.itemMeta}>
-                    {ingredient.unit} · Opening: {opening}
-                  </p>
-                </div>
-              </div>
-
-              <div className={styles.storeManagerFields}>
-                <div className={styles.primaryField}>
-                  <span className={styles.fieldLabel}>Received</span>
-                  <Stepper
-                    value={line.received}
-                    onChange={(next) => updateLine(ingredient.id, { received: next })}
-                    aria-label={`${ingredient.name} received`}
-                  />
-                </div>
-                <div className={styles.primaryField}>
-                  <span className={styles.fieldLabel}>Used in cooking</span>
-                  <Stepper
-                    value={line.quantityUsed}
-                    onChange={(next) => updateLine(ingredient.id, { quantityUsed: next })}
-                    max={opening + line.received - line.wastage}
-                    limitMessage={`Only ${remaining} left`}
-                    aria-label={`${ingredient.name} used`}
-                  />
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className={styles.wastageToggle}
-                onClick={() => setWastageOpenFor(wastageOpenFor === ingredient.id ? null : ingredient.id)}
-              >
-                {wastageOpen ? "Hide wastage" : "Log wastage"}
-              </button>
-
-              {wastageOpen && (
-                <div className={styles.wastageFields}>
-                  <div className={styles.wastageStepper}>
-                    <span className={styles.fieldLabel}>Wastage</span>
-                    <Stepper
-                      value={line.wastage}
-                      onChange={(next) => updateLine(ingredient.id, { wastage: next })}
-                      max={opening + line.received - line.quantityUsed}
-                      limitMessage={`Only ${remaining} left`}
-                      aria-label={`${ingredient.name} wastage`}
-                    />
-                  </div>
-                  <Input
-                    label="Note (optional)"
-                    value={line.wastageNote}
-                    onChange={(e) => updateLine(ingredient.id, { wastageNote: e.target.value })}
-                    placeholder="e.g. vegetables spoiled"
-                  />
-                </div>
-              )}
-            </li>
+            <ItemEntryCard
+              key={ingredient.id}
+              name={ingredient.name}
+              priceLabel={ingredient.unit}
+              openingLabel={`Opening: ${opening}`}
+              fields={fields}
+              wastageValue={line.wastage}
+              onWastageChange={(next) => updateLine(ingredient.id, { wastage: next })}
+              wastageMax={opening + line.received - line.quantityUsed}
+              wastageNote={line.wastageNote}
+              onWastageNoteChange={(next) => updateLine(ingredient.id, { wastageNote: next })}
+            />
           );
         })}
       </ul>

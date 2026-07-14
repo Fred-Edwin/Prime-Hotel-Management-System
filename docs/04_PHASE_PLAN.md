@@ -258,6 +258,30 @@ A phase is not complete until all of these are true. The phase's context file (s
 
 ---
 
+### Phase 9 — Post-Launch Fixes & Operational Gaps
+
+**Depends on:** Phase 8 (production deploy live, real client testing possible)
+
+**Goal:** Close three gaps surfaced by a live client testing session against the production demo (`prime-hotel.vercel.app`) — a genuine performance bug and two scope gaps that Phases 1–8's acceptance criteria never covered, confirmed with the user as legitimately out of any prior phase's scope rather than a regression.
+
+**Scope:**
+1. **Batch-save performance fix** — `/api/stock-entries` and `/api/ingredient-entries` looped one `supabase.rpc()` round trip per line item client-side; with the real 132-item catalog (Phase 8), a single "Save" tap meant dozens of sequential network round trips ("Save feels slow"). Fix: three new plpgsql wrapper functions (`save_stock_entries_batch()`, `save_canteen_stock_entries_batch()`, `save_ingredient_entries_batch()` — `supabase/migrations/20260713183705_batch_save_functions.sql`) that accept the whole batch as `jsonb` and loop **server-side**, calling the existing single-row `save_stock_entry()`/`save_canteen_stock_entry()`/`save_ingredient_entry()` per line inside one transaction. This is a pure loop relocation (Node → Postgres) — the per-row advisory lock + oversell re-check logic from §3.4 is unchanged. Net effect: one route → one RPC call → N in-process function calls, and a failure on any line now rolls back the **entire batch atomically** (previously: earlier lines had already committed one-round-trip-at-a-time before the client reached a failing line).
+2. **Admin order-detail view** — `orders`/`order_items` already have full admin-scoped RLS read access (`orders_select_scoped`, `order_items_select_scoped` — `is_admin()` bypasses the location boundary), but no admin screen ever surfaced individual order detail; the admin dashboard/ledger only shows aggregate `stock_entries` figures. New read-only admin screen listing orders (both locations) with drill-in to see line items, customer name, fulfillment type, delivery zone/fee, total.
+3. **Staff account management (edit/deactivate/PIN-reset)** — `/staff` (Phase 3) is create-only; there's no way to fix a typo, change a role/location, reset a forgotten PIN, or remove a departed staff member without direct DB access. `public.users` has no `ON DELETE CASCADE`/`SET NULL` from `stock_entries.created_by`/`ingredient_entries.created_by`/`expenses.created_by`/`orders.created_by`, so hard-delete is unsafe (would either fail on the FK or silently orphan historical records' attribution) — soft-deactivate via a new `users.active boolean not null default true` column is the correct model, mirroring the existing `items`/`ingredients`/`delivery_locations` soft-deactivate pattern (§2, §5). A deactivated account can no longer log in but its historical `created_by` attribution on past entries is untouched.
+
+**Explicitly not in scope:** Any new feature beyond these three; order status/workflow (still a deliberate V1 exclusion per §6); bulk staff import/export; audit log of who edited/deactivated a staff account (a real Phase-2-of-the-product candidate if the client asks, not built here).
+
+**Acceptance criteria (in addition to the standard gating checklist):**
+- [ ] Batch save confirmed as a single network round trip per save action (server logs / response timing), for all three write paths (restaurant, canteen, ingredients).
+- [ ] Oversell on any one line in a batch correctly rejects with the existing `409`/human-readable message, and the whole batch's transaction rolls back together — verified by confirming a line *before* the failing one was not partially saved.
+- [ ] `scripts/acceptance/phase9-batch-save.mjs` covers the above and passes.
+- [ ] Admin can view a list of orders across both locations and drill into one order's line items, matching what was actually submitted.
+- [ ] Admin can edit a staff account's name/role/location/store-manager flag, reset a PIN, and deactivate/reactivate an account.
+- [ ] A deactivated staff account cannot log in (401/403, clear message), while their historical entries remain attributed to them unchanged.
+- [ ] `docs/01_DATA_MODEL.md` updated for the new `users.active` column and the three new batch-save functions, in the same phase.
+
+---
+
 ## What's explicitly NOT in this phase plan
 
 Per `01_DATA_MODEL.md` §5 and prior client scope discussions, the following remain out of scope for this build and have no phase allocated:

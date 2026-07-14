@@ -12,7 +12,7 @@ export async function GET() {
   const supabase = await createServerSupabaseClient();
   const query = supabase
     .from("users")
-    .select("id, name, staff_code, role, location, is_store_manager, created_at")
+    .select("id, name, staff_code, role, location, is_store_manager, active, created_at")
     .order("staff_code");
   const { data, error }: Awaited<typeof query> = await query;
 

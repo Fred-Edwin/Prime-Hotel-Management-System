@@ -86,6 +86,19 @@ create table public.users (
   role user_role not null default 'staff',
   location location_type,  -- null for admin (admin sees both locations)
   is_store_manager boolean not null default false,  -- UI flag only, see 00_ARCHITECTURE.md §5.1 -- NOT a permission tier, no RLS depends on this
+  -- Added Phase 9 (supabase/migrations/20260713221946_users_active_soft_deactivate.sql):
+  -- soft-deactivate flag, same pattern as items/ingredients/delivery_locations'
+  -- `active` column (§5). Hard-delete is unsafe here -- no ON DELETE
+  -- CASCADE/SET NULL exists from stock_entries.created_by /
+  -- ingredient_entries.created_by / expenses.created_by / orders.created_by,
+  -- so removing a users row would either fail on the FK or (if that were
+  -- ever loosened) silently orphan historical entries' attribution. A
+  -- deactivated account can no longer log in (checked in
+  -- app/api/auth/login/route.ts before the Supabase Auth sign-in attempt,
+  -- same generic "Name or PIN is incorrect" message as a wrong PIN so a
+  -- deactivated staff member can't distinguish the two by probing), but
+  -- every past entry they created keeps its correct attribution untouched.
+  active boolean not null default true,
   created_at timestamptz not null default now()
 );
 
@@ -95,6 +108,19 @@ create table public.users (
 -- and use the PIN as the password. The person never sees this email --
 -- the login UI only ever shows Name (+ staff code where names collide)
 -- and a PIN field. See `04_PHASE_PLAN.md` Phase 2 for the concrete implementation.
+--
+-- PIN length note (Phase 9): Supabase Auth's minimum_password_length (6,
+-- see supabase/config.toml, mirrored in the production project) is
+-- enforced by admin.updateUserById() (used by the Phase 9 admin PIN-reset
+-- feature) but NOT by admin.createUser() (used by staff creation and
+-- scripts/seed-staff.ts) -- an asymmetry discovered while building PIN
+-- reset. lib/validation.ts's staffCreateSchema/staffPinResetSchema both
+-- require exactly 6 digits to match the real, enforced constraint and
+-- fail fast with a clear message rather than a confusing 500 from the
+-- Auth layer. loginSchema (validating login *input shape*, not creating a
+-- credential) deliberately stays a looser 4-6 digit range so it still
+-- accepts any already-existing PIN, including dev seed data's legacy
+-- 4-digit convention.
 
 -- ============================================================
 -- ITEMS
@@ -476,6 +502,8 @@ This section exists because `orders` (§6) and the till-sale entry screen (`04_P
 - Both routes run their writes inside a single database transaction (a single Postgres function call per save — `save_stock_entry()`/`save_canteen_stock_entry()`/`create_order()` — since PostgREST/the Supabase JS client has no client-driven multi-statement transaction), so a crash or network drop mid-write can't leave `quantity_sold` out of sync with its two inputs.
 
 **Row-locking fix (found post-Phase-6, while writing `scripts/acceptance/phase6-orders.mjs` — see `20260712091633_stock_entry_row_locking.sql`):** the three write functions above (`save_stock_entry`, `save_canteen_stock_entry`, `apply_order_to_stock_entry`) each did a plain, non-locking `SELECT` to check whether a `stock_entries` row already existed for the target item/location/period, computed their oversell check and derived values from that snapshot, then `INSERT ... ON CONFLICT DO UPDATE`. This has a genuine race when two calls are both the **first-ever write** for a brand-new row (e.g. a till save and a delivery order landing at the same moment for an item nobody has touched yet that day): both see "no row," both compute their oversell check from their own inputs only, and both attempt the insert. Postgres serializes the actual row conflict for you, but it does **not** re-run the PL/pgSQL function body for whichever call blocks — the blocked call's `ON CONFLICT DO UPDATE SET` clause still fires using `EXCLUDED` values computed from the stale pre-block snapshot. The observed failure mode was a false oversell rejection (a legitimate order returned `409` even though the combined total was well within stock) — a wrong-rejection bug, not silent data loss, but still a real defect in the exact property this section exists to guarantee. **Fix:** each function now calls `public.lock_stock_entry_row(item_id, location, entry_date)` — a `pg_advisory_xact_lock` keyed on that triple — as its very first statement, before any read. This serializes the whole read-decide-write sequence per row (not just the final `INSERT`'s conflict resolution): a second caller blocks on the lock itself, and by the time it acquires the lock and runs its own `SELECT`, the first caller's row is already committed and visible. The lock is transaction-scoped (no explicit unlock needed) and released automatically when the function's implicit transaction ends, matching the existing "one function call = one transaction" model. Verified via a repeated concurrent-request stress test (till save + order racing on a brand-new row, run 8+ times back to back) — no false rejections after the fix, oversell still correctly rejected when the combined total genuinely exceeds stock.
+
+**Batch-save wrappers (Phase 9 — see `20260713183705_batch_save_functions.sql`):** the client-side entry/store screens save a whole day's/week's sheet in one submit, but before Phase 9 the route handlers (`app/api/stock-entries/route.ts`, `app/api/ingredient-entries/route.ts`) looped over every line and `await`ed one `supabase.rpc()` call per line — a separate network round trip per item. With the real 132-item catalog (Phase 8), a single "Save" tap meant dozens of sequential round trips (the reported "Save feels slow" complaint from live client testing). **Fix:** three new plpgsql wrapper functions — `save_stock_entries_batch()`, `save_canteen_stock_entries_batch()`, `save_ingredient_entries_batch()` — each accepts the whole batch as a `jsonb` array and loops **server-side**, calling the existing single-row `save_stock_entry()`/`save_canteen_stock_entry()`/`save_ingredient_entry()` per line inside one transaction. This is a pure loop relocation (Node process → Postgres), **not** a rewrite of the correctness logic above: the per-row `lock_stock_entry_row()` advisory lock and oversell re-check still fire once per line, exactly as before. Locking stays per-row, not per-batch, so a till save and a concurrent delivery order on a *different* item in the same batch still don't block each other unnecessarily. The one behavior change (an improvement, not a regression): a failure on any line now rolls back the **entire batch** atomically in one transaction, where previously a failed line simply meant the client had made it partway through its own loop before hitting the error — earlier lines in that loop had already independently committed. Verified via `scripts/acceptance/phase9-batch-save.mjs`.
 
 ### Duplicate-submission protection (orders)
 

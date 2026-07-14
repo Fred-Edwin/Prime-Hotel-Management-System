@@ -16,7 +16,11 @@ node scripts/acceptance/phase4-entry.mjs
 node scripts/acceptance/phase5-canteen-expenses.mjs
 node scripts/acceptance/phase6-orders.mjs
 node scripts/acceptance/phase7-dashboard.mjs
+node scripts/acceptance/phase9-batch-save.mjs
+node scripts/acceptance/phase9-staff-orders.mjs
 ```
+
+If your local Supabase container name differs from `_lib.mjs`'s default (check with `docker ps` — the project's local containers are currently named `supabase_db_mqtlxuwbjzsjtywhjjtf_Reference_used_in_A`, a Docker-volume-naming artifact from a prior backup-restore, not the project's actual ref), override it: `ACCEPTANCE_DB_CONTAINER=<name> node scripts/acceptance/phaseX-*.mjs`.
 
 Each script logs in as the real seeded roster accounts (`scripts/seed-staff.ts`'s names/PINs — same roster `scripts/verify-screenshot.mjs` uses), prints `PASS`/`FAIL` per check, and exits non-zero if anything failed.
 

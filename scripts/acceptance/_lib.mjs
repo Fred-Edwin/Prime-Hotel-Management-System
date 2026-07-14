@@ -65,7 +65,7 @@ export async function api(cookie, method, path, body) {
  */
 import { execFileSync } from "node:child_process";
 
-const DB_CONTAINER = process.env.ACCEPTANCE_DB_CONTAINER ?? "supabase_db_prosper-restaurant-system";
+const DB_CONTAINER = process.env.ACCEPTANCE_DB_CONTAINER ?? "supabase_db_mqtlxuwbjzsjtywhjjtf_Reference_used_in_A";
 
 export function psql(sql) {
   const out = execFileSync(

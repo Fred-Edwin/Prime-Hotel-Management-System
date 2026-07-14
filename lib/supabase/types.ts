@@ -433,6 +433,7 @@ export type Database = {
       }
       users: {
         Row: {
+          active: boolean
           created_at: string
           id: string
           is_store_manager: boolean
@@ -442,6 +443,7 @@ export type Database = {
           staff_code: string
         }
         Insert: {
+          active?: boolean
           created_at?: string
           id: string
           is_store_manager?: boolean
@@ -451,6 +453,7 @@ export type Database = {
           staff_code: string
         }
         Update: {
+          active?: boolean
           created_at?: string
           id?: string
           is_store_manager?: boolean
@@ -659,6 +662,38 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["location_type"]
       }
+      save_canteen_stock_entries_batch: {
+        Args: { p_created_by: string; p_entry_date: string; p_lines: Json }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       save_canteen_stock_entry: {
         Args: {
           p_added_stock_input: number
@@ -702,6 +737,32 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      save_ingredient_entries_batch: {
+        Args: { p_created_by: string; p_entry_date: string; p_lines: Json }
+        Returns: {
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          ingredient_id: string
+          opening_stock: number
+          quantity_used: number
+          received: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ingredient_entries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       save_ingredient_entry: {
         Args: {
           p_buying_price_snapshot: number
@@ -735,6 +796,43 @@ export type Database = {
           to: "ingredient_entries"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      save_stock_entries_batch: {
+        Args: {
+          p_created_by: string
+          p_entry_date: string
+          p_lines: Json
+          p_location: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       save_stock_entry: {

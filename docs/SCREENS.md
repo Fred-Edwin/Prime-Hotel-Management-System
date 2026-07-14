@@ -34,7 +34,8 @@
 | Items | `/items` | Admin only | CRUD for the sellable menu item catalog (name, category, supply_type, prices, active flag) | §4.7 | Patterns §5 "Catalog/staff management" (table + modal) | 3 |
 | Ingredients | `/ingredients` | Admin only | CRUD for the raw ingredient catalog | §4.7 | Patterns §5 "Catalog/staff management" | 3 |
 | Delivery Locations | `/delivery-locations` | Admin only | CRUD for delivery zones + fixed fees | §4.7 | Patterns §5 "Catalog/staff management" | 3 |
-| Staff | `/staff` | Admin only | Create staff accounts (name, PIN, location, store-manager flag); no edit/delete in V1 | §4.7 | Patterns §5 "Catalog/staff management" (creation only, no edit modal in V1) | 3 |
+| Staff | `/staff` | Admin only | Create, edit (name/role/location/store-manager flag), soft-deactivate/reactivate, and PIN-reset staff accounts. No hard delete — see `01_DATA_MODEL.md`'s `users.active` note | §4.7 | Patterns §5 "Catalog/staff management" (edit modal + PIN-reset modal added Phase 9) | 3, edit/deactivate/PIN-reset added Phase 9 |
+| Order Detail (admin) | `/dashboard/orders` | Admin only | Read-only list of delivery/pickup orders across both locations, period-toggled, with drill-in to an individual order's line items | §6 | Standard table (Components §4.11) + Modal drill-in, light surface, same pattern as Item Ledger | 9 (not in the original 1–8 plan — see `docs/phases/phase9_context.md`) |
 
 ---
 

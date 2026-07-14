@@ -128,36 +128,40 @@ export async function POST(request: Request) {
 
   const priceById = new Map((priceRows ?? []).map((row) => [row.id, row]));
 
-  const savedRows = [];
+  const batchLines = [];
   for (const line of lines) {
     const prices = priceById.get(line.item_id);
     if (!prices) {
       return NextResponse.json({ error: "Unknown item in save request" }, { status: 400 });
     }
-
-    const { data, error } = await supabase.rpc("save_stock_entry", {
-      p_item_id: line.item_id,
-      p_location: user.location,
-      p_entry_date: entry_date,
-      p_till_quantity_sold: line.till_quantity_sold,
-      p_added_stock: line.added_stock,
-      p_sent_out: line.sent_out,
-      p_wastage: line.wastage,
-      p_wastage_note: line.wastage_note ?? undefined,
-      p_selling_price_snapshot: prices.selling_price,
-      p_buying_price_snapshot: prices.buying_price,
-      p_created_by: user.id,
+    batchLines.push({
+      item_id: line.item_id,
+      till_quantity_sold: line.till_quantity_sold,
+      added_stock: line.added_stock,
+      sent_out: line.sent_out,
+      wastage: line.wastage,
+      wastage_note: line.wastage_note ?? null,
+      selling_price_snapshot: prices.selling_price,
+      buying_price_snapshot: prices.buying_price,
     });
-
-    if (error) {
-      const { message, status } = describeSaveError(error);
-      return NextResponse.json({ error: message }, { status });
-    }
-
-    savedRows.push(data);
   }
 
-  return NextResponse.json({ entries: savedRows });
+  // Single round trip: save_stock_entries_batch() loops server-side over
+  // save_stock_entry() per line (docs/01_DATA_MODEL.md §3.4 correctness
+  // untouched — each line still gets its own row lock + oversell re-check).
+  const { data, error } = await supabase.rpc("save_stock_entries_batch", {
+    p_location: user.location,
+    p_entry_date: entry_date,
+    p_created_by: user.id,
+    p_lines: batchLines,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entries: data });
 }
 
 async function saveCanteenEntries(
@@ -189,33 +193,34 @@ async function saveCanteenEntries(
 
   const itemById = new Map((itemRows ?? []).map((row) => [row.id, row]));
 
-  const savedRows = [];
+  const batchLines = [];
   for (const line of lines) {
     const item = itemById.get(line.item_id);
     if (!item) {
       return NextResponse.json({ error: "Unknown item in save request" }, { status: 400 });
     }
-
-    const { data, error } = await supabase.rpc("save_canteen_stock_entry", {
-      p_item_id: line.item_id,
-      p_entry_date: entry_date,
-      p_is_canteen_supplied: item.supply_type === "canteen_supplied",
-      p_added_stock_input: line.added_stock,
-      p_till_quantity_sold: line.till_quantity_sold,
-      p_wastage: line.wastage,
-      p_wastage_note: line.wastage_note ?? undefined,
-      p_selling_price_snapshot: item.selling_price,
-      p_buying_price_snapshot: item.buying_price,
-      p_created_by: createdBy,
+    batchLines.push({
+      item_id: line.item_id,
+      is_canteen_supplied: item.supply_type === "canteen_supplied",
+      added_stock_input: line.added_stock,
+      till_quantity_sold: line.till_quantity_sold,
+      wastage: line.wastage,
+      wastage_note: line.wastage_note ?? null,
+      selling_price_snapshot: item.selling_price,
+      buying_price_snapshot: item.buying_price,
     });
-
-    if (error) {
-      const { message, status } = describeSaveError(error);
-      return NextResponse.json({ error: message }, { status });
-    }
-
-    savedRows.push(data);
   }
 
-  return NextResponse.json({ entries: savedRows });
+  const { data, error } = await supabase.rpc("save_canteen_stock_entries_batch", {
+    p_entry_date: entry_date,
+    p_created_by: createdBy,
+    p_lines: batchLines,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entries: data });
 }
