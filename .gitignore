@@ -37,6 +37,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# demo-video production scratch (Remotion project, screenshots) — not
+# part of the app, has its own package.json/deps that must never be
+# picked up by this project's build or type-check
+docs/demo/source-v2/
+docs/screenshots/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
