@@ -10,7 +10,11 @@ const PUBLIC_PATHS = ["/login"];
 // Always accessible, regardless of auth state — dev-only, no business
 // data, not part of the product's own navigation. See
 // app/style-guide/page.tsx.
-const ALWAYS_ACCESSIBLE_PATHS = ["/style-guide"];
+//
+// /manifest.webmanifest is here for a different reason: browsers fetch
+// it anonymously to evaluate PWA installability, before any auth
+// cookie exists. Redirecting it to /login breaks "Add to Home Screen".
+const ALWAYS_ACCESSIBLE_PATHS = ["/style-guide", "/manifest.webmanifest"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

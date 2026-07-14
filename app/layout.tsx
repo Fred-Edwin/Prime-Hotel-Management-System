@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope, IBM_Plex_Sans, Fraunces } from "next/font/google";
 import "./globals.css";
 
@@ -28,6 +28,14 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "Prime Hotel Management System",
   description: "Stock, sales, and profit tracking for Prime Hotel.",
+  appleWebApp: {
+    title: "Prime Hotel",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#331642",
 };
 
 export default function RootLayout({
