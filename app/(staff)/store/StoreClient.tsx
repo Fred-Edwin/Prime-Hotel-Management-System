@@ -232,14 +232,14 @@ export function StoreClient() {
               name={ingredient.name}
               priceLabel={ingredient.unit}
               openingLabel={`Opening: ${opening}`}
-              openingTooltip="Carried over automatically from yesterday's closing stock — you don't enter this."
+              openingTooltip="Yesterday's leftover stock. You don't type this in."
               fields={fields}
               wastageValue={line.wastage}
               onWastageChange={(next) => updateLine(ingredient.id, { wastage: next })}
               wastageMax={opening + line.received - line.quantityUsed}
               wastageNote={line.wastageNote}
               onWastageNoteChange={(next) => updateLine(ingredient.id, { wastageNote: next })}
-              wastageTooltip="Ingredients lost to spoilage, breakage, or mistakes — not used in cooking. Add a short note if you can, it helps explain the numbers later."
+              wastageTooltip="Ingredients spoiled, broken, or lost — not used in cooking."
             />
           );
         })}

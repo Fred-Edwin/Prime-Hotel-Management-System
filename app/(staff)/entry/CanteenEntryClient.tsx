@@ -245,8 +245,7 @@ export function CanteenEntryClient() {
                   key: "addedStock",
                   label: "Added stock (from restaurant)",
                   readOnlyValue: addedStock,
-                  tooltip:
-                    "This item is supplied by the restaurant — the amount sent over today is added automatically. You don't need to enter it.",
+                  tooltip: "Sent by the restaurant. Added automatically — you don't type this in.",
                 }
               : {
                   key: "addedStock",
@@ -271,11 +270,11 @@ export function CanteenEntryClient() {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={`Opening: ${opening}`}
-              openingTooltip="Carried over automatically from last week's closing stock — you don't enter this."
+              openingTooltip="Last week's leftover stock. You don't type this in."
               fields={fields}
               wastageValue={line.wastage}
               onWastageChange={(next) => updateLine(item.id, { wastage: next })}
-              wastageTooltip="Stock lost to spoilage, breakage, or mistakes — not sold. Add a short note if you can, it helps explain the numbers later."
+              wastageTooltip="Stock spoiled, broken, or lost — not sold."
               wastageMax={opening + addedStock - line.tillQuantitySold}
               wastageNote={line.wastageNote}
               onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}

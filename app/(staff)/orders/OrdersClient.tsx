@@ -249,7 +249,7 @@ export function OrdersClient() {
               labelExtra={
                 <InfoTooltip
                   label="Delivery fee"
-                  message="Set by admin for this delivery zone — added automatically, you can't change it here."
+                  message="Set by admin for this zone. You can't change it here."
                 />
               }
               value={selectedZone ? selectedZone.fee.toFixed(2) : ""}

@@ -254,14 +254,13 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                 {
                   key: "addedStock",
                   label: "Added stock",
-                  tooltip: "Stock delivered or brought in today. Raises tomorrow's opening balance.",
+                  tooltip: "Stock added today",
                   stepper: { value: line.addedStock, onChange: (next) => updateLine(item.id, { addedStock: next }) },
                 },
                 {
                   key: "sentOut",
                   label: "Sent to canteen",
-                  tooltip:
-                    "Stock sent from the restaurant to the canteen today. This becomes the canteen's added stock automatically — the canteen doesn't enter it separately.",
+                  tooltip: "Stock sent to the canteen today. The canteen sees it automatically.",
                   stepper: {
                     value: line.sentOut,
                     onChange: (next) => updateLine(item.id, { sentOut: next }),
@@ -272,8 +271,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                 {
                   key: "quantitySold",
                   label: "Quantity sold",
-                  tooltip:
-                    "Sales rung up at the till. Delivery/pickup orders are added on top of this automatically — you don't need to include them here.",
+                  tooltip: "Sales from the till. Orders are added on their own — don't count them here.",
                   stepper: {
                     value: line.tillQuantitySold,
                     onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
@@ -301,9 +299,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={isStoreManager ? `Opening: ${opening}` : undefined}
-              openingTooltip={
-                isStoreManager ? "Carried over automatically from yesterday's closing stock — you don't enter this." : undefined
-              }
+              openingTooltip={isStoreManager ? "Yesterday's leftover stock. You don't type this in." : undefined}
               availableLabel={isStoreManager ? undefined : `Available: ${remaining}`}
               isLow={isLow}
               fields={fields}
@@ -312,7 +308,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               wastageMax={opening + line.addedStock - line.tillQuantitySold - line.sentOut}
               wastageNote={line.wastageNote}
               onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}
-              wastageTooltip="Stock lost to spoilage, breakage, or mistakes — not sold. Add a short note if you can, it helps explain the numbers later."
+              wastageTooltip="Stock spoiled, broken, or lost — not sold."
             />
           );
         })}
