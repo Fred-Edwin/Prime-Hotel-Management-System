@@ -1,4 +1,4 @@
-# Prime Hotel Management System — Patterns & Review Checklist
+# Prosper Hotel Management System — Patterns & Review Checklist
 
 **Read this when:** you're building a full screen/flow and need cross-screen visual consistency guidance, or you're about to consider any screen "done" and need to check it against the design system's own bar.
 
@@ -46,4 +46,4 @@ Use before considering any new screen on-language. Includes both functional chec
 
 ---
 
-*End of the design system reference set — `00_FOUNDATIONS.md`, `01_COMPONENTS.md`, `02_PATTERNS_AND_CHECKLIST.md`. Prime Hotel Management System, v0.1.1 (split into three files + empty-states addition; see `docs/phases/` for which phase made this change once Phase 1 completes).*
+*End of the design system reference set — `00_FOUNDATIONS.md`, `01_COMPONENTS.md`, `02_PATTERNS_AND_CHECKLIST.md`. Prosper Hotel Management System, v0.1.1 (split into three files + empty-states addition; see `docs/phases/` for which phase made this change once Phase 1 completes).*

@@ -1,4 +1,4 @@
-# Prime Hotel — Restaurant Staff Quick Reference
+# Prosper Hotel — Restaurant Staff Quick Reference
 
 For Sarah, Mercy, and Janiffer. Janiffer has two extra sections marked **Store manager only**.
 

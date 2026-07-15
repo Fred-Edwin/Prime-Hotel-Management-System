@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Prime Hotel",
-    short_name: "Prime Hotel",
-    description: "Stock, sales, and profit tracking for Prime Hotel.",
+    name: "Prosper Hotel",
+    short_name: "Prosper Hotel",
+    description: "Stock, sales, and profit tracking for Prosper Hotel.",
     start_url: "/",
     display: "standalone",
     background_color: "#FAF9FB",

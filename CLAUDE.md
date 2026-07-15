@@ -6,7 +6,7 @@ This file is read automatically at the start of every Claude Code session in thi
 
 ## What this project is
 
-**Prime Hotel Management System** (product name; the client business is **Prime Hotel**) — a mobile-first web app replacing a Kenyan restaurant + university canteen's manual Excel stock/sales/profit tracking. Two locations (restaurant with the main store, canteen), staff log stock/sales, admin (**WaPrecious**) gets automatic profit visibility. Budget-constrained: **no monthly hosting fees**, ever. This is a single-business system, not a SaaS product — no multi-tenant abstractions, ever.
+**Prosper Hotel Management System** (product name; the client business is **Prosper Hotel**) — a mobile-first web app replacing a Kenyan restaurant + university canteen's manual Excel stock/sales/profit tracking. Two locations (restaurant with the main store, canteen), staff log stock/sales, admin (**WaPrecious**) gets automatic profit visibility. Budget-constrained: **no monthly hosting fees**, ever. This is a single-business system, not a SaaS product — no multi-tenant abstractions, ever.
 
 Full product context (business problem, user journeys, success criteria): `docs/PRD.md`. Read it once at the start of a new engagement with this project, or whenever the "why" behind a requirement is unclear.
 
@@ -19,14 +19,25 @@ Real staff roster:
 
 ---
 
+## Project status: phased build is complete — this is now post-launch maintenance
+
+**Phases 1–9 are done and shipped** (`docs/04_PHASE_PLAN.md`, `docs/phases/phase9_context.md`). The app is live and in real use by the client. There is no Phase 10, and new work should **not** default to being organized as a phase — phases existed to sequence dependent, multi-day chunks of *new* functionality with their own gating checklists; day-to-day fixes and small updates don't have that dependency shape and the phase-context-file overhead is disproportionate to them. See **"Post-launch maintenance work"** below for how to approach a typical incoming request now.
+
+The one exception: if a request is genuinely large — a new feature area comparable in scope to an original phase, not a fix — flag that explicitly and ask whether it warrants a phase-style approach (its own plan, its own context file) rather than silently either over- or under-structuring it.
+
+---
+
 ## Read order, every session
 
-1. **The immediately-previous phase's context file** — `docs/phases/phaseX_context.md` (X = current phase number minus 1). This tells you the actual current state of the repo, what was built, what's still open. Read this before assuming anything. If no phase has completed yet (starting Phase 1), skip this step.
-2. **`docs/04_PHASE_PLAN.md`**, the section for the phase you're working on. This is your task spec — goal, scope, exclusions, acceptance criteria, and the standard gating checklist you must satisfy before the phase is done.
-3. **Only the reference doc(s) relevant to that phase** — see the pointer table below. Don't re-read everything every time; the phase's own section tells you what you need.
-4. **Summarize back to the human** before writing code: current state, what this phase covers, anything that seems to conflict with the repo as it actually exists.
+**For a normal fix/update (the common case now):** read `docs/phases/phase9_context.md` once for current repo state if you haven't already this session, then go straight to the relevant reference doc(s) from the pointer table below for whatever you're touching. Summarize back to the human before writing code: what you understand the request to be, which files/tables it touches, anything that seems to conflict with the repo as it actually exists.
 
-Full protocol for how phase context files work, and the exact format to write one in, is below in **"Context handoff between phases."**
+**If a request is explicitly phase-scale** (see above), use the old sequence instead:
+1. The immediately-previous phase's context file — `docs/phases/phase9_context.md`. This tells you the actual current state of the repo, what was built, what's still open.
+2. Add a new section to `docs/04_PHASE_PLAN.md` for the new phase (goal, scope, exclusions, acceptance criteria) before writing code — mirroring Phase 9's own section, which was added this way.
+3. Only the reference doc(s) relevant to that work — see the pointer table below.
+4. Summarize back to the human before writing code.
+
+Full protocol for how phase context files work, and the exact format to write one in, is below in **"Context handoff between phases (historical — phased build only)."**
 
 ---
 
@@ -113,7 +124,7 @@ The GitHub CLI (`gh`) is available and authenticated — use it directly for Git
 Follow this layout exactly so code lands in a predictable place across phases/sessions.
 
 ```
-prime-hotel-management-system/
+prosper-hotel-management-system/
 ├── CLAUDE.md
 ├── docs/
 │   ├── PRD.md                      # Product requirements — read once per engagement
@@ -193,18 +204,35 @@ prime-hotel-management-system/
 | `docs/SCREENS.md` | You need the full list of screens/routes, who sees each one, and which phase builds it |
 | `docs/00_ARCHITECTURE.md` | You need stack rationale, auth model detail, environment/hosting setup, or the concurrency/orders architectural commitments |
 | `docs/01_DATA_MODEL.md` | You're touching the database — full SQL schema, RLS policies, calculation formulas, the §3.4 concurrency mechanism |
-| `docs/04_PHASE_PLAN.md` | You need the whole build sequence, or the detailed spec/acceptance criteria for the phase you're on |
+| `docs/04_PHASE_PLAN.md` | You need the history of the original build sequence, or are scoping a genuinely phase-scale new addition (see "Post-launch maintenance work") |
 | `docs/design/*.md` | You're building or touching any UI — see the Design System section above for which of the three files to read |
-| `docs/phases/phaseX_context.md` | Always — the immediately-previous phase's file is required reading before starting the next one |
+| `docs/phases/phase9_context.md` | Once per session (if not already read this session), for current repo state — this is the last phase file and stays the required baseline read even though there's no Phase 10 |
 | `.claude/skills/verify/SKILL.md` | You're about to check a layout/positioning/visual claim against the real running app — see "Verifying layout/visual fixes" above |
 | `scripts/seed-staff.ts` | You need the real roster's name/PIN pairs to log in via `curl` for an RLS/data-correctness check — see "Verifying data/logic/RLS correctness" above |
 | `scripts/acceptance/README.md` | You're about to verify RLS/oversell/concurrency/idempotency/cross-location correctness for any phase — run or extend the existing `scripts/acceptance/phaseX-*.mjs` script rather than writing a one-off check that gets discarded |
 
 ---
 
-## Context handoff between phases
+## Post-launch maintenance work
 
-This replaces what used to be a single cumulative `PROGRESS.md`. Instead, **each completed phase writes its own standalone file**: `docs/phases/phase1_context.md`, `phase2_context.md`, and so on.
+This is the default mode now. A typical incoming request is a bug fix, a small feature add, a performance fix, or a scope gap noticed during real client use (Phase 9 itself was three such items bundled only because they surfaced in the same testing session — not because they depended on each other).
+
+**Approach each one as its own normal unit of work:**
+- Understand the request, read whichever reference doc(s) it actually touches (pointer table below), and summarize your understanding back to the human before writing code — same bar as always, just without a phase-plan section to point to first.
+- Build it, following every constraint in this file that still applies unconditionally: the non-negotiable constraints, the design-system conformance rules, the verification rules (visual → `verify` skill; data/RLS/logic → `curl`/direct SQL), and the acceptance-script discipline.
+- **Still update `docs/01_DATA_MODEL.md`/`docs/00_ARCHITECTURE.md` in the same piece of work whenever you touch schema or architecture** — this discipline doesn't relax just because there's no phase wrapping the change. See "Rules for handling architecture/data-model changes" below, unchanged.
+- **Still write or extend a `scripts/acceptance/*.mjs` script for anything with real correctness risk** (RLS, oversell, concurrency, idempotency, cross-location aggregation) — same rule as during the phased build, same reasoning (a one-off `curl` check that isn't saved has to be fully re-derived the next time someone needs it).
+- Commit with a message that describes the fix; push when the human confirms (per this file's own git-safety norms — don't push unprompted beyond what's already been agreed for a session).
+- **No phase-context file is required.** A commit message and, if the fix involved a genuinely non-obvious root cause or a real judgment call, a note in the relevant doc's surrounding comments (see the `users.active`/PIN-length example in `01_DATA_MODEL.md`, added Phase 9) is enough of a record. Don't manufacture a `docs/phases/phase10_context.md`-style file for a routine fix.
+- If a fix reveals something that contradicts a documented decision or a "known issue" from a prior phase context file, **don't edit that old file** (same rule as always — it's a diary, not a wiki) — correct it going forward in the doc that's actually still authoritative (`01_DATA_MODEL.md`/`00_ARCHITECTURE.md`) and mention the correction to the human.
+
+---
+
+## Context handoff between phases (historical — only if a request is explicitly phase-scale)
+
+This section describes the protocol Phases 1–9 used. It no longer applies to routine work (see "Post-launch maintenance work" above) — kept only for the rare case of a future phase-scale addition.
+
+**Each completed phase writes its own standalone file**: `docs/phases/phase1_context.md`, `phase2_context.md`, and so on.
 
 ### The rule: only the immediately-previous file is required reading
 
@@ -266,3 +294,5 @@ If `docs/04_PHASE_PLAN.md` conflicts with the immediately-previous phase's conte
 If asked to draft a prompt by the user, always include the relevant role, and never draft the prompt as a file.
 
 The user prefers that when you use a tasklist that you update as you progress when you are working on something so he can observe the progress.
+
+Always use pnpm.

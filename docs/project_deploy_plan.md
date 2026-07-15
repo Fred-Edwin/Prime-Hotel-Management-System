@@ -1,4 +1,4 @@
-# Prime Hotel — Production Deployment Plan
+# Prosper Hotel — Production Deployment Plan
 
 Deployment happens in two stages, not one:
 

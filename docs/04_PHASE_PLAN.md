@@ -1,6 +1,6 @@
-# Prime Hotel Management System — Phase Plan (Master Overview)
+# Prosper Hotel Management System — Phase Plan (Master Overview)
 
-> This is the map, not the territory. This file replaces the old `04_SPRINT_PLAN.md` (deleted — it predated the orders/delivery feature and the Prime Hotel rebrand). It exists so any session can see the whole build arc at a glance before diving into one phase's detail.
+> This is the map, not the territory. This file replaces the old `04_SPRINT_PLAN.md` (deleted — it predated the orders/delivery feature and the Prosper Hotel rebrand). It exists so any session can see the whole build arc at a glance before diving into one phase's detail.
 
 ---
 
@@ -51,7 +51,7 @@ A phase is not complete until all of these are true. The phase's context file (s
 ### Phase 1 — Design System & Requirements
 
 **Depends on:** Nothing (first phase)
-**Input already provided:** the design system is documented in `docs/design/00_FOUNDATIONS.md`, `01_COMPONENTS.md`, `02_PATTERNS_AND_CHECKLIST.md` (Prime Hotel's brand palette, type scale, spacing, component specs, patterns, and pre-ship checklist). This phase implements that system as code — it does not originate the system from scratch.
+**Input already provided:** the design system is documented in `docs/design/00_FOUNDATIONS.md`, `01_COMPONENTS.md`, `02_PATTERNS_AND_CHECKLIST.md` (Prosper Hotel's brand palette, type scale, spacing, component specs, patterns, and pre-ship checklist). This phase implements that system as code — it does not originate the system from scratch.
 
 **Goal:** Turn the already-documented design system into real, working code — tokens and base components — so later phases *use* the system rather than reinvent styling per-screen.
 
@@ -59,7 +59,7 @@ A phase is not complete until all of these are true. The phase's context file (s
 - Read `docs/design/00_FOUNDATIONS.md` and `01_COMPONENTS.md` in full.
 - Implement design tokens as CSS custom properties in `app/globals.css`, matching `00_FOUNDATIONS.md` §3's token block exactly (per `00_ARCHITECTURE.md` §6's existing rule: self-hosted fonts via `next/font`, no CDN — Manrope + IBM Plex Sans, both self-hosted).
 - Implement a base component library in `components/` per `01_COMPONENTS.md`'s specs (Button, Input, Stepper, TillStrip/Running Total Bar, Card, MetricCard/Stat Card, Role/Location Badge, Period Toggle, Low-Stock Indicator, Modal, Toast, Empty State, CategoryChips placeholder) using CSS Modules that reference only the tokens — no hardcoded values inside component styles.
-- Integrate the Prime Hotel logo asset (`public/`) and confirm it renders correctly per `01_COMPONENTS.md` §4.1/4.12's brand-presence notes (wordmark in Manrope, no illustrated lockup).
+- Integrate the Prosper Hotel logo asset (`public/`) and confirm it renders correctly per `01_COMPONENTS.md` §4.1/4.12's brand-presence notes (wordmark in Manrope, no illustrated lockup).
 - **No page-level screens are built in this phase** — only the token layer and reusable components. Screens get built in the phases that need them (3–8), each one required to use this layer and to pass `02_PATTERNS_AND_CHECKLIST.md` §6's review checklist.
 
 **Explicitly not in scope:**
@@ -184,7 +184,7 @@ A phase is not complete until all of these are true. The phase's context file (s
 
 **Depends on:** Phase 3 (delivery-locations catalog), Phase 5 (stock_entries + expenses pattern established; canteen may also take orders)
 
-**Goal:** Implement the delivery/pickup order log that replaces Prime Hotel's WhatsApp-coordinated process, including the concurrency-safe write path designed in `01_DATA_MODEL.md` §3.4. This phase carries real correctness risk (two writers touching one stock figure) and needs deliberate, tested attention — not a bolt-on.
+**Goal:** Implement the delivery/pickup order log that replaces Prosper Hotel's WhatsApp-coordinated process, including the concurrency-safe write path designed in `01_DATA_MODEL.md` §3.4. This phase carries real correctness risk (two writers touching one stock figure) and needs deliberate, tested attention — not a bolt-on.
 
 **Scope:**
 1. **Order entry screen** (`app/(staff)/orders/page.tsx`) — customer name, fulfillment type (delivery/pickup), delivery zone picker (fee auto-fills from `delivery_locations`), multi-item line entry (mirrors a receipt), styled per the design system.

@@ -4,7 +4,7 @@
  */
 
 /**
- * Prime Hotel operates in Nairobi (Africa/Nairobi, UTC+3, no DST — this
+ * Prosper Hotel operates in Nairobi (Africa/Nairobi, UTC+3, no DST — this
  * offset never changes). All "what date/day is it right now" logic in this
  * app — server routes and client components alike — must go through
  * nairobiNow()/nairobiToday(), never raw `new Date()`/`toISOString()`.

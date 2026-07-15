@@ -115,7 +115,7 @@ export default function StyleGuidePage() {
       <aside className={styles.sidebar}>
         <div>
           <h2 className={styles.sidebarHeading}>Design System</h2>
-          <p className={styles.sidebarSubtitle}>Prime Hotel Management System</p>
+          <p className={styles.sidebarSubtitle}>Prosper Hotel Management System</p>
         </div>
         <nav className={styles.nav}>
           {NAV_SECTIONS.map((section) => (

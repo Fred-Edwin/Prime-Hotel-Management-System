@@ -1,4 +1,4 @@
-# Prime Hotel Management System — Data Model
+# Prosper Hotel Management System — Data Model
 
 > Read `00_ARCHITECTURE.md` first if you haven't. This file is the single source of truth for the database schema. If application code and this file disagree, this file wins — update the code, or update this file explicitly and note why in the current phase's `docs/phases/phaseX_context.md` (see `CLAUDE.md`).
 
@@ -730,7 +730,7 @@ RLS policies alone are not sufficient — Postgres requires baseline `GRANT` pri
 
 ## 6. Delivery orders — a real replacement for the WhatsApp process, not a speculative add
 
-This section documents a genuine V1 scope addition made after initial planning, per direct client input: Prime Hotel currently coordinates estate/home deliveries over a WhatsApp group, with no record-of-truth beyond the chat thread. `orders` + `order_items` + `delivery_locations` replace that group as the actual record, while staying deliberately narrow — see the exclusions below.
+This section documents a genuine V1 scope addition made after initial planning, per direct client input: Prosper Hotel currently coordinates estate/home deliveries over a WhatsApp group, with no record-of-truth beyond the chat thread. `orders` + `order_items` + `delivery_locations` replace that group as the actual record, while staying deliberately narrow — see the exclusions below.
 
 ### What an order is, and isn't
 
@@ -743,7 +743,7 @@ An order is a **single customer transaction** — closer to a receipt than to a 
 
 ### `delivery_locations` — admin-managed zone catalog
 
-Prime Hotel's admin (WaPrecious) sets up named delivery zones, each with a fixed fee (e.g., "Estate A — KES 100"). Staff logging an order pick a zone from this catalog rather than typing a fee themselves — same "don't make staff re-derive a number the system already knows" principle as opening-stock carry-forward (§3.1). `delivery_locations` follows the same admin-CRUD, soft-deactivate pattern as `items`/`ingredients` (§2, §5's no-hard-delete rule applies here too, since past orders reference a zone).
+Prosper Hotel's admin (WaPrecious) sets up named delivery zones, each with a fixed fee (e.g., "Estate A — KES 100"). Staff logging an order pick a zone from this catalog rather than typing a fee themselves — same "don't make staff re-derive a number the system already knows" principle as opening-stock carry-forward (§3.1). `delivery_locations` follows the same admin-CRUD, soft-deactivate pattern as `items`/`ingredients` (§2, §5's no-hard-delete rule applies here too, since past orders reference a zone).
 
 - `fee` is **snapshotted onto the order** at write time (`orders.delivery_fee_snapshot`), same rationale as every other price snapshot in this schema (§3) — a later fee change at a zone must not silently alter a past order's recorded total.
 - Pickup orders have no delivery zone (`delivery_location_id` is null, `delivery_fee_snapshot` is `0`).

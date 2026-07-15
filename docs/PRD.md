@@ -1,7 +1,7 @@
-# Prime Hotel Management System — Product Requirements Document
+# Prosper Hotel Management System — Product Requirements Document
 
-**Client:** Prime Hotel (a restaurant + university canteen business, Kenya)
-**Product name:** Prime Hotel Management System
+**Client:** Prosper Hotel (a restaurant + university canteen business, Kenya)
+**Product name:** Prosper Hotel Management System
 **Status:** Pre-build — requirements finalized, build not yet started
 **Related docs:** `00_ARCHITECTURE.md` (how it's built), `01_DATA_MODEL.md` (database schema, the source of truth for calculations), `04_PHASE_PLAN.md` (build sequence)
 
@@ -11,7 +11,7 @@
 
 ## 1. The business problem
 
-Prime Hotel runs two connected operations:
+Prosper Hotel runs two connected operations:
 
 - **The restaurant** — a central store/kitchen that cooks and sells food and drinks daily, on-site.
 - **The university canteen** — a second retail location the restaurant partially supplies, serving a student population, reconciling stock weekly rather than daily.
@@ -21,7 +21,7 @@ Today, both locations track stock, sales, and costs by hand in Excel. This creat
 1. **Manual carry-forward is slow and error-prone.** Every day (restaurant) or week (canteen), staff re-type yesterday's/last week's leftover count as today's/this week's starting point. Mistakes compound silently.
 2. **No true profit visibility.** The admin can see rough sales figures but has no systematic way to net out cost of goods sold, operating expenses (electricity, gas, charcoal), and wastage to get a real profit number. "Are we actually making money" is a manual, error-prone exercise done occasionally, not a number available on demand.
 3. **The restaurant→canteen supply chain is manually reconciled.** The restaurant sends stock to the canteen daily, but canteen only counts weekly — someone has to manually add up a week's worth of daily transfer notes to know what canteen's true starting stock is.
-4. **Deliveries are coordinated over WhatsApp with no record-of-truth.** Prime Hotel offers estate/home deliveries, currently tracked only in a WhatsApp group chat — no structured log of what was ordered, by whom, for how much, making it invisible to profit reporting entirely.
+4. **Deliveries are coordinated over WhatsApp with no record-of-truth.** Prosper Hotel offers estate/home deliveries, currently tracked only in a WhatsApp group chat — no structured log of what was ordered, by whom, for how much, making it invisible to profit reporting entirely.
 
 The system exists to remove these four specific pieces of manual, error-prone work — not to reinvent how the business operates.
 
@@ -38,7 +38,7 @@ The system exists to remove these four specific pieces of manual, error-prone wo
 
 ### Non-goals (explicitly out of scope for this build)
 - **No recurring hosting cost** — this is a constraint on every decision, not a feature, but it shapes what's buildable (see `00_ARCHITECTURE.md` §2, §8).
-- **No SaaS/multi-tenant design.** This is a single-business system for Prime Hotel only. Do not add tenant IDs, organization switching, or any abstraction implying multiple unrelated businesses will ever use one deployment.
+- **No SaaS/multi-tenant design.** This is a single-business system for Prosper Hotel only. Do not add tenant IDs, organization switching, or any abstraction implying multiple unrelated businesses will ever use one deployment.
 - **No formal recipe/bill-of-materials** linking ingredient consumption to menu item output — the business's own knowledge here is informal, and the system doesn't pretend otherwise (see `01_DATA_MODEL.md` §3.2).
 - **No debtor/credit ledger, no trend charts beyond basic period toggles, no delivery status/rider-tracking, no WhatsApp API integration, no customer accounts.** These are documented, deliberate exclusions — see `01_DATA_MODEL.md` §5 and §6, and `04_PHASE_PLAN.md`'s "What's explicitly NOT in this phase plan."
 - **No native mobile app.** Mobile-first *web*, used through a browser.
@@ -107,7 +107,7 @@ The build is successful when:
 - WaPrecious can answer "are we profitable this week, this month, per location" without opening Excel or asking staff to reconstruct anything by hand.
 - No staff member re-types a number the system already knows (opening stock, restaurant→canteen supply totals, delivery fees).
 - The WhatsApp delivery group is no longer the record-of-truth for what was delivered and for how much.
-- The system runs at zero recurring hosting cost, indefinitely, at Prime Hotel's actual scale (2 locations, ~5 staff, low hundreds of entries/day).
+- The system runs at zero recurring hosting cost, indefinitely, at Prosper Hotel's actual scale (2 locations, ~5 staff, low hundreds of entries/day).
 - Staff genuinely prefer using it to the old Excel process — measured informally by continued daily/weekly use without admin intervention, not by a formal survey.
 
 ---

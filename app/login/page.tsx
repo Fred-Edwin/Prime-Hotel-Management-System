@@ -63,15 +63,15 @@ export default function LoginPage() {
       <div className={styles.main}>
         <header className={styles.header}>
           <Image
-            src="/logo/Prime-Hotel-Logo.png"
-            alt="Prime Hotel"
+            src="/logo/Prosper-Hotel-logo.png"
+            alt="Prosper Hotel"
             width={132}
             height={132}
             className={styles.logo}
             priority
           />
           <h1 className={styles.headline}>Welcome back</h1>
-          <p className={styles.subline}>Prime Hotel Management System</p>
+          <p className={styles.subline}>Prosper Hotel Management System</p>
         </header>
 
         <div className={styles.content}>

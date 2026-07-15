@@ -1,4 +1,4 @@
-# Prime Hotel Management System — Screens & User Flows Inventory
+# Prosper Hotel Management System — Screens & User Flows Inventory
 
 > This is the single place to find "what screens does this product have, who sees them, and which phase builds them." It doesn't duplicate the *why* (see `PRD.md` §4 for narrative user journeys) or the *visual treatment* (see `docs/design/02_PATTERNS_AND_CHECKLIST.md` §5 for cross-screen visual patterns) — it's an index that points at both.
 
@@ -51,7 +51,7 @@
 
 ## What's deliberately not a screen
 
-Per `PRD.md` §2 and `04_PHASE_PLAN.md`'s "What's explicitly NOT in this phase plan": no debtor/credit ledger screen, no trend-chart screen, no order status/rider-tracking screen, no customer-facing screen of any kind (this is 100% internal staff/admin tooling — Prime Hotel's customers never log in).
+Per `PRD.md` §2 and `04_PHASE_PLAN.md`'s "What's explicitly NOT in this phase plan": no debtor/credit ledger screen, no trend-chart screen, no order status/rider-tracking screen, no customer-facing screen of any kind (this is 100% internal staff/admin tooling — Prosper Hotel's customers never log in).
 
 ---
 

@@ -26,10 +26,10 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Prime Hotel Management System",
-  description: "Stock, sales, and profit tracking for Prime Hotel.",
+  title: "Prosper Hotel Management System",
+  description: "Stock, sales, and profit tracking for Prosper Hotel.",
   appleWebApp: {
-    title: "Prime Hotel",
+    title: "Prosper Hotel",
     statusBarStyle: "default",
   },
 };

@@ -1,4 +1,4 @@
-# Prime Hotel — Admin Quick Reference (WaPrecious)
+# Prosper Hotel — Admin Quick Reference (WaPrecious)
 
 A short guide to the day-to-day admin tasks. For anything not covered here, ask Lobster Technologies.
 

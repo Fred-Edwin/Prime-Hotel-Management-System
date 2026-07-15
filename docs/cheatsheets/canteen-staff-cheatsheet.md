@@ -1,4 +1,4 @@
-# Prime Hotel — Canteen Staff Quick Reference (Anne)
+# Prosper Hotel — Canteen Staff Quick Reference (Anne)
 
 Canteen works on a **weekly** cycle, not daily like the restaurant — you only need to do the main stock entry once a week.
 

@@ -20,7 +20,7 @@ export function Wordmark({ onDark = false, logoSrc }: WordmarkProps) {
       {logoSrc && (
         <Image src={logoSrc} alt="" width={28} height={28} className={styles.mark} priority />
       )}
-      Prime Hotel
+      Prosper Hotel
     </span>
   );
 }

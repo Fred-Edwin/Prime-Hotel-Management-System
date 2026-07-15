@@ -1,5 +1,5 @@
 /**
- * Dev-only: seeds the real Prime Hotel staff roster into Supabase Auth
+ * Dev-only: seeds the real Prosper Hotel staff roster into Supabase Auth
  * + public.users. Needs the Auth admin API (service role key), so it
  * can't live in supabase/seed.sql (plain SQL can't hash passwords /
  * create auth.users rows correctly). Run against the LOCAL dev project
@@ -37,7 +37,7 @@ type SeedStaff = {
   isStoreManager: boolean;
 };
 
-// Real Prime Hotel roster, per CLAUDE.md. Dev-only PINs — never reused
+// Real Prosper Hotel roster, per CLAUDE.md. Dev-only PINs — never reused
 // in production, where an admin sets real PINs at account creation.
 const roster: SeedStaff[] = [
   { name: "WaPrecious", staffCode: "01", pin: "1234", role: "admin", location: null, isStoreManager: false },

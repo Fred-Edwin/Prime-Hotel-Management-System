@@ -1,4 +1,4 @@
-# Prime Hotel Management System — Design Foundations
+# Prosper Hotel Management System — Design Foundations
 
 **Read this when:** you need the design philosophy/rationale, or you're touching colors, type, spacing, layout, elevation, motion, or iconography — or you need the raw CSS custom-property tokens to build against.
 
@@ -10,16 +10,16 @@
 
 ### 1.1 The thesis
 
-Prime Hotel Management System replaces a business's Excel sheets and WhatsApp group with a tool their staff actually want to open. That's the whole brief, and it's harder than it sounds — most operational software earns trust through competence and loses it through friction, and this product has to earn both in the first five taps someone takes on it.
+Prosper Hotel Management System replaces a business's Excel sheets and WhatsApp group with a tool their staff actually want to open. That's the whole brief, and it's harder than it sounds — most operational software earns trust through competence and loses it through friction, and this product has to earn both in the first five taps someone takes on it.
 
-The philosophy here has two halves held in tension. The first half is **restraint**: a disciplined two-color palette (Prime Hotel's own deep aubergine and gold, not a stock enterprise blue), flat surfaces, conventional and predictable interaction patterns, nothing decorative that doesn't earn its place. The second half is **speed under real pressure**: this is used on a phone, mid-shift, by someone counting real stock and real money, often in a hurry. Every design decision gets checked against both halves — restrained, but never at the cost of a cashier having to squint, guess, or double-check.
+The philosophy here has two halves held in tension. The first half is **restraint**: a disciplined two-color palette (Prosper Hotel's own deep aubergine and gold, not a stock enterprise blue), flat surfaces, conventional and predictable interaction patterns, nothing decorative that doesn't earn its place. The second half is **speed under real pressure**: this is used on a phone, mid-shift, by someone counting real stock and real money, often in a hurry. Every design decision gets checked against both halves — restrained, but never at the cost of a cashier having to squint, guess, or double-check.
 
 "Premium" in this context doesn't mean ornamental. It means the interface never makes someone doubt what they just did. Confident hierarchy, generous tap targets, a running total that's always visible, an error state that's impossible to miss — these are this product's version of luxury, in the same way a well-run hotel's luxury is a room that's quiet, not a room that's loud.
 
 ### 1.2 Guiding principles
 
 1. **Legibility over elegance when they conflict.** If a beautifully restrained treatment makes a number harder to read at a glance on a mid-range Android phone in bright daylight, legibility wins. Every time.
-2. **One brand color, one accent color, everything else neutral.** Prime Hotel's deep aubergine and gold are spent deliberately, never as a rainbow of "on-brand" colors applied wherever something needs to stand out.
+2. **One brand color, one accent color, everything else neutral.** Prosper Hotel's deep aubergine and gold are spent deliberately, never as a rainbow of "on-brand" colors applied wherever something needs to stand out.
 3. **No display typeface inside working screens — one narrow exception at the door.** Every interior screen (till entry, dashboard, catalog management) carries its brand entirely through color, spacing, and restraint, using only the two structural/data sans-serif families below — this is unchanged. **The login screen is the one deliberate exception** (added in Phase 2, see §2.2): a display serif is permitted there, and only there, for a single headline moment, because a login screen is a threshold a person crosses once per session, not a working surface they operate against — see §2.2's full rationale and the login pattern in `02_PATTERNS_AND_CHECKLIST.md` §5.
 4. **Flat until it has a reason not to be.** Elevation communicates state, never decorates.
 5. **Error-prevention is a design material.** This product explicitly must reject oversell attempts and make wastage, stock, and profit figures impossible to misread. Validation and warning states are treated with the same care as the primary path — not an afterthought bolted on later.
@@ -39,7 +39,7 @@ This system is **not**:
 
 ### 2.1 Color System
 
-#### Brand palette — sampled directly from the Prime Hotel logo
+#### Brand palette — sampled directly from the Prosper Hotel logo
 
 | Swatch | Name | Hex | Role |
 |---|---|---|---|

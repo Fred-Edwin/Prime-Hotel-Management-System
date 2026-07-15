@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TillStrip } from "@/components/TillStrip";
 import { SearchBar } from "@/components/SearchBar";
+import { CategoryChips } from "@/components/CategoryChips";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
@@ -59,6 +60,7 @@ export function CanteenEntryClient() {
   const [weekStart, setWeekStart] = useState<string>(() => weekStartMonday(nairobiNow()));
   const [weekEnd, setWeekEnd] = useState<string>(weekStart);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "canteen_supplied" | "canteen_independent">("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
@@ -116,10 +118,18 @@ export function CanteenEntryClient() {
   }, [requestedDate]);
 
   const visibleItems = useMemo(() => {
+    const bySource = sourceFilter === "all" ? items : items.filter((item) => item.supply_type === sourceFilter);
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((item) => item.name.toLowerCase().includes(term));
-  }, [items, searchTerm]);
+    if (!term) return bySource;
+    return bySource.filter((item) => item.name.toLowerCase().includes(term));
+  }, [items, sourceFilter, searchTerm]);
+
+  const hasBothSources = useMemo(
+    () =>
+      items.some((item) => item.supply_type === "canteen_supplied") &&
+      items.some((item) => item.supply_type === "canteen_independent"),
+    [items],
+  );
 
   function openingStockFor(itemId: string): number {
     return savedEntries[itemId]?.opening_stock ?? 0;
@@ -226,6 +236,20 @@ export function CanteenEntryClient() {
       </div>
 
       <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search items…" />
+
+      {hasBothSources && (
+        <div className={styles.chipsRow}>
+          <CategoryChips
+            options={[
+              { value: "all", label: "All" },
+              { value: "canteen_supplied", label: "From Restaurant" },
+              { value: "canteen_independent", label: "Own Stock" },
+            ]}
+            value={sourceFilter}
+            onChange={(value) => setSourceFilter(value as typeof sourceFilter)}
+          />
+        </div>
+      )}
 
       {visibleItems.length === 0 && (
         <p className={styles.noResults}>No items match &ldquo;{searchTerm}&rdquo;.</p>

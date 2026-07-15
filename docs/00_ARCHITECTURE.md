@@ -1,6 +1,6 @@
-# Prime Hotel Management System — System Architecture
+# Prosper Hotel Management System — System Architecture
 
-**Project:** Prime Hotel stock, sales & profit tracking system (product name: Prime Hotel Management System)
+**Project:** Prosper Hotel stock, sales & profit tracking system (product name: Prosper Hotel Management System)
 **Status:** Pre-build reference document
 **Last updated:** Pre-Phase 1 (planning)
 
@@ -10,7 +10,7 @@
 
 ## 1. What this system is
 
-A mobile-first web application replacing Prime Hotel's manual Excel-based stock, sales, and profit tracking across two locations (a restaurant with a central store, and a university canteen). Staff log stock and sales daily (restaurant) or weekly (canteen); the admin (WaPrecious) sees automatically calculated profit and a simple dashboard, without manually consolidating spreadsheets. Staff also log delivery/pickup orders (see §13), replacing a WhatsApp-coordinated process.
+A mobile-first web application replacing Prosper Hotel's manual Excel-based stock, sales, and profit tracking across two locations (a restaurant with a central store, and a university canteen). Staff log stock and sales daily (restaurant) or weekly (canteen); the admin (WaPrecious) sees automatically calculated profit and a simple dashboard, without manually consolidating spreadsheets. Staff also log delivery/pickup orders (see §13), replacing a WhatsApp-coordinated process.
 
 Full business context lives in `PRD.md` — not repeated here. This file is about **how the system is built**, not why.
 
@@ -121,6 +121,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=       # server-only, never exposed to client
 ```
 
+**`.env.local` holds local-dev credentials only — never production ones, even temporarily.** Production Supabase credentials (needed occasionally for a one-off script that must target production directly, e.g. `scripts/seed-data/*.mjs`) live in a separate `.env.prod-credentials.local` (gitignored, same as every `.env*` file, but not one Next.js or any script auto-loads). This split exists because of a real incident (Phase 9): both sets of credentials briefly lived in `.env.local` under near-identical variable names, and `dotenv`'s "last duplicate key wins" parsing meant every local script silently authenticated against **production** instead of local dev — a full local-dev-auth outage for a session, see `docs/phases/phase9_context.md`. A prod-targeting script must load `.env.prod-credentials.local` explicitly or receive the values as inline command-line env vars — never by relying on `.env.local`'s automatic loading to happen to have them.
+
 ---
 
 ## 7.1 Timezone: everything is Nairobi time, not server time
@@ -186,7 +188,7 @@ This constraint list originally deferred wastage/spoilage tracking to a later pr
 
 ## 13. Delivery orders — added after initial planning, per direct client input
 
-Prime Hotel currently coordinates estate/home deliveries over a WhatsApp group, with no record beyond the chat thread. This is a genuine V1 scope addition (not in the original discovery scope), added because the client asked for the WhatsApp group to be replaced with a real record-of-truth. Full schema/RLS in `01_DATA_MODEL.md` §6; this section states the architectural commitment.
+Prosper Hotel currently coordinates estate/home deliveries over a WhatsApp group, with no record beyond the chat thread. This is a genuine V1 scope addition (not in the original discovery scope), added because the client asked for the WhatsApp group to be replaced with a real record-of-truth. Full schema/RLS in `01_DATA_MODEL.md` §6; this section states the architectural commitment.
 
 - **An order is a customer transaction, not a stock-entry row** — closer to a receipt (customer name, items, quantities, delivery zone or pickup) than to the location-level daily/weekly aggregates in `stock_entries`. It gets its own tables (`orders`, `order_items`).
 - **Orders deduct from the same day's `stock_entries.quantity_sold`**, via the same calculation path in `lib/calculations.ts` — an order is a second write-path into the existing stock ledger, not a parallel untracked record. Getting this wrong would silently break stock reconciliation, the same failure mode wastage tracking (§12) exists to prevent.

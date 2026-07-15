@@ -1,4 +1,4 @@
-# Prime Hotel Management System — Component Library
+# Prosper Hotel Management System — Component Library
 
 **Read this when:** you're building or styling any specific UI component (button, input, stepper, card, badge, nav, modal, toast, etc.).
 
@@ -17,9 +17,9 @@ Standard enterprise components are specified using this system's own tokens thro
 *Revised in Phase 2, after the original v0.1.0 spec (below the line) shipped and was judged too spartan in practice — the login screen read as unfinished, not restrained, with no visual anchor and no typographic moment of its own. `00_FOUNDATIONS.md` §1.2/§1.3/§2.2/§2.7 were amended in the same phase to carve out a narrow, explicitly-scoped exception for this one screen — see those sections for the full rationale. This is still the system's only screen with a display typeface, decorative icon use, or a boxed-digit input; nothing here licenses similar treatment elsewhere.*
 
 **Structure, top to bottom:**
-1. **Logo** — the Prime Hotel roundel mark, ~130px, centered, on the plain `color-surface-page` background (no aubergine band behind it).
+1. **Logo** — the Prosper Hotel roundel mark, ~130px, centered, on the plain `color-surface-page` background (no aubergine band behind it).
 2. **Headline** — "Welcome back" in `display-lg` (Fraunces), the one sanctioned use of the display typeface in this system.
-3. **Subordinate line** — "Prime Hotel Management System" in `label`-weight Manrope, `color-text-secondary`.
+3. **Subordinate line** — "Prosper Hotel Management System" in `label`-weight Manrope, `color-text-secondary`.
 4. **Card** (`color-surface-raised`, `radius-lg`, `elevation-2`, per §4.10's content-card spec):
    - **Staff name** — a custom-styled dropdown (§4.18, new), not a native `select`. A native select's open popup is OS/browser-rendered and can't be restyled to match the card, which read as inconsistent once the rest of the screen was designed. Lists staff names for lookup (see `docs/01_DATA_MODEL.md` for how a picked name resolves to a staff account server-side). Since staff use their own phones, this may default to "remember last selected staff member," with a manual change always available.
    - **PIN** — a segmented **boxed-digit input** (§4.16, new), revealed once a name is selected. This reverses the original spec's "no segmented boxes, too POS-like" call — in practice a single masked text field was slower to visually self-check than a boxed pattern, and the boxed pattern is now judged worth the small increase in visual weight for this one high-frequency interaction.
