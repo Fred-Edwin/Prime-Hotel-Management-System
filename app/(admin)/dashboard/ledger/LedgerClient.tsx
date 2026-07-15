@@ -156,14 +156,14 @@ export function LedgerClient() {
                       <th>Location</th>
                       <th className={catalogStyles.numeric}>Opening</th>
                       <th className={catalogStyles.numeric}>Added</th>
-                      <th className={catalogStyles.numeric}>Sent out</th>
-                      <th className={catalogStyles.numeric}>Sold (till)</th>
+                      <th className={catalogStyles.numeric}>Sent (Canteen)</th>
+                      <th className={catalogStyles.numeric}>Sold (Hotel)</th>
                       <th className={catalogStyles.numeric}>Sold (total)</th>
                       <th className={catalogStyles.numeric}>Wastage</th>
                       <th className={catalogStyles.numeric}>Closing</th>
                       <th className={catalogStyles.numeric}>Sales value</th>
                       <th className={catalogStyles.numeric}>Cost value</th>
-                      <th className={catalogStyles.numeric}>Closing value</th>
+                      <th className={catalogStyles.numeric}>Closing stock value</th>
                       <th className={catalogStyles.numeric}>Wastage value</th>
                     </tr>
                   </thead>

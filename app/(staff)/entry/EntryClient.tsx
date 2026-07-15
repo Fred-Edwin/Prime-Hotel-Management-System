@@ -268,17 +268,6 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                     limitMessage: `Only ${remaining} left`,
                   },
                 },
-                {
-                  key: "quantitySold",
-                  label: "Quantity sold",
-                  tooltip: "Sales from the till. Orders are added on their own — don't count them here.",
-                  stepper: {
-                    value: line.tillQuantitySold,
-                    onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
-                    max: opening + line.addedStock - line.sentOut - line.wastage,
-                    limitMessage: `Only ${remaining} left`,
-                  },
-                },
               ]
             : [
                 {
