@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { TillStrip } from "@/components/TillStrip";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StatusStrip, type StatusStripState } from "@/components/StatusStrip";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
-import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
+import { IngredientRow, type IngredientFieldSaveState } from "@/components/IngredientRow";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "../entry/entry.module.css";
+import storeStyles from "./store.module.css";
 
 type Ingredient = Database["public"]["Tables"]["ingredients"]["Row"];
 type IngredientEntryRow = Database["public"]["Tables"]["ingredient_entries"]["Row"];
@@ -18,16 +19,18 @@ type IngredientEntryRow = Database["public"]["Tables"]["ingredient_entries"]["Ro
 interface LineState {
   received: number;
   quantityUsed: number;
-  wastage: number;
-  wastageNote: string;
 }
+
+type FieldKey = "received" | "quantityUsed";
+
+const AUTOSAVE_DEBOUNCE_MS = 700;
 
 function todayISO(): string {
   return nairobiToday();
 }
 
 function emptyLine(): LineState {
-  return { received: 0, quantityUsed: 0, wastage: 0, wastageNote: "" };
+  return { received: 0, quantityUsed: 0 };
 }
 
 export function StoreClient() {
@@ -35,10 +38,16 @@ export function StoreClient() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [savedEntries, setSavedEntries] = useState<Record<string, IngredientEntryRow>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
+  const [fieldStates, setFieldStates] = useState<Record<string, Record<FieldKey, IngredientFieldSaveState>>>(
+    {},
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const [lastError, setLastError] = useState<string | null>(null);
+
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +59,7 @@ export function StoreClient() {
       if (cancelled) return;
 
       if (!res.ok) {
-        setToast({ message: body.error ?? "Couldn't load today's ingredients", status: "error" });
+        setLoadError(body.error ?? "Couldn't load today's ingredients");
         setLoading(false);
         return;
       }
@@ -64,12 +73,7 @@ export function StoreClient() {
         const entry = fetchedEntries.find((e) => e.ingredient_id === ingredient.id);
         if (entry) entriesById[ingredient.id] = entry;
         nextLines[ingredient.id] = entry
-          ? {
-              received: entry.received,
-              quantityUsed: entry.quantity_used,
-              wastage: entry.wastage,
-              wastageNote: entry.wastage_note ?? "",
-            }
+          ? { received: entry.received, quantityUsed: entry.quantity_used }
           : emptyLine();
       }
 
@@ -89,15 +93,69 @@ export function StoreClient() {
     return savedEntries[ingredientId]?.opening_stock ?? 0;
   }
 
-  function remainingFor(ingredientId: string): number {
-    const line = lines[ingredientId] ?? emptyLine();
-    const opening = openingStockFor(ingredientId);
-    return opening + line.received - line.quantityUsed - line.wastage;
+  function setFieldState(ingredientId: string, field: FieldKey, state: IngredientFieldSaveState) {
+    setFieldStates((prev) => ({
+      ...prev,
+      [ingredientId]: { ...(prev[ingredientId] ?? { received: "idle", quantityUsed: "idle" }), [field]: state },
+    }));
   }
 
-  function updateLine(ingredientId: string, patch: Partial<LineState>) {
-    setLines((prev) => ({ ...prev, [ingredientId]: { ...(prev[ingredientId] ?? emptyLine()), ...patch } }));
+  const saveLine = useCallback(
+    async (ingredientId: string, field: FieldKey, line: LineState) => {
+      setFieldState(ingredientId, field, "saving");
+      setPendingSaves((n) => n + 1);
+
+      try {
+        const res = await fetch("/api/ingredient-entries", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entry_date: entryDate,
+            ingredient_id: ingredientId,
+            received: line.received,
+            quantity_used: line.quantityUsed,
+          }),
+        });
+        const body = await res.json();
+
+        if (!res.ok) {
+          setFieldState(ingredientId, field, "error");
+          setLastError(body.error ?? "Couldn't save — please try again.");
+          return;
+        }
+
+        setSavedEntries((prev) => ({ ...prev, [ingredientId]: body.entry }));
+        setFieldState(ingredientId, field, "saved");
+        setLastError(null);
+      } catch {
+        setFieldState(ingredientId, field, "error");
+        setLastError("Couldn't reach the server — check your connection and try again.");
+      } finally {
+        setPendingSaves((n) => n - 1);
+      }
+    },
+    [entryDate],
+  );
+
+  function updateField(ingredientId: string, field: FieldKey, value: number) {
+    const nextLine: LineState = { ...(lines[ingredientId] ?? emptyLine()), [field]: value };
+    setLines((prev) => ({ ...prev, [ingredientId]: nextLine }));
+
+    const timerKey = `${ingredientId}:${field}`;
+    if (debounceTimers.current[timerKey]) {
+      clearTimeout(debounceTimers.current[timerKey]);
+    }
+    debounceTimers.current[timerKey] = setTimeout(() => {
+      saveLine(ingredientId, field, nextLine);
+    }, AUTOSAVE_DEBOUNCE_MS);
   }
+
+  useEffect(() => {
+    const timers = debounceTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
 
   const visibleIngredients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -105,12 +163,7 @@ export function StoreClient() {
     return ingredients.filter((ingredient) => ingredient.name.toLowerCase().includes(term));
   }, [ingredients, searchTerm]);
 
-  const itemCount = useMemo(
-    () => Object.values(lines).reduce((sum, line) => sum + line.received, 0),
-    [lines],
-  );
-
-  const totalValue = useMemo(() => {
+  const totalUsedValue = useMemo(() => {
     return ingredients.reduce((sum, ingredient) => {
       const line = lines[ingredient.id];
       if (!line) return sum;
@@ -118,58 +171,23 @@ export function StoreClient() {
     }, 0);
   }, [ingredients, lines]);
 
-  async function handleSave() {
-    setSaving(true);
-    const payload = {
-      entry_date: entryDate,
-      lines: ingredients.map((ingredient) => {
-        const line = lines[ingredient.id] ?? emptyLine();
-        return {
-          ingredient_id: ingredient.id,
-          received: line.received,
-          quantity_used: line.quantityUsed,
-          wastage: line.wastage,
-          wastage_note: line.wastageNote.trim() ? line.wastageNote.trim() : null,
-        };
-      }),
-    };
-
-    try {
-      const res = await fetch("/api/ingredient-entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json();
-
-      if (!res.ok) {
-        setToast({ message: body.error ?? "Couldn't save today's ingredients", status: "error" });
-        return;
-      }
-
-      const nextSaved: Record<string, IngredientEntryRow> = {};
-      for (const entry of body.entries as IngredientEntryRow[]) {
-        nextSaved[entry.ingredient_id] = entry;
-      }
-      setSavedEntries(nextSaved);
-      setToast({ message: "Today's ingredient entries saved", status: "success" });
-    } catch {
-      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
-    } finally {
-      setSaving(false);
-    }
-  }
+  const stripState: StatusStripState = lastError
+    ? "error"
+    : pendingSaves > 0
+      ? "saving"
+      : Object.keys(savedEntries).length > 0
+        ? "saved"
+        : "idle";
 
   useTillStripSlot(
     !loading && ingredients.length > 0 ? (
-      <TillStrip
-        itemCount={itemCount}
-        totalValueLabel={`KES ${totalValue.toFixed(2)} used`}
-        onSave={handleSave}
-        saving={saving}
+      <StatusStrip
+        state={stripState}
+        totalValueLabel={`KES ${totalUsedValue.toFixed(2)} used today`}
+        errorMessage={lastError ?? undefined}
       />
     ) : null,
-    `${loading}:${ingredients.length}:${itemCount}:${totalValue}:${saving}`,
+    `${loading}:${ingredients.length}:${stripState}:${totalUsedValue}`,
   );
 
   if (loading) {
@@ -199,53 +217,30 @@ export function StoreClient() {
         <p className={styles.noResults}>No ingredients match &ldquo;{searchTerm}&rdquo;.</p>
       )}
 
-      <ul className={styles.itemList}>
+      <ul className={storeStyles.rowList}>
         {visibleIngredients.map((ingredient) => {
           const line = lines[ingredient.id] ?? emptyLine();
           const opening = openingStockFor(ingredient.id);
-          const remaining = remainingFor(ingredient.id);
-
-          const fields: ItemEntryField[] = [
-            {
-              key: "received",
-              label: "Received",
-              stepper: {
-                value: line.received,
-                onChange: (next) => updateLine(ingredient.id, { received: next }),
-              },
-            },
-            {
-              key: "quantityUsed",
-              label: "Used in cooking",
-              stepper: {
-                value: line.quantityUsed,
-                onChange: (next) => updateLine(ingredient.id, { quantityUsed: next }),
-                max: opening + line.received - line.wastage,
-                limitMessage: `Only ${remaining} left`,
-              },
-            },
-          ];
+          const states = fieldStates[ingredient.id] ?? { received: "idle", quantityUsed: "idle" };
 
           return (
-            <ItemEntryCard
+            <IngredientRow
               key={ingredient.id}
               name={ingredient.name}
-              priceLabel={ingredient.unit}
-              openingLabel={`Opening: ${opening}`}
-              openingTooltip="Yesterday's leftover stock. You don't type this in."
-              fields={fields}
-              wastageValue={line.wastage}
-              onWastageChange={(next) => updateLine(ingredient.id, { wastage: next })}
-              wastageMax={opening + line.received - line.quantityUsed}
-              wastageNote={line.wastageNote}
-              onWastageNoteChange={(next) => updateLine(ingredient.id, { wastageNote: next })}
-              wastageTooltip="Ingredients spoiled, broken, or lost — not used in cooking."
+              unit={ingredient.unit}
+              openingStock={opening}
+              received={line.received}
+              onReceivedChange={(next) => updateField(ingredient.id, "received", next)}
+              receivedSaveState={states.received}
+              quantityUsed={line.quantityUsed}
+              onQuantityUsedChange={(next) => updateField(ingredient.id, "quantityUsed", next)}
+              quantityUsedSaveState={states.quantityUsed}
             />
           );
         })}
       </ul>
 
-      {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
+      {loadError && <Toast message={loadError} status="error" onDismiss={() => setLoadError(null)} />}
     </div>
   );
 }

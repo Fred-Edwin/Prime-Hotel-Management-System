@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { ingredientEntriesSaveSchema } from "@/lib/validation";
+import { ingredientEntriesSaveSchema, ingredientEntryLineSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 
@@ -104,4 +104,62 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ entries: data });
+}
+
+/**
+ * PUT /api/ingredient-entries
+ * Store-manager-only single-line autosave — /store saves one ingredient's
+ * received/quantity_used as soon as the store manager finishes editing
+ * that field, instead of batching the whole day's sheet behind one Save
+ * button (Phase 10 redesign). Calls save_ingredient_entry() directly
+ * (skipping the batch RPC, which exists for the multi-line POST path)
+ * with wastage hardcoded to 0 — wastage entry moved to admin, this route
+ * never writes it.
+ */
+export async function PUT(request: Request) {
+  const user = await getCurrentUser();
+  if (!requireStoreManager(user)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const parsed = ingredientEntryLineSaveSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+
+  const { entry_date, ingredient_id, received, quantity_used } = parsed.data;
+  const supabase = await createServerSupabaseClient();
+
+  const priceQuery = supabase
+    .from("ingredients")
+    .select("id, buying_price")
+    .eq("id", ingredient_id)
+    .single();
+  const { data: ingredient, error: priceError }: Awaited<typeof priceQuery> = await priceQuery;
+
+  if (priceError || !ingredient) {
+    return NextResponse.json({ error: "Unknown ingredient in save request" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase.rpc("save_ingredient_entry", {
+    p_ingredient_id: ingredient_id,
+    p_entry_date: entry_date,
+    p_received: received,
+    p_quantity_used: quantity_used,
+    p_wastage: 0,
+    p_buying_price_snapshot: ingredient.buying_price,
+    p_created_by: user!.id,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entry: data });
 }

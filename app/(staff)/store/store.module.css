@@ -1,0 +1,14 @@
+/*
+ * Store's own stylesheet (Phase 10 redesign) — previously reused
+ * ../entry/entry.module.css wholesale. IngredientRow now renders its
+ * own Card per ingredient (see components/IngredientRow), so this list
+ * just needs the same card-spacing gap ItemEntryCard's list uses.
+ * .page/.header/.title/.dateLabel/.noResults/.loading are still shared
+ * verbatim from entry.module.css — only the list needs its own rule here.
+ */
+.rowList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

@@ -18,7 +18,10 @@ node scripts/acceptance/phase6-orders.mjs
 node scripts/acceptance/phase7-dashboard.mjs
 node scripts/acceptance/phase9-batch-save.mjs
 node scripts/acceptance/phase9-staff-orders.mjs
+node scripts/acceptance/post-launch-store-autosave.mjs
 ```
+
+Post-launch (non-phase) fixes with real correctness risk get a `post-launch-<short-name>.mjs` script instead of a `phaseX-*.mjs` one — same shape, same discipline, just not tied to a phase number (see `CLAUDE.md`'s "Post-launch maintenance work" section). `post-launch-store-autosave.mjs` is the first of these, covering the `/store` per-field-autosave redesign's new `PUT /api/ingredient-entries` route: row carry-forward across independent field saves, the oversell check, store-manager-only RBAC, and the new `lock_ingredient_entry_row()` advisory lock.
 
 If your local Supabase container name differs from `_lib.mjs`'s default (check with `docker ps` — the project's local containers are currently named `supabase_db_mqtlxuwbjzsjtywhjjtf_Reference_used_in_A`, a Docker-volume-naming artifact from a prior backup-restore, not the project's actual ref), override it: `ACCEPTANCE_DB_CONTAINER=<name> node scripts/acceptance/phaseX-*.mjs`.
 

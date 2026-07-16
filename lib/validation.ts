@@ -188,6 +188,23 @@ export const ingredientEntriesSaveSchema = z.object({
 export type IngredientEntriesSaveInput = z.infer<typeof ingredientEntriesSaveSchema>;
 
 /**
+ * Single-line autosave payload for PUT /api/ingredient-entries — /store's
+ * per-field autosave (received or used-in-cooking blurred) saves one
+ * ingredient's line at a time rather than the whole day's sheet. No
+ * wastage/wastage_note here: wastage entry moved to admin (see
+ * docs/01_DATA_MODEL.md §3.3's Phase 10 correction) — this route always
+ * saves wastage as 0 for the store manager's own edits.
+ */
+export const ingredientEntryLineSaveSchema = z.object({
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  ingredient_id: z.string().uuid(),
+  received: nonNegativeQuantity,
+  quantity_used: nonNegativeQuantity,
+});
+
+export type IngredientEntryLineSaveInput = z.infer<typeof ingredientEntryLineSaveSchema>;
+
+/**
  * One item's line on the canteen weekly reconciliation screen — see
  * docs/01_DATA_MODEL.md §3.1. No sent_out (canteen never forwards stock).
  * added_stock is only accepted from the client for canteen_independent

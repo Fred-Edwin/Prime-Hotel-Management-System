@@ -459,8 +459,9 @@ Concretely, this means:
 
 ### Who logs ingredient entries, and where
 
-- **Store manager only** — same person already responsible for `added_stock`/`sent_out` on the restaurant side. No new role; this is an extension of their existing daily responsibility, not a new permission tier (still just `is_store_manager = true` on a `staff` account, per `00_ARCHITECTURE.md` §5.1).
-- Ingredient entry is a **separate screen/route** (`app/(staff)/store/page.tsx` — see `CLAUDE.md`'s Project Structure section), distinct from the daily menu-item entry screen. It is a structurally different ledger (one inflow — `received` — and one consumption path — `quantity_used` — versus items' opening/added/sent/sold shape), so it gets its own screen rather than being squeezed into `/entry` as a sub-section. It's still reachable from the same bottom nav, visible only to the store-manager-flagged user.
+- **Store manager only, for `received`/`quantity_used`** — same person already responsible for `added_stock`/`sent_out` on the restaurant side. No new role; this is an extension of their existing daily responsibility, not a new permission tier (still just `is_store_manager = true` on a `staff` account, per `00_ARCHITECTURE.md` §5.1).
+- Ingredient entry is a **separate screen/route** (`app/(staff)/store/page.tsx` — see `CLAUDE.md`'s Project Structure section), distinct from the daily menu-item entry screen. It is a structurally different ledger (one inflow — `received` — and one consumption path — `quantity_used` — versus items' opening/added/sent/sold shape), so it gets its own screen rather than being squeezed into `/entry` as a sub-section. It's still reachable from the same bottom nav, visible only to the store-manager-flagged user. As of the Phase 10 redesign, `/store` autosaves each field independently (`PUT /api/ingredient-entries`, one ingredient/one field per call) instead of a single batched daily save — see `00_ARCHITECTURE.md` §12 for why wastage is no longer part of this screen's payload.
+- **`wastage`/`wastage_note` are NOT entered on `/store` as of the Phase 10 redesign** — see the correction in §3.3 below. `/store`'s per-field autosave (`PUT /api/ingredient-entries`) always writes `wastage: 0, wastage_note: null`. The older multi-line batch save (`POST /api/ingredient-entries` → `save_ingredient_entries_batch()`) still accepts `wastage` in its payload and remains available for any future admin-side wastage entry point, but nothing in the current UI calls it with a non-zero wastage value.
 
 ---
 
@@ -468,13 +469,15 @@ Concretely, this means:
 
 Wastage is tracked at **both** stages — finished menu items (`stock_entries`) and raw ingredients (`ingredient_entries`) — because spoilage genuinely happens at both ends: vegetables and other ingredients can go bad before they're ever cooked, and prepared food can go unsold and spoil, or get dropped/broken, after production. This was originally scoped as a Phase 2 nice-to-have (see the old note in §5); it's now V1 scope per direct client input, since without it the numbers don't reconcile with a physical count.
 
+**Correction (Phase 10, post-launch redesign of `/store`):** ingredient wastage entry was moved off the store manager's `/store` screen. `ingredient_entries.wastage`/`wastage_note` still exist and still reduce `closing_stock`/appear as `wastage_value` exactly as described below — only *who enters it and where* changed, not the underlying model. Responsibility for entering ingredient wastage moves to admin; as of this redesign **no screen writes a non-zero ingredient wastage value** — this is a real, currently-open gap (no admin-side wastage entry screen has been built yet), not a design decision to leave wastage uncollected indefinitely. `stock_entries.wastage` (finished menu items) is unaffected — staff/store manager still enter that on `/entry` as before.
+
 ### Why wastage can't just be folded into "closing stock" or ignored
 
 Without a dedicated `wastage` column, any item that spoils or is discarded has nowhere to go in the model — it's not a sale (`quantity_sold`), not a transfer (`sent_out`), so it would either wrongly inflate `closing_stock` (the system thinks stock is on hand that physically isn't) or force staff to fudge `quantity_sold` to make the physical count match, which corrupts the sales/profit figures. Neither is acceptable — this is exactly the kind of quiet data corruption the rest of this document goes out of its way to prevent.
 
 ### Shape: quantity + optional note, no reason enum
 
-- `wastage` (numeric) — the quantity spoiled/discarded/wasted that period, entered by whoever is already logging that row (regular staff or store manager for `stock_entries`; store manager for `ingredient_entries`).
+- `wastage` (numeric) — the quantity spoiled/discarded/wasted that period, entered by whoever is already logging that row (regular staff or store manager for `stock_entries`; **admin, as of the Phase 10 correction above, for `ingredient_entries`** — no admin-side entry screen exists yet, see the correction note).
 - `wastage_note` (nullable text) — optional free-text reason ("left out overnight," "customer return," "dropped tray"). No fixed reason-category enum in V1 — mirrors how `expenses.note` is already free text rather than a rigid taxonomy, and the client hasn't asked for structured wastage reporting by category.
 
 ### How wastage affects the numbers
