@@ -1,0 +1,21 @@
+.stat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width-default) dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+  color: var(--color-text-placeholder);
+}
+
+.label {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+}
+
+.value {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  font-variant-numeric: tabular-nums;
+}

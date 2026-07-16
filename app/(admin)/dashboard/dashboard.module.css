@@ -27,6 +27,16 @@
   color: var(--color-text-on-brand);
 }
 
+/* Hidden at desktop width — AdminShell's light-surface top bar carries
+   the toggle there instead (via useAdminTopBarSlot), matching the
+   Phase 10 reference design. Kept visible below --breakpoint-desktop,
+   where there's no equivalent top bar. */
+@media (min-width: 1024px) {
+  .heroPeriodToggleMobileOnly {
+    display: none;
+  }
+}
+
 .heroLoading,
 .heroError {
   font-family: var(--font-family-data);
@@ -37,14 +47,6 @@
 .heroError {
   color: var(--color-status-error-on-dark);
   opacity: 1;
-}
-
-.heroHeadline {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-5);
-  flex-wrap: wrap;
 }
 
 .heroGrid {
@@ -59,36 +61,6 @@
   .heroGrid {
     grid-template-columns: repeat(4, 1fr);
   }
-}
-
-/* --- Trend sparkline (single-series, gold-on-dark) --- */
-
-.sparklineWrap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 220px;
-  flex: 1;
-}
-
-.sparklineCaption {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-overline);
-  letter-spacing: var(--letter-spacing-tracked-lg);
-  text-transform: uppercase;
-  color: var(--color-brand-accent);
-}
-
-.sparkline {
-  width: 100%;
-  height: 64px;
-}
-
-.sparklineLabel {
-  font-family: var(--font-family-data);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  fill: rgba(255, 255, 255, 0.7);
 }
 
 /* --- Sections below the hero band (light surface) --- */
@@ -119,179 +91,250 @@
   text-decoration: none;
 }
 
-.attentionCount {
-  min-width: 22px;
-  height: 22px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--color-status-warning-bg);
-  color: var(--color-status-warning);
-  font-family: var(--font-family-data);
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-semibold);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
+/* --- Action Required + per-location restock preview cards --- */
 
-/* --- Per-location split (Card wraps chart + comparison table) --- */
-
-.locationCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.splitChart {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.splitBarRow {
+.attentionGrid {
   display: grid;
-  grid-template-columns: 84px 1fr auto;
-  align-items: center;
-  gap: var(--space-3);
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
 }
 
-.splitBarLabel {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-body-sm);
-  color: var(--color-text-secondary);
+@media (min-width: 900px) {
+  .attentionGrid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 }
 
-.splitBarTrack {
-  height: 10px;
-  border-radius: var(--radius-full);
-  background: var(--neutral-100);
-  overflow: hidden;
-}
-
-.splitBarFillPrimary,
-.splitBarFillSecondary {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width var(--motion-base);
-}
-
-.splitBarFillPrimary {
-  background: var(--color-chart-primary-light);
-}
-
-.splitBarFillSecondary {
-  background: var(--color-chart-secondary-light);
-}
-
-/* A negative figure (a location at a loss) is a status fact, not just a
-   different series -- overrides the categorical chart color with the
-   semantic error token, per the dataviz skill's "status color follows
-   the entity's state, never impersonates a series" rule. */
-.splitBarFillNegative {
-  background: var(--color-status-error);
-}
-
-.splitBarValue {
-  font-family: var(--font-family-data);
-  font-size: var(--font-size-body-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
-  min-width: 90px;
-  text-align: right;
-}
-
-.splitBarValueNegative {
-  color: var(--color-status-error);
-  font-weight: var(--font-weight-semibold);
-}
-
-.splitChartCaption {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
-}
-
-.locationTable {
+.actionRequiredCard {
+  background: var(--color-status-error-bg);
+  border: 1px solid var(--color-status-error);
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--color-border-default);
-  padding-top: var(--space-3);
-}
-
-.locationRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  padding: var(--space-2) 0;
-}
-
-.locationRowLabel {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-body-sm);
-  color: var(--color-text-secondary);
-}
-
-.locationRowHeading {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-  text-align: right;
-}
-
-.locationRowValue {
-  font-family: var(--font-family-data);
-  font-size: var(--font-size-body-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
-  text-align: right;
-}
-
-/* --- Needs attention (low stock) --- */
-
-.attentionCard {
-  padding: 0;
-}
-
-.attentionRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border-default);
-}
-
-.attentionRow:last-child {
-  border-bottom: none;
-}
-
-.attentionInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.attentionName {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-body-md);
-  color: var(--color-text-primary);
-}
-
-.attentionLocation {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
-}
-
-.attentionStock {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
 }
 
-.attentionQty {
+.actionRequiredHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-status-error);
+}
+
+.actionRequiredIcon {
+  flex-shrink: 0;
+}
+
+.actionRequiredCount {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.actionRequiredBody {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  flex: 1;
+}
+
+.actionRequiredButton {
+  border-color: var(--color-status-error);
+  color: var(--color-status-error);
+}
+
+.restockCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.restockHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.restockEmpty {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.restockList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.restockRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.restockRow:last-child {
+  border-bottom: none;
+}
+
+.restockName {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-primary);
+}
+
+.restockQtyLow {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-status-warning);
+  background: var(--color-status-warning-bg);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.restockQtyCritical {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-status-error);
+  background: var(--color-status-error-bg);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+/* --- Location Performance Comparison table --- */
+
+.comparisonCard {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.comparisonTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+}
+
+.comparisonTable th {
+  text-align: left;
+  font-family: var(--font-family-structural);
+  font-weight: 600;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.comparisonTable td {
+  padding: var(--space-3) var(--space-4);
+  height: 48px;
   font-family: var(--font-family-data);
   font-size: var(--font-size-body-md);
-  font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.comparisonTable tr:last-child td {
+  border-bottom: none;
+}
+
+/* :is() boosts specificity above .comparisonTable th/td's own element+class
+   rules above (0-1-1), which otherwise silently beat a plain .comparisonNumeric
+   class (0-1-0) on text-align — same cascade trap as .comparisonNegative below. */
+.comparisonTable :is(th, td).comparisonNumeric {
+  text-align: right;
+  font-family: var(--font-family-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.comparisonTotalRow td {
+  background: var(--color-surface-sunken);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* .comparisonTable td (line ~231) sets color directly on the element
+   selector, which otherwise beats a single class selector's specificity
+   — combine with :is() so this rule reliably wins regardless of the
+   cascade's declaration order. */
+.comparisonTable td:is(.comparisonNegative) {
+  color: var(--color-status-error);
+}
+
+/* --- Sales trend chart --- */
+
+.trendCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.trendHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.trendTitle {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-md);
+  color: var(--color-text-primary);
+}
+
+.trendSubtitle {
+  margin-top: var(--space-1);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.trendChart {
+  width: 100%;
+  height: auto;
+}
+
+.trendGridline {
+  stroke: var(--color-border-default);
+  stroke-width: 1;
+}
+
+.trendAxisLabel {
+  font-family: var(--font-family-data);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-text-secondary);
+}
+
+.trendBar {
+  /* Muted aubergine-family violet, not gold — matches the Phase 10
+     reference's bar treatment (docs/design/reference-images/
+     stitch-design.md's "aubergine anchor, then gold, then neutral"
+     charting guidance); the current-period bar carries the accent. */
+  fill: var(--color-chart-secondary-light);
+}
+
+.trendBarCurrent {
+  fill: var(--color-brand-primary-container);
+}
+
+.trendBarValue {
+  font-family: var(--font-family-data);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-text-primary);
 }

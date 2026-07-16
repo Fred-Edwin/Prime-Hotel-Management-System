@@ -43,7 +43,8 @@ This system is **not**:
 
 | Swatch | Name | Hex | Role |
 |---|---|---|---|
-| Prime Aubergine | Prime Aubergine | `#331642` | Primary brand color. Headers, primary buttons, active states, admin dashboard accents. |
+| Prime Aubergine | Prime Aubergine | `#1B002B` | Primary brand color as of Phase 10 (see §3's brand-color swap note) — sidebars, headers, primary buttons, focus/link color, active states. |
+| Prime Aubergine Container | Prime Aubergine Container | `#331642` | Secondary/lighter brand tone — `--color-surface-dark` (hero bands), `--color-brand-primary-container` (e.g. active nav-item fill on a dark sidebar). This was the sole primary color before Phase 10. |
 | Prime Gold | Prime Gold | `#EABF63` | Secondary/accent. Used on dark surfaces only — see accessibility note below. |
 | Prime Gold Deep | Prime Gold Deep | `#D19F48` | Gold hover/active state, and gold used at smaller sizes where more contrast/weight is needed. |
 
@@ -152,15 +153,15 @@ Margins: 16px on mobile, 24px on tablet, 32px+ on desktop. No 12-column grid sys
 
 ### 2.5 Elevation
 
-Flat by default; elevation is used only to communicate real layering.
+Flat by default; elevation is used only to communicate real layering. **Flattened Phase 10** (values below tightened from the original v0.1.0 scale) to match the admin redesign's Google Stitch reference designs — applied site-wide, not admin-only, so the system stays internally consistent. Roles/usage are unchanged, only the shadow depth.
 
 | Level | Shadow | Usage |
 |---|---|---|
 | `elevation-0` | none | Page background, resting cards, list rows |
-| `elevation-1` | `0 1px 2px rgba(26,22,32,0.06)` | Sticky footer action bar (running total + Save), cards on a busy list |
-| `elevation-2` | `0 4px 12px rgba(26,22,32,0.10)` | Dropdowns (staff/name selector), popovers |
-| `elevation-3` | `0 12px 28px rgba(26,22,32,0.16)` | Modals (confirm delivery order, confirm wastage entry) |
-| `elevation-4` | `0 20px 40px rgba(26,22,32,0.20)` | Toasts (save confirmation, oversell rejection) |
+| `elevation-1` | `0 1px 2px rgba(26,22,32,0.05)` | Sticky footer action bar (running total + Save), cards on a busy list |
+| `elevation-2` | `0 2px 6px rgba(26,22,32,0.07)` | Dropdowns (staff/name selector), popovers |
+| `elevation-3` | `0 6px 16px rgba(26,22,32,0.10)` | Modals (confirm delivery order, confirm wastage entry), Drawer (§4.22) |
+| `elevation-4` | `0 12px 24px rgba(26,22,32,0.14)` | Toasts (save confirmation, oversell rejection) |
 
 **One adaptation specific to this product:** the sticky bottom bar (running total + Save button, present through most of the daily entry flow) uses `elevation-1` permanently while scrolled — an exception to "flat until it has a reason," justified because this element is genuinely always floating above scrolling content and needs to read as such.
 
@@ -200,10 +201,20 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
 
 ```css
 :root {
-  /* Color — brand */
-  --color-brand-primary: #331642;
-  --color-brand-primary-hover: #260F32;
-  --color-brand-primary-active: #1C0B25;
+  /* Color — brand
+     Swapped Phase 10, per the admin redesign's Google Stitch design
+     system spec (docs/design/reference-images/stitch-design.md): that
+     spec's "primary" (#1B002B, near-black aubergine) is the DOMINANT
+     color — sidebars, headers, primary buttons, focus/link color — and
+     its "primary-container" (#331642, this token's original value) is
+     the secondary/lighter tone, kept below as
+     --color-brand-primary-container for that narrower role and
+     unchanged as --color-surface-dark's value. Same hue family
+     throughout — a dominance swap, not a rebrand. */
+  --color-brand-primary: #1B002B;
+  --color-brand-primary-hover: #12001C;
+  --color-brand-primary-active: #0B0012;
+  --color-brand-primary-container: #331642;
   --color-brand-accent: #EABF63;
   --color-brand-accent-deep: #D19F48;
   /* Reminder: --color-brand-accent is valid as text/icon color ONLY on dark surfaces. */
@@ -212,7 +223,10 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
   --color-surface-page: #FAF9FB;
   --color-surface-raised: #FFFFFF;
   --color-surface-sunken: #F2F0F5;
-  --color-surface-dark: #331642;
+  /* Matches --color-brand-primary as of Phase 10's dominant-color swap
+     (see the brand block above) — sidebar and hero band read as one
+     continuous dark surface rather than two different shades. */
+  --color-surface-dark: #1B002B;
   --color-surface-overlay: rgba(26,22,32,0.48);
 
   /* Color — text */
@@ -221,11 +235,11 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
   --color-text-placeholder: #7C7686;
   --color-text-on-brand: #FFFFFF;
   --color-text-on-brand-accent: #EABF63;  /* gold text — dark surfaces only */
-  --color-text-link: #331642;
+  --color-text-link: #1B002B;
 
   /* Color — border */
   --color-border-default: #DBD7E0;
-  --color-border-focus: #331642;
+  --color-border-focus: #1B002B;
   --color-border-error: #B23B3B;
 
   /* Color — neutrals */
@@ -320,19 +334,21 @@ Tokens are named semantically by role (`color-brand-primary`, `space-touch`, `fo
   --space-5: 20px;   --space-touch: 44px;
   --space-6: 24px;
 
-  /* Border radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  /* Border radius — tightened Phase 10 (was sm:6/md:10/lg:16/xl:24),
+     matching the admin redesign's Google Stitch reference for a flatter,
+     crisper feel. Applied site-wide, not admin-only. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadow */
+  /* Shadow — flattened Phase 10, same reasoning as border radius above. */
   --shadow-elevation-0: none;
-  --shadow-elevation-1: 0 1px 2px rgba(26,22,32,0.06);
-  --shadow-elevation-2: 0 4px 12px rgba(26,22,32,0.10);
-  --shadow-elevation-3: 0 12px 28px rgba(26,22,32,0.16);
-  --shadow-elevation-4: 0 20px 40px rgba(26,22,32,0.20);
+  --shadow-elevation-1: 0 1px 2px rgba(26,22,32,0.05);
+  --shadow-elevation-2: 0 2px 6px rgba(26,22,32,0.07);
+  --shadow-elevation-3: 0 6px 16px rgba(26,22,32,0.10);
+  --shadow-elevation-4: 0 12px 24px rgba(26,22,32,0.14);
 
   /* Z-index */
   --z-index-dropdown: 100;

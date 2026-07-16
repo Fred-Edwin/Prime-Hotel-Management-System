@@ -34,6 +34,7 @@
   font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
   padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
   border-bottom: 1px solid var(--color-border-default);
 }
 
@@ -50,7 +51,11 @@
   border-bottom: none;
 }
 
-.numeric {
+/* :is() boosts specificity above .table th/td's own element+class rules
+   above (0-1-1), which otherwise silently beat a plain .numeric class
+   (0-1-0) on text-align — found via the Dashboard's comparison table
+   (same shared pattern), Phase 10. */
+.table :is(th, td).numeric {
   text-align: right;
   font-family: var(--font-family-data);
   font-variant-numeric: tabular-nums;

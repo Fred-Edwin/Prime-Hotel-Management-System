@@ -148,13 +148,13 @@ Density: `comfortable` (48px row height) as default for admin ledger views; `com
 
 Sized to this product's actual surface count — a handful of screens, not a sprawling multi-section app:
 
-- **Top bar**: `color-surface-raised` or `color-brand-primary` (admin dashboard uses the dark variant for visual distinction from entry screens — see `02_PATTERNS_AND_CHECKLIST.md` §5), wordmark/logotype left, role/location badge (§4.6) and staff name right.
-- **Bottom tab bar** (mobile primary navigation): 3–4 destinations depending on role (staff: Entry, Store [store-manager-flagged only], Expenses, Summary; admin: Dashboard, Items, Ingredients, Delivery, Staff). Icon (§4.21) above a `caption`-size label per destination, `neutral-700` inactive / `color-brand-primary` active (label goes semibold on active too, not just the icon). Each tap target is a minimum of `space-touch` (44px) tall on top of the icon+label content — in practice the two-line stack needs `space-touch + space-4` (60px) to sit comfortably, not the bare 44px minimum; a bottom nav sized to exactly 44px is a conformance gap, not a valid minimal implementation (found and fixed in Phase 4 — see `docs/phases/phase4_context.md`). Fixed to the viewport bottom on mobile widths (`position: fixed`, not `sticky` — nesting sticky elements inside other sticky/fixed ancestors is fragile, see the same context file), reflows to a horizontal top-aligned strip at `768px+` per the existing admin desktop-nav placeholder (icon beside label, not stacked, at that width).
-- No sidebar — this product's mobile-first, single-role-per-session nature doesn't call for a persistent desktop sidebar; one may be added later as a desktop-only enhancement for the admin dashboard if needed, not specified here.
+- **Top bar** (staff shell; also the admin shell below `--breakpoint-desktop`, 1024px): `color-surface-raised` or `color-brand-primary` (admin dashboard uses the dark variant for visual distinction from entry screens — see `02_PATTERNS_AND_CHECKLIST.md` §5), wordmark/logotype left, role/location badge (§4.6) and staff name right.
+- **Bottom tab bar** (mobile primary navigation, all roles below `--breakpoint-desktop`): 3–4 destinations depending on role (staff: Entry, Store [store-manager-flagged only], Expenses, Summary; admin: Dashboard, Items, Ingredients, Delivery, Orders, Staff). Icon (§4.21) above a `caption`-size label per destination, `neutral-700` inactive / `color-brand-primary` active (label goes semibold on active too, not just the icon). Each tap target is a minimum of `space-touch` (44px) tall on top of the icon+label content — in practice the two-line stack needs `space-touch + space-4` (60px) to sit comfortably, not the bare 44px minimum; a bottom nav sized to exactly 44px is a conformance gap, not a valid minimal implementation (found and fixed in Phase 4 — see `docs/phases/phase4_context.md`). Fixed to the viewport bottom on mobile widths (`position: fixed`, not `sticky` — nesting sticky elements inside other sticky/fixed ancestors is fragile, see the same context file), reflows to a horizontal top-aligned strip at `768px+` per the existing admin desktop-nav placeholder (icon beside label, not stacked, at that width).
+- **Admin desktop sidebar** (`--breakpoint-desktop`, 1024px, and up — admin only). *Added Phase 10, superseding this section's prior "no sidebar" position* — the admin (WaPrecious) turned out to be primarily a laptop user, and the design system's own Foundations §2.4 already carved out a two-column desktop exception for "dashboard/reporting screens only" that no admin screen had actually used. At this width the top bar and bottom tab bar (above) are both hidden entirely and replaced by a persistent left sidebar: `color-brand-primary` (dark aubergine) fill, full viewport height, `240px` fixed width. Top-to-bottom: wordmark (`onDark`), a vertical nav list (same destinations/icons as the bottom tab bar — the two are driven by one shared route list so they can't drift apart), then a bottom-anchored block with the role/location badge (§4.6), staff name, and a log-out button, separated by a hairline divider. Nav items are full-width rows (icon + label, left-aligned, not stacked), `space-touch`-minimum height, active state a subtle light-on-dark fill plus gold (`color-text-on-brand-accent`) label text — gold-on-dark, consistent with Foundations §2.1's gold-never-on-light rule. This pattern is **admin-only** — no staff-facing shell has a desktop sidebar; staff screens stay mobile-first/bottom-nav at every width, since staff primarily work from their phones mid-shift, not a desktop.
 
 ### 4.13 Modals
 
-Used sparingly — confirm-before-destructive-action (delete catalog item), confirm delivery order details before submission. Not used for validation errors (§4.7 handles those inline).
+Used sparingly — confirm-before-destructive-action (delete catalog item), confirm delivery order details before submission, drill-in detail views (e.g. Order Detail's line-item view). Not used for validation errors (§4.7 handles those inline). **Not used for admin catalog add/edit forms as of Phase 10 — see §4.22 Drawer**, which replaced Modal for that specific case (Items, Ingredients, Delivery Locations, Staff); Modal remains the right choice for the shorter, non-form interactions above.
 
 ### 4.14 Toasts
 
@@ -265,6 +265,42 @@ A slim band at the bottom of the login screen — the one place besides the head
 | `delivery` | Admin bottom nav — Delivery Locations |
 | `staff` | Admin bottom nav — Staff |
 | `search` | Search Bar (§4.20) leading glyph |
-| `close` | Search Bar (§4.20) clear-field button |
+| `close` | Search Bar (§4.20) clear-field button, Drawer (§4.22) close button |
+| `filter` | Reserved — Filter Bar (§4.24) conceptual glyph; the shipped Filter Bar uses Select's built-in chevron rather than a separate filter icon, kept in the vocabulary for a future standalone filter-toggle affordance |
+| `logout` | Admin desktop sidebar (§4.12) log-out button |
+| `bell` | Placeholder Stat (§4.25) — Dashboard's unwired notification affordance only |
+| `chevron-right` | Drill-in/disclosure affordance (e.g. a future Staff attendance drill-in) |
 
 **Sizing convention:** 22px in the bottom nav (slightly under the full 24px grid so the icon+caption stack doesn't feel top-heavy against the small label beneath it), 18px inside Search Bar (a smaller, denser control), 24px (the native grid size) everywhere else including the style guide's reference grid — call sites choose via the `size` prop, the underlying paths don't change.
+
+### 4.22 Drawer
+
+*Added Phase 10, replacing Modal (§4.13) as the standard pattern for admin catalog add/edit forms (Items, Ingredients, Delivery Locations, Staff) — driven by two things learned during that phase's Google Stitch design exploration: these forms have enough fields (4–6+, grouped into sections) that a centered modal felt cramped, and the admin is primarily working from a laptop, where a form that keeps the underlying table visible/contextual behind it reads better than one that fully occludes the screen.*
+
+**Component:** `components/Drawer` — same `open`/`onClose`/`title`/`children`/`footer` API shape as Modal, plus an optional `subtitle`. Right-edge slide-in panel, `440px` max width (full-width below `600px`), full viewport height, `elevation-4`, `color-surface-raised` fill. Header (title + optional subtitle + close button) is a fixed top band with a bottom divider; footer (typically Cancel/Save buttons, §4.2) is a fixed bottom band with a top divider; the body between them scrolls independently. Same escape-key-closes and click-outside-closes behavior as Modal, same portal-to-`document.body` implementation.
+
+**When to still use Modal instead:** shorter, non-form interactions — a destructive-action confirmation, a read-only drill-in (Order Detail's line-item view) — where occluding the full screen briefly is fine and a persistent side panel would be overkill.
+
+### 4.23 Form Section
+
+*Added Phase 10, for grouping related fields inside a Drawer form (§4.22) — e.g. Items' "Identity" / "Pricing" / "Stock Behavior" / "Status" groups, Staff's "Identity" / "Access" / "Responsibilities" / "Status" groups. A flat, ungrouped list of 4–6+ fields in a single form was judged hard to scan at a glance; grouping by the way an admin actually thinks about the entity (what it is, what it costs, how it behaves, whether it's active) reads faster than an alphabetical or schema-order field list.*
+
+**Component:** `components/FormSection` — takes a `label` and renders its children beneath an `overline`-style section heading (§Foundations 2.2 type scale), with a bottom divider separating it from the next section (no divider after the last section in a form). Always used as a direct child of a Drawer's body — not a standalone card, no elevation of its own.
+
+### 4.24 Filter Bar
+
+*Added Phase 10, for the Items and Ingredients catalog screens — as the item catalog specifically was flagged as needing better UX (13 categories, no way to narrow the list), a search-plus-filter row above the table was judged the standard, lowest-risk pattern rather than inventing something novel. Built entirely from existing Search Bar (§4.20) and Select (§4.3) primitives.*
+
+**Component:** `components/FilterBar` — a `SearchBar` (flexible width) plus zero or more `Select` filter dropdowns, laid out in a wrapping row above a catalog table. Each filter's option list must include an explicit "all" option (e.g. `{ value: "", label: "All Categories" }`) as a real, re-selectable entry — Select's `placeholder` prop renders a `disabled hidden` option that can't be returned to once left, which is the wrong behavior for a filter meant to be cleared repeatedly, not a one-time initial choice.
+
+### 4.25 Placeholder Stat
+
+*Added Phase 10. Several of that phase's Google Stitch reference designs included UI for functionality this product doesn't have yet — a Dashboard "Add Entry" button and notification bell (both would require the admin being able to act as any staff role, a deliberately out-of-scope future feature), a Ledger "staff on shift" column and Staff screen "Attendance"/"Last Shift" columns (both depend on a lightweight clock-in feature agreed on in principle but not built this phase). Rather than either silently building fake data behind these or dropping them entirely and losing a genuinely good idea, this phase ships them as a single, consistent "clearly not wired yet" treatment — see Phase 10's context file for the full list of what's parked here.*
+
+**Component:** `components/PlaceholderStat` — a small inline badge: a `caption`-weight label, an optional `body-sm` value (e.g. sample/placeholder data where showing a shape helps, like "18 / 26" for attendance), and a built-in `InfoTooltip` (§4.26) explaining what the element is for and that it isn't live yet. Dashed border (`color-border-default`), `color-text-placeholder` text throughout — deliberately muted relative to every real, wired stat on the same screen, so it reads as "coming soon," never as broken or as real data. **Rule:** any UI element shipped ahead of its backend must use this component — no ad hoc "TODO"-style treatment invented per screen.
+
+### 4.26 Info Tooltip
+
+*Not part of the original v0.1.0 spec — added ad hoc for a form field whose purpose wasn't obvious from its label alone, and undocumented here until Phase 10 noticed the gap while writing up §4.25's dependency on it. Reuses Dropdown's (§4.18) popover surface language (`elevation-2`, `radius-md`) rather than inventing a new one.*
+
+**Component:** `components/InfoTooltip` — a small `?`-in-circle trigger button (Icon `info`, §4.21) next to a label; clicking/tapping toggles a small popover panel with an explanatory message, closes on outside click, Escape, or toggling the trigger again. Not a hover-only tooltip — click/tap-based, so it works identically on touch and pointer devices without relying on hover state that phones don't have.

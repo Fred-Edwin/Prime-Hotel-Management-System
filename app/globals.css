@@ -1,8 +1,19 @@
 :root {
-  /* Color — brand */
-  --color-brand-primary: #331642;
-  --color-brand-primary-hover: #260F32;
-  --color-brand-primary-active: #1C0B25;
+  /* Color — brand
+     Swapped Phase 10, per the admin redesign's Google Stitch design
+     system spec (docs/design/reference-images/stitch-design.md): that
+     spec's "primary" (#1B002B, near-black aubergine) is the DOMINANT
+     color — sidebars, headers, primary buttons, focus/link color — and
+     its "primary-container" (#331642, our original --color-brand-primary
+     value) is the secondary/lighter tone, kept below as
+     --color-brand-primary-container for that narrower role (active nav
+     item fill on a dark sidebar, etc.) and unchanged as
+     --color-surface-dark's value. Same hue family throughout — this is a
+     dominance swap, not a rebrand. */
+  --color-brand-primary: #1B002B;
+  --color-brand-primary-hover: #12001C;
+  --color-brand-primary-active: #0B0012;
+  --color-brand-primary-container: #331642;
   --color-brand-accent: #EABF63;
   --color-brand-accent-deep: #D19F48;
   /* Reminder: --color-brand-accent is valid as text/icon color ONLY on dark surfaces. */
@@ -11,7 +22,10 @@
   --color-surface-page: #FAF9FB;
   --color-surface-raised: #FFFFFF;
   --color-surface-sunken: #F2F0F5;
-  --color-surface-dark: #331642;
+  /* Matches --color-brand-primary as of Phase 10's dominant-color swap
+     (see the brand block above) — the sidebar and the hero band read as
+     one continuous dark surface rather than two different shades. */
+  --color-surface-dark: #1B002B;
   --color-surface-overlay: rgba(26,22,32,0.48);
 
   /* Color — text */
@@ -20,11 +34,11 @@
   --color-text-placeholder: #7C7686;
   --color-text-on-brand: #FFFFFF;
   --color-text-on-brand-accent: #EABF63;  /* gold text — dark surfaces only */
-  --color-text-link: #331642;
+  --color-text-link: #1B002B;
 
   /* Color — border */
   --color-border-default: #DBD7E0;
-  --color-border-focus: #331642;
+  --color-border-focus: #1B002B;
   --color-border-error: #B23B3B;
 
   /* Color — neutrals */
@@ -107,19 +121,24 @@
   --space-5: 20px;   --space-touch: 44px;
   --space-6: 24px;
 
-  /* Border radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  /* Border radius — tightened Phase 10, matching the admin redesign's
+     Google Stitch reference (a flatter, crisper feel than the original
+     v0.1.0 scale). Applied site-wide, not admin-only, to keep the
+     system internally consistent — see docs/design/00_FOUNDATIONS.md §3. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadow */
+  /* Shadow — flattened Phase 10, same reasoning as border radius above.
+     Elevation still communicates state (Foundations §1.2 principle 4)
+     but with less depth than the original scale. */
   --shadow-elevation-0: none;
-  --shadow-elevation-1: 0 1px 2px rgba(26,22,32,0.06);
-  --shadow-elevation-2: 0 4px 12px rgba(26,22,32,0.10);
-  --shadow-elevation-3: 0 12px 28px rgba(26,22,32,0.16);
-  --shadow-elevation-4: 0 20px 40px rgba(26,22,32,0.20);
+  --shadow-elevation-1: 0 1px 2px rgba(26,22,32,0.05);
+  --shadow-elevation-2: 0 2px 6px rgba(26,22,32,0.07);
+  --shadow-elevation-3: 0 6px 16px rgba(26,22,32,0.10);
+  --shadow-elevation-4: 0 12px 24px rgba(26,22,32,0.14);
 
   /* Z-index */
   --z-index-dropdown: 100;

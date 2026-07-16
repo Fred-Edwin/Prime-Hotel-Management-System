@@ -282,6 +282,54 @@ A phase is not complete until all of these are true. The phase's context file (s
 
 ---
 
+### Phase 10 — Admin Screen Redesign
+
+**Depends on:** Phase 9 (all admin screens exist and are functionally complete; this phase is visual/UX only, no new backend functionality)
+
+**Goal:** The client (WaPrecious) and Fred were both dissatisfied with the admin screens' visual/UX quality — the original build never explored alternative designs before shipping. This phase redesigns all 7 existing admin screens using real reference designs generated in Google Stitch (reviewed and corrected against this product's actual data/constraints across several rounds — see the design conversation this phase originated from for full detail on what was accepted/rejected per screen and why), rather than inventing a new visual direction from scratch.
+
+Two real product facts drove this beyond a pure reskin:
+1. **WaPrecious is primarily a laptop user**, occasionally on phone — the existing design system (`docs/design/00_FOUNDATIONS.md` §2.4) already anticipated a two-column desktop treatment for "dashboard/reporting screens only," but no admin screen actually used it. This phase makes admin genuinely desktop-first with mobile as the secondary, not the primary, breakpoint — the inverse of every staff-facing screen.
+2. During scoping, several **new functionality requests** surfaced (audit log, geofencing/clock-in, staff meal accounting, admin able to act as any staff role, admin-only historical edits, full shift scheduling). These are explicitly **out of scope for this phase** — see below. A lightweight, non-geofenced clock-in and a compact attendance/shift-days display were agreed as the only shift-adjacent things worth a UI placeholder in this phase; everything else needs its own future scoping phase.
+
+**Scope:**
+1. **`AdminShell` responsive split** — sidebar navigation at desktop widths (≥1024px), the existing bottom-tab nav preserved at mobile widths. Same 7 routes either way (Dashboard, Ledger, Orders, Items, Ingredients, Delivery Locations, Staff) — this is a shell/layout change, not a route change.
+2. **New shared components:**
+   - `Drawer` — right-side panel, replaces `Modal` as the standard for every admin catalog add/edit form (Items, Ingredients, Delivery Locations, Staff), sized for desktop-primary use.
+   - `FormSection` — grouped-fields-with-divider pattern used inside `Drawer` (e.g. Items' Identity / Pricing / Stock Behavior / Status groups).
+   - `FilterBar` — search box + filter dropdown(s) row, sits above a catalog table (Items, Ingredients).
+   - A `PlaceholderStat` pattern — one consistent, clearly-not-wired-yet visual treatment for the handful of UI elements this phase deliberately ships ahead of their backend (see below), so they read as "coming soon," not as broken or misleading.
+   - Extended sticky-column + horizontal-scroll handling on wide tables (`catalog.module.css`'s existing `.tableCard` mask-fade already exists from Phase 8; this phase adds sticky first-column behavior for the 14-column Item Ledger table specifically).
+3. **Per-screen redesign**, applying the shared components above:
+   - **Dashboard** — real chart components (period-aware net-profit trend, replacing the single-point sparkline; a Restaurant-vs-Canteen comparison) inside the existing dark-aubergine hero band (Net Profit headline + Total Sales/Total Cost/Wastage Cost/Closing Stock Value), an "Action Required" callout separated from per-location restock preview cards, no sales-target/goal concept (deliberately rejected — not a feature this product has).
+   - **Item Ledger** — column-grouped sub-headers instead of one flat 14-column row; `Sent to canteen`/`Received from canteen` merged into one signed `Canteen (S/R)` column; a date-range picker alongside the existing Today/Week/Month toggle; a `PlaceholderStat`-style "staff on shift" column (unwired).
+   - **Order Detail** — no dedicated reference design; carries the new shell/visual language directly, light polish only, structure unchanged.
+   - **Items** — `FilterBar` (search + category + status), `Drawer` form grouped Identity/Pricing/Stock Behavior/Status with a live buying/selling margin hint, supply-type shown as a compact badge instead of plain text.
+   - **Ingredients** — same recipe as Items, adapted fields (no category/supply_type; a unit badge instead).
+   - **Delivery Locations** — `Drawer` form only (2 fields, no `FilterBar`/`FormSection` needed at that size).
+   - **Staff** — identity-card-style rows (avatar initials, name+code, grouped role/location/store-manager badges) replacing the flat text table; a guarded, visually distinct Delete action alongside the existing Deactivate/Reactivate (destructive vs. reversible, stronger confirmation on Delete); `PlaceholderStat`-style Attendance/Last-Shift columns (unwired); `Drawer` form grouped Identity/Access/Responsibilities/Status.
+4. `docs/design/01_COMPONENTS.md` updated with all new/changed components in the same phase, per the standing design-system-conformance rule.
+
+**Explicitly not in scope (parked for a future phase, not silently dropped):**
+- Any backend/data work for shift scheduling or attendance tracking — this phase only places a `PlaceholderStat` UI element where that data will eventually surface.
+- Lightweight clock-in (no geofencing) as a real, working feature — agreed in principle during scoping, but not built this phase; the Staff screen's Attendance/Last-Shift columns stay unwired placeholders until it exists.
+- Staff meal/unpaid-food consumption accounting (no schema, no screen).
+- A system-wide audit/event log.
+- Admin being able to act as any staff role (log sales, stock, orders from her own account) — the Dashboard's "Add Entry" button and notification bell, if carried into the reference designs, ship as unwired `PlaceholderStat` elements only, not real entry points.
+- Admin-only historical-entry edit capability.
+- Hard-delete's actual backend semantics beyond the UI — Staff's Delete action is a UI/confirmation-flow addition only in this phase; whether/how it's wired to a real destructive API call (given `created_by` FK constraints noted in Phase 9) is a decision for whichever phase actually implements it.
+
+**Acceptance criteria (in addition to the standard gating checklist):**
+- [ ] `AdminShell` renders sidebar nav at ≥1024px and the existing bottom nav below it, verified via the `verify` skill at both breakpoints, on every one of the 7 admin routes.
+- [ ] Every admin catalog add/edit form (Items, Ingredients, Delivery Locations, Staff) uses `Drawer`, not `Modal` — `Modal` may remain in use elsewhere (e.g. Order Detail's line-item drill-in) where it's still the right pattern.
+- [ ] No hardcoded `$` currency symbols remain — `KES` throughout, matching the existing `money()` helper convention.
+- [ ] Every `PlaceholderStat` instance is visually distinguishable from real, wired data (per whatever concrete treatment this phase settles on — dashed border, muted tone, tooltip, etc.) — confirmed by screenshot review, not just code inspection.
+- [ ] Design-system conformance pass (`02_PATTERNS_AND_CHECKLIST.md` §6) completed per screen, all 7.
+- [ ] `docs/design/01_COMPONENTS.md` updated for `Drawer`, `FormSection`, `FilterBar`, and the `PlaceholderStat` pattern.
+- [ ] No RLS or calculation logic changed — this phase is presentation-only; existing Phase 4–9 acceptance scripts re-run with zero regressions as confirmation.
+
+---
+
 ## What's explicitly NOT in this phase plan
 
 Per `01_DATA_MODEL.md` §5 and prior client scope discussions, the following remain out of scope for this build and have no phase allocated:

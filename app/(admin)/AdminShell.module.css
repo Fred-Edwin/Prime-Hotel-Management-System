@@ -1,8 +1,179 @@
 .shell {
   min-height: 100dvh;
   display: flex;
-  flex-direction: column;
   background: var(--color-surface-sunken);
+}
+
+/* ---- Desktop sidebar (>=1024px only) ---- */
+
+.sidebar {
+  display: none;
+}
+
+.sidebarTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-5) var(--space-6);
+}
+
+.sidebarCollapsed .sidebarTop {
+  justify-content: center;
+  padding: var(--space-5) var(--space-2) var(--space-6);
+}
+
+.sidebarCollapseToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-on-brand);
+  cursor: pointer;
+}
+
+.sidebarCollapseToggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.collapseIconOpen {
+  transform: rotate(180deg);
+}
+
+.sidebarNav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+}
+
+.sidebarNavItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: rgba(255, 255, 255, 0.72);
+  text-decoration: none;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.sidebarNavItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-on-brand);
+}
+
+.sidebarCollapsed .sidebarNavItem {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebarNavItemActive {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-on-brand-accent);
+}
+
+.sidebarBottom {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sidebarCollapsed .sidebarBottom {
+  align-items: center;
+  padding: var(--space-5) var(--space-2);
+}
+
+.sidebarStaffName {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sidebarLogout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--space-touch);
+  min-width: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: transparent;
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  cursor: pointer;
+}
+
+.sidebarCollapsed .sidebarLogout {
+  padding: 0;
+}
+
+/* ---- Desktop-only light-surface top bar (>=1024px) ---- */
+
+.desktopTopBar {
+  display: none;
+}
+
+.addEntryButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-primary);
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.addEntryButton:hover {
+  background: var(--color-brand-primary-hover);
+}
+
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-touch);
+  min-height: var(--space-touch);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-primary);
+}
+
+/* ---- Mobile/tablet top bar + bottom nav (unchanged below desktop) ---- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .topBar {
@@ -113,5 +284,76 @@
 
   .content {
     padding-bottom: var(--space-5);
+  }
+}
+
+/* ---- Desktop breakpoint: swap top bar + bottom nav for the sidebar ---- */
+
+@media (min-width: 1024px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    /* Fixed, not sticky — sticky's containing block here is the document,
+       and on any page taller than one viewport the sidebar scrolled out
+       of view with the page instead of staying pinned (found via live
+       testing, not something sticky's spec-documented behavior alone
+       would have flagged as wrong). Fixed positions it directly against
+       the viewport, independent of .content's height entirely. */
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    background: var(--color-brand-primary);
+    z-index: var(--z-index-sticky);
+    transition: width var(--motion-base);
+  }
+
+  .sidebarCollapsed {
+    width: 72px;
+  }
+
+  .topBar,
+  .bottomNav {
+    display: none;
+  }
+
+  .desktopTopBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    height: 64px;
+    padding: 0 var(--space-6);
+    background: var(--color-surface-raised);
+    border-bottom: 1px solid var(--color-border-default);
+    position: sticky;
+    top: 0;
+    z-index: var(--z-index-sticky);
+  }
+
+  .desktopTopBarSlot {
+    display: flex;
+    align-items: center;
+  }
+
+  .desktopTopBarActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .main {
+    margin-left: 240px;
+    transition: margin-left var(--motion-base);
+  }
+
+  .mainSidebarCollapsed {
+    margin-left: 72px;
+  }
+
+  .content {
+    padding: var(--space-8);
+    max-width: 1280px;
   }
 }

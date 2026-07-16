@@ -13,12 +13,15 @@ export interface PeriodToggleProps {
   onChange: (value: string) => void;
   /** Dark-surface variant — see admin dashboard's hero band (Components §4.8). */
   onDark?: boolean;
+  className?: string;
 }
 
-export function PeriodToggle({ options, value, onChange, onDark = false }: PeriodToggleProps) {
+export function PeriodToggle({ options, value, onChange, onDark = false, className }: PeriodToggleProps) {
   return (
     <div
-      className={[styles.toggle, onDark ? styles.toggleOnDark : ""].filter(Boolean).join(" ")}
+      className={[styles.toggle, onDark ? styles.toggleOnDark : "", className ?? ""]
+        .filter(Boolean)
+        .join(" ")}
       role="tablist"
     >
       {options.map((option) => {

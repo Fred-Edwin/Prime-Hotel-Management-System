@@ -25,7 +25,11 @@ export type IconName =
   | "close"
   | "wastage"
   | "info"
-  | "check";
+  | "check"
+  | "filter"
+  | "logout"
+  | "bell"
+  | "chevron-right";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -141,6 +145,32 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="m8.5 12.3 2.3 2.3 4.7-4.9" />
+    </>
+  ),
+  // Filter — funnel, FilterBar's category/status controls
+  filter: (
+    <>
+      <path d="M4 5h16l-6 7.5V19l-4 2v-8.5Z" strokeLinejoin="round" />
+    </>
+  ),
+  // Logout — an exit door with an arrow, sidebar sign-out
+  logout: (
+    <>
+      <path d="M13 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7" />
+      <path d="M10 12h10M17 8.5l3.5 3.5-3.5 3.5" />
+    </>
+  ),
+  // Bell — notification affordance (unwired placeholder, see PlaceholderStat)
+  bell: (
+    <>
+      <path d="M6 10.5a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14.5 6 10.5Z" strokeLinejoin="round" />
+      <path d="M10 19a2 2 0 0 0 4 0" />
+    </>
+  ),
+  // Chevron right — drill-in affordance
+  "chevron-right": (
+    <>
+      <path d="m9 5 7 7-7 7" />
     </>
   ),
 };
