@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
+import { Drawer } from "@/components/Drawer";
+import { FormSection } from "@/components/FormSection";
+import { FilterBar } from "@/components/FilterBar";
 import { Modal } from "@/components/Modal";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
+import { ActionMenu } from "@/components/ActionMenu";
 import {
   staffCreateSchema,
   staffUpdateSchema,
@@ -17,7 +21,8 @@ import {
   type StaffPinResetInput,
 } from "@/lib/validation";
 import type { Database } from "@/lib/supabase/types";
-import styles from "../catalog.module.css";
+import catalogStyles from "../catalog.module.css";
+import styles from "./staff.module.css";
 
 type StaffRow = Pick<
   Database["public"]["Tables"]["users"]["Row"],
@@ -42,9 +47,15 @@ function toUpdateForm(person: StaffRow): StaffUpdateInput {
   };
 }
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
   const [staff, setStaff] = useState<StaffRow[]>(initialStaff);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [form, setForm] = useState<StaffCreateInput>(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<string, string>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -60,13 +71,29 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
   const [pinErrors, setPinErrors] = useState<Partial<Record<string, string>>>({});
   const [pinSubmitting, setPinSubmitting] = useState(false);
 
-  function openAddModal() {
+  const [deleteTarget, setDeleteTarget] = useState<StaffRow | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+
+  const filteredStaff = useMemo(() => {
+    return staff.filter((person) => {
+      if (search && !person.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (roleFilter && person.role !== roleFilter) return false;
+      if (locationFilter && person.location !== locationFilter) return false;
+      return true;
+    });
+  }, [staff, search, roleFilter, locationFilter]);
+
+  function openAddDrawer() {
     setForm(emptyForm);
     setFieldErrors({});
-    setModalOpen(true);
+    setDrawerOpen(true);
   }
 
-  function openEditModal(person: StaffRow) {
+  function openEditDrawer(person: StaffRow) {
     setEditingStaff(person);
     setEditForm(toUpdateForm(person));
     setEditErrors({});
@@ -76,6 +103,11 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
     setPinResetStaff(person);
     setPinForm({ pin: "" });
     setPinErrors({});
+  }
+
+  function openDeleteModal(person: StaffRow) {
+    setDeleteTarget(person);
+    setDeleteConfirmText("");
   }
 
   async function handleSubmit() {
@@ -105,7 +137,7 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
 
       const saved: StaffRow = data.staff;
       setStaff((prev) => [...prev, saved].sort((a, b) => a.staff_code.localeCompare(b.staff_code)));
-      setModalOpen(false);
+      setDrawerOpen(false);
       setToast(`${saved.name} can now log in (code ${saved.staff_code})`);
     } catch {
       setFieldErrors({ form: "Couldn't reach the server — check your connection and try again." });
@@ -187,13 +219,66 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
     }
   }
 
+  async function handleQuickDeactivate(person: StaffRow) {
+    setEditSubmitting(true);
+    try {
+      const res = await fetch(`/api/staff/${person.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...toUpdateForm(person), active: !person.active }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast(data.error ?? "Something went wrong");
+        return;
+      }
+      const saved: StaffRow = data.staff;
+      setStaff((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+      setToast(saved.active ? `${saved.name} reactivated` : `${saved.name} deactivated`);
+    } catch {
+      setToast("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
   return (
     <div>
-      <div className={styles.header}>
-        <h1 className={styles.title}>Staff</h1>
-        <Button variant="primary" onClick={openAddModal}>
+      <div className={catalogStyles.header}>
+        <h1 className={catalogStyles.title}>Staff</h1>
+        <Button variant="primary" onClick={openAddDrawer}>
           Add staff
         </Button>
+      </div>
+
+      <div className={catalogStyles.toolbarRow}>
+        <FilterBar
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search staff…"
+          filters={[
+            {
+              value: roleFilter,
+              onChange: setRoleFilter,
+              "aria-label": "Filter by role",
+              options: [
+                { value: "", label: "All roles" },
+                { value: "admin", label: "Admin" },
+                { value: "staff", label: "Staff" },
+              ],
+            },
+            {
+              value: locationFilter,
+              onChange: setLocationFilter,
+              "aria-label": "Filter by location",
+              options: [
+                { value: "", label: "All locations" },
+                { value: "restaurant", label: "Restaurant" },
+                { value: "canteen", label: "Canteen" },
+              ],
+            },
+          ]}
+        />
       </div>
 
       {staff.length === 0 ? (
@@ -202,54 +287,71 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
           heading="No staff accounts yet"
           body="Add your first staff account to get started."
           actionLabel="Add staff"
-          onAction={openAddModal}
+          onAction={openAddDrawer}
+        />
+      ) : filteredStaff.length === 0 ? (
+        <EmptyState
+          icon={<Icon name="staff" size={48} />}
+          heading="No staff match your filters"
+          body="Try a different search term or clear a filter."
         />
       ) : (
-        <Card className={styles.tableCard}>
-          <table className={styles.table}>
+        <Card className={catalogStyles.tableCard}>
+          <table className={catalogStyles.table}>
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Code</th>
                 <th>Role</th>
                 <th>Location</th>
                 <th>Store manager</th>
                 <th>Status</th>
-                <th></th>
+                <th aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
-              {staff.map((person) => (
+              {filteredStaff.map((person) => (
                 <tr key={person.id}>
-                  <td>{person.name}</td>
-                  <td>{person.staff_code}</td>
-                  <td>{person.role === "admin" ? "Admin" : "Staff"}</td>
-                  <td>
+                  <td className={styles.nameTd}>
+                    <div className={styles.nameCell}>
+                      <span className={styles.avatar}>{initials(person.name)}</span>
+                      <span className={styles.personName}>{person.name}</span>
+                    </div>
+                  </td>
+                  <td data-label="Role">{person.role === "admin" ? "Admin" : "Staff"}</td>
+                  <td data-label="Location">
                     {person.location
                       ? person.location.charAt(0).toUpperCase() + person.location.slice(1)
                       : "—"}
                   </td>
-                  <td>{person.is_store_manager ? "Yes" : "—"}</td>
-                  <td>
-                    <span className={person.active ? styles.badgeActive : styles.badgeInactive}>
+                  <td data-label="Store manager">{person.is_store_manager ? "Yes" : "—"}</td>
+                  <td data-label="Status">
+                    <span className={catalogStyles.statusCell}>
+                      <span
+                        className={`${catalogStyles.statusDot} ${
+                          person.active ? catalogStyles.statusDotActive : catalogStyles.statusDotInactive
+                        }`}
+                      />
                       {person.active ? "Active" : "Deactivated"}
                     </span>
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      className={styles.editLink}
-                      onClick={() => openEditModal(person)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.editLink}
-                      onClick={() => openPinResetModal(person)}
-                    >
-                      Reset PIN
-                    </button>
+                  <td className={styles.actionsTd}>
+                    <ActionMenu
+                      aria-label={`Actions for ${person.name}`}
+                      items={[
+                        { label: "Edit", onClick: () => openEditDrawer(person) },
+                        { label: "Reset PIN", onClick: () => openPinResetModal(person) },
+                        {
+                          label: person.active ? "Deactivate" : "Reactivate",
+                          onClick: () => handleQuickDeactivate(person),
+                          disabled: editSubmitting,
+                        },
+                        {
+                          label: "Delete",
+                          onClick: () => openDeleteModal(person),
+                          destructive: true,
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
@@ -259,13 +361,13 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
       )}
 
       {/* Add staff */}
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         title="Add staff"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
@@ -274,14 +376,16 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
           </>
         }
       >
-        <div className={styles.form}>
+        <FormSection label="Identity">
           <Input
             label="Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             error={fieldErrors.name}
           />
+        </FormSection>
 
+        <FormSection label="Access">
           <Input
             label="PIN (6 digits)"
             type="password"
@@ -291,10 +395,10 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
             error={fieldErrors.pin}
           />
 
-          <label className={styles.selectField}>
-            <span className={styles.selectLabel}>Role</span>
+          <label className={catalogStyles.selectField}>
+            <span className={catalogStyles.selectLabel}>Role</span>
             <select
-              className={styles.select}
+              className={catalogStyles.select}
               value={form.role}
               onChange={(e) => {
                 const role = e.target.value as StaffCreateInput["role"];
@@ -310,47 +414,47 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
               <option value="admin">Admin</option>
             </select>
           </label>
+        </FormSection>
 
-          {form.role === "staff" && (
-            <>
-              <label className={styles.selectField}>
-                <span className={styles.selectLabel}>Location</span>
-                <select
-                  className={styles.select}
-                  value={form.location ?? "restaurant"}
-                  onChange={(e) => {
-                    const location = e.target.value as "restaurant" | "canteen";
-                    setForm({
-                      ...form,
-                      location,
-                      is_store_manager: location === "restaurant" ? form.is_store_manager : false,
-                    });
-                  }}
-                >
-                  <option value="restaurant">Restaurant</option>
-                  <option value="canteen">Canteen</option>
-                </select>
+        {form.role === "staff" && (
+          <FormSection label="Responsibilities">
+            <label className={catalogStyles.selectField}>
+              <span className={catalogStyles.selectLabel}>Location</span>
+              <select
+                className={catalogStyles.select}
+                value={form.location ?? "restaurant"}
+                onChange={(e) => {
+                  const location = e.target.value as "restaurant" | "canteen";
+                  setForm({
+                    ...form,
+                    location,
+                    is_store_manager: location === "restaurant" ? form.is_store_manager : false,
+                  });
+                }}
+              >
+                <option value="restaurant">Restaurant</option>
+                <option value="canteen">Canteen</option>
+              </select>
+            </label>
+
+            {form.location === "restaurant" && (
+              <label className={catalogStyles.checkboxField}>
+                <input
+                  type="checkbox"
+                  checked={form.is_store_manager}
+                  onChange={(e) => setForm({ ...form, is_store_manager: e.target.checked })}
+                />
+                <span>Store manager</span>
               </label>
+            )}
+          </FormSection>
+        )}
 
-              {form.location === "restaurant" && (
-                <label className={styles.checkboxField}>
-                  <input
-                    type="checkbox"
-                    checked={form.is_store_manager}
-                    onChange={(e) => setForm({ ...form, is_store_manager: e.target.checked })}
-                  />
-                  <span>Store manager</span>
-                </label>
-              )}
-            </>
-          )}
-
-          {fieldErrors.form && <p className={styles.formError}>{fieldErrors.form}</p>}
-        </div>
-      </Modal>
+        {fieldErrors.form && <p className={catalogStyles.formError}>{fieldErrors.form}</p>}
+      </Drawer>
 
       {/* Edit staff */}
-      <Modal
+      <Drawer
         open={editingStaff !== null}
         onClose={() => setEditingStaff(null)}
         title={editingStaff ? `Edit ${editingStaff.name}` : "Edit staff"}
@@ -366,40 +470,44 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
         }
       >
         {editForm && (
-          <div className={styles.form}>
-            <Input
-              label="Name"
-              value={editForm.name}
-              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              error={editErrors.name}
-            />
+          <>
+            <FormSection label="Identity">
+              <Input
+                label="Name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                error={editErrors.name}
+              />
+            </FormSection>
 
-            <label className={styles.selectField}>
-              <span className={styles.selectLabel}>Role</span>
-              <select
-                className={styles.select}
-                value={editForm.role}
-                onChange={(e) => {
-                  const role = e.target.value as StaffUpdateInput["role"];
-                  setEditForm({
-                    ...editForm,
-                    role,
-                    location: role === "admin" ? null : (editForm.location ?? "restaurant"),
-                    is_store_manager: role === "admin" ? false : editForm.is_store_manager,
-                  });
-                }}
-              >
-                <option value="staff">Staff</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
+            <FormSection label="Access">
+              <label className={catalogStyles.selectField}>
+                <span className={catalogStyles.selectLabel}>Role</span>
+                <select
+                  className={catalogStyles.select}
+                  value={editForm.role}
+                  onChange={(e) => {
+                    const role = e.target.value as StaffUpdateInput["role"];
+                    setEditForm({
+                      ...editForm,
+                      role,
+                      location: role === "admin" ? null : (editForm.location ?? "restaurant"),
+                      is_store_manager: role === "admin" ? false : editForm.is_store_manager,
+                    });
+                  }}
+                >
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+            </FormSection>
 
             {editForm.role === "staff" && (
-              <>
-                <label className={styles.selectField}>
-                  <span className={styles.selectLabel}>Location</span>
+              <FormSection label="Responsibilities">
+                <label className={catalogStyles.selectField}>
+                  <span className={catalogStyles.selectLabel}>Location</span>
                   <select
-                    className={styles.select}
+                    className={catalogStyles.select}
                     value={editForm.location ?? "restaurant"}
                     onChange={(e) => {
                       const location = e.target.value as "restaurant" | "canteen";
@@ -416,33 +524,37 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
                 </label>
 
                 {editForm.location === "restaurant" && (
-                  <label className={styles.checkboxField}>
+                  <label className={catalogStyles.checkboxField}>
                     <input
                       type="checkbox"
                       checked={editForm.is_store_manager}
-                      onChange={(e) => setEditForm({ ...editForm, is_store_manager: e.target.checked })}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, is_store_manager: e.target.checked })
+                      }
                     />
                     <span>Store manager</span>
                   </label>
                 )}
-              </>
+              </FormSection>
             )}
 
-            <label className={styles.checkboxField}>
-              <input
-                type="checkbox"
-                checked={editForm.active}
-                onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
-              />
-              <span>Active (can log in)</span>
-            </label>
+            <FormSection label="Status">
+              <label className={catalogStyles.checkboxField}>
+                <input
+                  type="checkbox"
+                  checked={editForm.active}
+                  onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
+                />
+                <span>Active (can log in)</span>
+              </label>
+            </FormSection>
 
-            {editErrors.form && <p className={styles.formError}>{editErrors.form}</p>}
-          </div>
+            {editErrors.form && <p className={catalogStyles.formError}>{editErrors.form}</p>}
+          </>
         )}
-      </Modal>
+      </Drawer>
 
-      {/* Reset PIN */}
+      {/* Reset PIN — short, non-form interaction: Modal remains correct here */}
       <Modal
         open={pinResetStaff !== null}
         onClose={() => setPinResetStaff(null)}
@@ -458,7 +570,7 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
           </>
         }
       >
-        <div className={styles.form}>
+        <div className={catalogStyles.form}>
           <Input
             label="New PIN (6 digits)"
             type="password"
@@ -467,7 +579,45 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
             onChange={(e) => setPinForm({ pin: e.target.value })}
             error={pinErrors.pin}
           />
-          {pinErrors.form && <p className={styles.formError}>{pinErrors.form}</p>}
+          {pinErrors.form && <p className={catalogStyles.formError}>{pinErrors.form}</p>}
+        </div>
+      </Modal>
+
+      {/* Delete — destructive, guarded with a typed confirmation; not yet
+          wired to a real backend delete (Phase 10 scope: UI/confirmation
+          flow only, see docs/04_PHASE_PLAN.md's Phase 10 section). */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete staff"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText !== deleteTarget?.name}
+              onClick={() => {
+                setToast("Hard-delete isn't wired up yet — use Deactivate for now.");
+                setDeleteTarget(null);
+              }}
+            >
+              Delete permanently
+            </Button>
+          </>
+        }
+      >
+        <div className={catalogStyles.form}>
+          <p className={styles.deleteWarning}>
+            This permanently removes the account. This is different from Deactivate, which can be
+            reversed. Type <strong>{deleteTarget?.name}</strong> to confirm.
+          </p>
+          <Input
+            label="Confirm name"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+          />
         </div>
       </Modal>
 

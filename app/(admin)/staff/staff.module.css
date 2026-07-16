@@ -1,0 +1,53 @@
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-primary-container);
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-weight: 600;
+  font-size: var(--font-size-caption);
+}
+
+.personName {
+  font-family: var(--font-family-structural);
+  font-weight: 600;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-primary);
+}
+
+.deleteWarning {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Mobile card-collapse (catalog.module.css, <600px): Name acts as the
+   card's own header — full width, no data-label prefix, avatar+identity
+   left-aligned rather than the default label:value split. Actions sits
+   as a top-right overlay on the same row instead of its own line. */
+@media (max-width: 599px) {
+  .nameTd {
+    justify-content: flex-start !important;
+    position: relative;
+  }
+
+  .actionsTd {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    border: none !important;
+    min-height: 0 !important;
+    padding: 0;
+  }
+}

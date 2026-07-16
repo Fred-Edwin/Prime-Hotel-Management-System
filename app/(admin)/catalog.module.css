@@ -15,40 +15,129 @@
 .tableCard {
   padding: 0;
   overflow-x: auto;
-  /* Phase 8: fade the right edge so a scrollable table signals there's
-     more content off-screen, instead of just cutting off mid-column. */
-  mask-image: linear-gradient(to right, black calc(100% - var(--space-6)), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--space-6)), transparent 100%);
 }
 
+/* Carbon-style dense data grid (piloted on Items — see catalog table
+   redesign conversation): real cell borders on every side instead of
+   row-only dividers, tighter compact-density rows, no fill/pill
+   treatments for routine categorical columns. If approved, this same
+   treatment rolls out to Ingredients/Delivery/Staff/Ledger tables. */
 .table {
   width: 100%;
   border-collapse: collapse;
   min-width: 640px;
+  border: 1px solid var(--color-border-default);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   text-align: left;
   font-family: var(--font-family-structural);
-  font-weight: 600;
-  font-size: var(--font-size-body-sm);
+  font-weight: 700;
+  font-size: var(--font-size-caption);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--color-text-secondary);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   background: var(--color-surface-sunken);
-  border-bottom: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-default);
+  border-top: none;
+}
+
+.table th:first-child,
+.table td:first-child {
+  border-left: none;
+}
+
+.table th:last-child,
+.table td:last-child {
+  border-right: none;
 }
 
 .table td {
-  padding: var(--space-3) var(--space-4);
-  height: 48px;
+  padding: var(--space-2) var(--space-3);
+  height: 36px;
   font-family: var(--font-family-data);
-  font-size: var(--font-size-body-md);
+  font-size: var(--font-size-body-sm);
   color: var(--color-text-primary);
-  border-bottom: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-default);
 }
 
 .table tr:last-child td {
   border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background: var(--color-surface-sunken);
+}
+
+/* Below --breakpoint-tablet (600px, see 00_FOUNDATIONS.md §breakpoints):
+   collapse the dense grid into stacked label:value cards rather than
+   forcing horizontal scroll on a phone — matches Carbon's own responsive
+   DataTable pattern. Same table/tr/td markup throughout; only the CSS
+   display mode changes, driven by each <td>'s data-label attribute. */
+@media (max-width: 599px) {
+  .tableCard {
+    overflow-x: visible;
+  }
+
+  .table {
+    display: block;
+    min-width: 0;
+    border: none;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .table tr {
+    display: block;
+    position: relative;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    height: auto;
+    min-height: var(--space-touch);
+    border: none;
+    border-bottom: 1px solid var(--color-border-default);
+    text-align: right;
+  }
+
+  .table tr td:last-child {
+    border-bottom: none;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-family: var(--font-family-structural);
+    font-weight: 700;
+    font-size: var(--font-size-caption);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    text-align: left;
+  }
+
+  .table :is(th, td).numeric {
+    text-align: right;
+  }
 }
 
 /* :is() boosts specificity above .table th/td's own element+class rules
@@ -80,15 +169,79 @@
   color: var(--color-text-secondary);
 }
 
+/* Compact neutral tag — supply type (Items), unit (Ingredients) — a
+   third badge tone distinct from the active/inactive status pair.
+   Superseded within the Items table by .plainText (Carbon-style pilot,
+   see catalog table redesign) — kept here as it's still used by
+   Ingredients until/unless that table is migrated too. */
+.tag {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-brand-primary-container);
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+}
+
+/* Carbon-style status cell: dot + plain text, no pill/fill. */
+.statusCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-primary);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.statusDotActive {
+  background: var(--color-status-success);
+}
+
+.statusDotInactive {
+  background: var(--color-text-secondary);
+}
+
+.marginHint {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.marginHint strong {
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbarRow {
+  margin-bottom: var(--space-4);
+}
+
+.deleteLink {
+  color: var(--color-status-error);
+}
+
 .editLink {
   background: none;
   border: none;
-  color: var(--color-brand-primary);
+  color: var(--color-text-secondary);
   font-family: var(--font-family-structural);
   font-size: var(--font-size-body-sm);
   cursor: pointer;
   padding: var(--space-2);
   min-height: var(--space-touch);
+}
+
+.editLink:hover {
+  color: var(--color-brand-primary);
 }
 
 .form {

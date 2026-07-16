@@ -29,7 +29,8 @@ export type IconName =
   | "filter"
   | "logout"
   | "bell"
-  | "chevron-right";
+  | "chevron-right"
+  | "more";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -171,6 +172,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
   "chevron-right": (
     <>
       <path d="m9 5 7 7-7 7" />
+    </>
+  ),
+  // More — vertical kebab, row-level ActionMenu trigger
+  more: (
+    <>
+      <circle cx="12" cy="5.5" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="18.5" r="1.3" fill="currentColor" stroke="none" />
     </>
   ),
 };

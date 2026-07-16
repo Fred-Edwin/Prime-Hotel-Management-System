@@ -303,4 +303,10 @@ A slim band at the bottom of the login screen — the one place besides the head
 
 *Not part of the original v0.1.0 spec — added ad hoc for a form field whose purpose wasn't obvious from its label alone, and undocumented here until Phase 10 noticed the gap while writing up §4.25's dependency on it. Reuses Dropdown's (§4.18) popover surface language (`elevation-2`, `radius-md`) rather than inventing a new one.*
 
+### 4.27 Action Menu (row overflow)
+
+*Added during the Staff screen's post-launch redesign (2026-07-16), when that screen was converted from a card grid to the Carbon-style table pattern §5 of `02_PATTERNS_AND_CHECKLIST.md` already called for rolling out from Items. Items' table gets away with a single inline "Edit" text link per row; Staff has four actions (Edit, Reset PIN, Deactivate/Reactivate, Delete) and cramming all four as peer-weighted inline links makes the destructive Delete action too easy to hit by mistake. No overflow-menu pattern existed anywhere in the system before this — flagged as a genuine gap and built as the minimal addition, not invented silently.*
+
+**Component:** `components/ActionMenu` — a kebab icon-button trigger (`Icon name="more"`, 44×44px hit area) that opens a small popover list of labeled actions, reusing Dropdown's (§4.18) popover surface (`elevation-2`, `radius-md`, `color-surface-raised`) and its click-outside/Escape-to-close keyboard behavior. Each item is a full-width `body-sm` row (min `space-touch` height); an item may be marked `destructive` (renders in `color-status-error`) or `disabled`. Intended for table rows with 3+ actions where one is destructive — for a single action, keep using Items' plain inline text link instead; don't reach for a menu just for consistency's sake.
+
 **Component:** `components/InfoTooltip` — a small `?`-in-circle trigger button (Icon `info`, §4.21) next to a label; clicking/tapping toggles a small popover panel with an explanatory message, closes on outside click, Escape, or toggling the trigger again. Not a hover-only tooltip — click/tap-based, so it works identically on touch and pointer devices without relying on hover state that phones don't have.
