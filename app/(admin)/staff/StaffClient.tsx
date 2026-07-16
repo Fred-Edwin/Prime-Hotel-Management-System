@@ -77,6 +77,19 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   const filteredStaff = useMemo(() => {
     return staff.filter((person) => {
@@ -254,12 +267,18 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
       <div className={catalogStyles.toolbarRow}>
         <FilterBar
           searchValue={search}
-          onSearchChange={setSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setExpandedIds(new Set());
+          }}
           searchPlaceholder="Search staff…"
           filters={[
             {
               value: roleFilter,
-              onChange: setRoleFilter,
+              onChange: (value) => {
+                setRoleFilter(value);
+                setExpandedIds(new Set());
+              },
               "aria-label": "Filter by role",
               options: [
                 { value: "", label: "All roles" },
@@ -269,7 +288,10 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
             },
             {
               value: locationFilter,
-              onChange: setLocationFilter,
+              onChange: (value) => {
+                setLocationFilter(value);
+                setExpandedIds(new Set());
+              },
               "aria-label": "Filter by location",
               options: [
                 { value: "", label: "All locations" },
@@ -296,68 +318,164 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
           body="Try a different search term or clear a filter."
         />
       ) : (
-        <Card className={catalogStyles.tableCard}>
-          <table className={catalogStyles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Location</th>
-                <th>Store manager</th>
-                <th>Status</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStaff.map((person) => (
-                <tr key={person.id}>
-                  <td className={styles.nameTd}>
-                    <div className={styles.nameCell}>
-                      <span className={styles.avatar}>{initials(person.name)}</span>
-                      <span className={styles.personName}>{person.name}</span>
-                    </div>
-                  </td>
-                  <td data-label="Role">{person.role === "admin" ? "Admin" : "Staff"}</td>
-                  <td data-label="Location">
-                    {person.location
-                      ? person.location.charAt(0).toUpperCase() + person.location.slice(1)
-                      : "—"}
-                  </td>
-                  <td data-label="Store manager">{person.is_store_manager ? "Yes" : "—"}</td>
-                  <td data-label="Status">
-                    <span className={catalogStyles.statusCell}>
-                      <span
-                        className={`${catalogStyles.statusDot} ${
-                          person.active ? catalogStyles.statusDotActive : catalogStyles.statusDotInactive
-                        }`}
-                      />
-                      {person.active ? "Active" : "Deactivated"}
-                    </span>
-                  </td>
-                  <td className={styles.actionsTd}>
-                    <ActionMenu
-                      aria-label={`Actions for ${person.name}`}
-                      items={[
-                        { label: "Edit", onClick: () => openEditDrawer(person) },
-                        { label: "Reset PIN", onClick: () => openPinResetModal(person) },
-                        {
-                          label: person.active ? "Deactivate" : "Reactivate",
-                          onClick: () => handleQuickDeactivate(person),
-                          disabled: editSubmitting,
-                        },
-                        {
-                          label: "Delete",
-                          onClick: () => openDeleteModal(person),
-                          destructive: true,
-                        },
-                      ]}
-                    />
-                  </td>
+        <>
+          <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+            <table className={catalogStyles.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Location</th>
+                  <th>Store manager</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+              </thead>
+              <tbody>
+                {filteredStaff.map((person) => (
+                  <tr key={person.id} data-accent={person.active ? "active" : "inactive"}>
+                    <td className={styles.nameTd}>
+                      <div className={styles.nameCell}>
+                        <span className={styles.avatar}>{initials(person.name)}</span>
+                        <span className={styles.personName}>{person.name}</span>
+                      </div>
+                    </td>
+                    <td data-label="Role">{person.role === "admin" ? "Admin" : "Staff"}</td>
+                    <td data-label="Location">
+                      {person.location
+                        ? person.location.charAt(0).toUpperCase() + person.location.slice(1)
+                        : "—"}
+                    </td>
+                    {person.is_store_manager && (
+                      <td data-label="Store manager" className={styles.storeManagerTd}>
+                        Yes
+                      </td>
+                    )}
+                    <td data-label="Status" className={styles.statusTd}>
+                      <span className={catalogStyles.statusCell}>
+                        <span
+                          className={`${catalogStyles.statusDot} ${
+                            person.active ? catalogStyles.statusDotActive : catalogStyles.statusDotInactive
+                          }`}
+                        />
+                        {person.active ? "Active" : "Deactivated"}
+                      </span>
+                    </td>
+                    <td className={styles.actionsTd}>
+                      <ActionMenu
+                        aria-label={`Actions for ${person.name}`}
+                        items={[
+                          { label: "Edit", onClick: () => openEditDrawer(person) },
+                          { label: "Reset PIN", onClick: () => openPinResetModal(person) },
+                          {
+                            label: person.active ? "Deactivate" : "Reactivate",
+                            onClick: () => handleQuickDeactivate(person),
+                            disabled: editSubmitting,
+                          },
+                          {
+                            label: "Delete",
+                            onClick: () => openDeleteModal(person),
+                            destructive: true,
+                          },
+                        ]}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+            {filteredStaff.map((person) => {
+              const isOpen = expandedIds.has(person.id);
+              return (
+                <li key={person.id} className={catalogStyles.itemCard}>
+                  <button
+                    type="button"
+                    className={catalogStyles.itemCardRow}
+                    aria-expanded={isOpen}
+                    onClick={() => toggleExpanded(person.id)}
+                  >
+                    <span className={styles.avatar}>{initials(person.name)}</span>
+                    <span className={catalogStyles.itemCardIdentity}>
+                      <span className={catalogStyles.itemCardName}>{person.name}</span>
+                      <span className={catalogStyles.itemCardCategory}>
+                        {person.role === "admin" ? "Admin" : "Staff"}
+                        {person.location
+                          ? ` · ${person.location.charAt(0).toUpperCase() + person.location.slice(1)}`
+                          : ""}
+                      </span>
+                    </span>
+                    <span
+                      className={`${catalogStyles.itemCardStatusDot} ${
+                        person.active ? catalogStyles.statusDotActive : catalogStyles.statusDotInactive
+                      }`}
+                      title={person.active ? "Active" : "Deactivated"}
+                    />
+                    <span
+                      className={`${catalogStyles.itemCardChevron} ${
+                        isOpen ? catalogStyles.itemCardChevronOpen : ""
+                      }`}
+                    >
+                      <Icon name="chevron-right" size={20} />
+                    </span>
+                  </button>
+
+                  <div
+                    className={`${catalogStyles.itemCardDetails} ${
+                      isOpen ? catalogStyles.itemCardDetailsOpen : ""
+                    }`}
+                  >
+                    <div className={catalogStyles.itemCardDetailsInner}>
+                      <div className={catalogStyles.itemCardDetailLine}>
+                        <span>Status</span>
+                        <strong>{person.active ? "Active" : "Deactivated"}</strong>
+                      </div>
+                      {person.is_store_manager && (
+                        <div className={catalogStyles.itemCardDetailLine}>
+                          <span>Store manager</span>
+                          <strong>Yes</strong>
+                        </div>
+                      )}
+                      <div className={styles.itemCardActionRow}>
+                        <button
+                          type="button"
+                          className={catalogStyles.itemCardEditBtn}
+                          onClick={() => openPinResetModal(person)}
+                        >
+                          Reset PIN
+                        </button>
+                        <button
+                          type="button"
+                          className={catalogStyles.itemCardEditBtn}
+                          disabled={editSubmitting}
+                          onClick={() => handleQuickDeactivate(person)}
+                        >
+                          {person.active ? "Deactivate" : "Reactivate"}
+                        </button>
+                        <button
+                          type="button"
+                          className={`${catalogStyles.itemCardEditBtn} ${styles.itemCardDeleteBtn}`}
+                          onClick={() => openDeleteModal(person)}
+                        >
+                          Delete
+                        </button>
+                        <button
+                          type="button"
+                          className={catalogStyles.itemCardEditBtn}
+                          onClick={() => openEditDrawer(person)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       {/* Add staff */}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
-import { Modal } from "@/components/Modal";
+import { Drawer } from "@/components/Drawer";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
@@ -26,7 +26,7 @@ export function DeliveryLocationsClient({
   initialLocations: DeliveryLocation[];
 }) {
   const [locations, setLocations] = useState<DeliveryLocation[]>(initialLocations);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<DeliveryLocationInput>(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<
@@ -34,19 +34,32 @@ export function DeliveryLocationsClient({
   >({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   function openAddModal() {
     setEditingId(null);
     setForm(emptyForm);
     setFieldErrors({});
-    setModalOpen(true);
+    setDrawerOpen(true);
   }
 
   function openEditModal(location: DeliveryLocation) {
     setEditingId(location.id);
     setForm({ name: location.name, fee: location.fee, active: location.active });
     setFieldErrors({});
-    setModalOpen(true);
+    setDrawerOpen(true);
   }
 
   async function handleSubmit() {
@@ -81,7 +94,7 @@ export function DeliveryLocationsClient({
       setLocations((prev) =>
         editingId ? prev.map((l) => (l.id === saved.id ? saved : l)) : [...prev, saved],
       );
-      setModalOpen(false);
+      setDrawerOpen(false);
       setToast(editingId ? "Delivery location updated" : "Delivery location added");
     } catch {
       setFieldErrors({ name: "Couldn't reach the server — check your connection and try again." });
@@ -108,49 +121,114 @@ export function DeliveryLocationsClient({
           onAction={openAddModal}
         />
       ) : (
-        <Card className={styles.tableCard}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Zone</th>
-                <th className={styles.numeric}>Fee</th>
-                <th>Status</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {locations.map((location) => (
-                <tr key={location.id}>
-                  <td>{location.name}</td>
-                  <td className={styles.numeric}>KES {location.fee.toFixed(2)}</td>
-                  <td>
-                    <span className={location.active ? styles.badgeActive : styles.badgeInactive}>
-                      {location.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className={styles.editLink}
-                      onClick={() => openEditModal(location)}
-                    >
-                      Edit
-                    </button>
-                  </td>
+        <>
+          <Card className={`${styles.tableCard} ${styles.desktopOnly}`}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Zone</th>
+                  <th className={styles.numeric}>Fee</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+              </thead>
+              <tbody>
+                {locations.map((location) => (
+                  <tr key={location.id}>
+                    <td>{location.name}</td>
+                    <td className={styles.numeric}>KES {location.fee.toFixed(2)}</td>
+                    <td>
+                      <span className={styles.statusCell}>
+                        <span
+                          className={`${styles.statusDot} ${
+                            location.active ? styles.statusDotActive : styles.statusDotInactive
+                          }`}
+                        />
+                        {location.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className={styles.editLink}
+                        onClick={() => openEditModal(location)}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          <ul className={`${styles.cardList} ${styles.mobileOnly}`}>
+            {locations.map((location) => {
+              const isOpen = expandedIds.has(location.id);
+              return (
+                <li key={location.id} className={styles.itemCard}>
+                  <button
+                    type="button"
+                    className={styles.itemCardRow}
+                    aria-expanded={isOpen}
+                    onClick={() => toggleExpanded(location.id)}
+                  >
+                    <span className={styles.itemCardIdentity}>
+                      <span className={styles.itemCardName}>{location.name}</span>
+                    </span>
+                    <span className={styles.itemCardMetrics}>
+                      <span className={styles.itemCardPrice}>KES {location.fee.toFixed(2)}</span>
+                    </span>
+                    <span
+                      className={`${styles.itemCardStatusDot} ${
+                        location.active ? styles.statusDotActive : styles.statusDotInactive
+                      }`}
+                      title={location.active ? "Active" : "Inactive"}
+                    />
+                    <span
+                      className={`${styles.itemCardChevron} ${
+                        isOpen ? styles.itemCardChevronOpen : ""
+                      }`}
+                    >
+                      <Icon name="chevron-right" size={20} />
+                    </span>
+                  </button>
+
+                  <div
+                    className={`${styles.itemCardDetails} ${
+                      isOpen ? styles.itemCardDetailsOpen : ""
+                    }`}
+                  >
+                    <div className={styles.itemCardDetailsInner}>
+                      <div className={styles.itemCardDetailLine}>
+                        <span>Status</span>
+                        <strong>{location.active ? "Active" : "Inactive"}</strong>
+                      </div>
+                      <div className={styles.itemCardFooter}>
+                        <button
+                          type="button"
+                          className={styles.itemCardEditBtn}
+                          onClick={() => openEditModal(location)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         title={editingId ? "Edit delivery location" : "Add delivery location"}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
@@ -187,7 +265,7 @@ export function DeliveryLocationsClient({
             <span>Active</span>
           </label>
         </div>
-      </Modal>
+      </Drawer>
 
       {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>

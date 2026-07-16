@@ -32,22 +32,19 @@
   color: var(--color-text-secondary);
 }
 
-/* Mobile card-collapse (catalog.module.css, <600px): Name acts as the
-   card's own header — full width, no data-label prefix, avatar+identity
-   left-aligned rather than the default label:value split. Actions sits
-   as a top-right overlay on the same row instead of its own line. */
-@media (max-width: 599px) {
-  .nameTd {
-    justify-content: flex-start !important;
-    position: relative;
-  }
+/* Mobile card footer for Staff — multiple actions (Reset PIN, Deactivate,
+   Delete, Edit) as plain inline buttons instead of catalog.module.css's
+   ActionMenu popover, which renders position:absolute and gets clipped by
+   the collapsible card's overflow:hidden animation wrapper
+   (itemCardDetailsInner) — the popover was opening but invisible. */
+.itemCardActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
+}
 
-  .actionsTd {
-    position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
-    border: none !important;
-    min-height: 0 !important;
-    padding: 0;
-  }
+.itemCardDeleteBtn {
+  color: var(--color-status-error);
 }

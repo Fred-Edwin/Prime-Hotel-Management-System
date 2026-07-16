@@ -81,20 +81,25 @@
    Superseded the earlier "spec sheet" 2-column <td> reflow piloted here;
    kept as two sibling renders (table + list) gated by these toggles
    rather than one shape-shifting table. */
-.desktopOnly {
+/* Doubled class selector boosts specificity (0-2-0) above .cardList's own
+   later `display: flex` declaration (0-1-0) — both classes land on the
+   same <ul>, and without this, source order (.cardList comes later in
+   this file) would win and leave the mobile list visible at desktop
+   widths even though .mobileOnly says display:none. */
+.desktopOnly.desktopOnly {
   display: block;
 }
 
-.mobileOnly {
+.mobileOnly.mobileOnly {
   display: none;
 }
 
 @media (max-width: 599px) {
-  .desktopOnly {
+  .desktopOnly.desktopOnly {
     display: none;
   }
 
-  .mobileOnly {
+  .mobileOnly.mobileOnly {
     display: block;
   }
 }
