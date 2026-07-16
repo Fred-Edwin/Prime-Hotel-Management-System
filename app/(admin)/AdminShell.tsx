@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Wordmark } from "@/components/Wordmark";
 import { RoleLocationBadge } from "@/components/RoleLocationBadge";
 import { Icon, type IconName } from "@/components/Icon";
@@ -29,11 +29,14 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
-  }, []);
+  // Lazy initializer, not an effect — avoids the extra render pass and
+  // the react-hooks/set-state-in-effect lint error. Server-rendered HTML
+  // always starts expanded (window is undefined there); the client's
+  // first render reads localStorage synchronously before paint, so a
+  // returning user doesn't see a visible collapse-toggle flash.
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"
+  );
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
