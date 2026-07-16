@@ -99,8 +99,11 @@
     display: none;
   }
 
+  /* flex, not block — .cardList is itself a flex column with `gap` for
+     spacing between cards; `block` here would win the specificity fight
+     against .cardList's `display: flex` and silently collapse that gap. */
   .mobileOnly.mobileOnly {
-    display: block;
+    display: flex;
   }
 }
 

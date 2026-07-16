@@ -45,6 +45,20 @@
   color: var(--color-text-secondary);
 }
 
+/* Mobile card's item-count badge — neutral tone (unlike Items' margin
+   badge) since item count has no good/mid/low judgment attached to it,
+   just a count worth showing at a glance next to the total. */
+.itemCountBadge {
+  font-family: var(--font-family-data);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-sunken);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+}
+
 .orderDetail {
   display: flex;
   flex-direction: column;

@@ -135,51 +135,90 @@ export function OrdersClient() {
           body="Once staff log a delivery or pickup order, it'll show up here."
         />
       ) : data ? (
-        <Card className={catalogStyles.tableCard}>
-          <table className={catalogStyles.table}>
-            <thead>
-              <tr>
-                <th>Placed</th>
-                <th>Customer</th>
-                <th>Location</th>
-                <th>Fulfillment</th>
-                <th className={catalogStyles.numeric}>Items</th>
-                <th className={catalogStyles.numeric}>Total</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.orders.map((order) => (
-                <tr key={order.id}>
-                  <td>
-                    {new Date(order.created_at).toLocaleString("en-KE", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </td>
-                  <td>{order.customer_name}</td>
-                  <td className={styles.locationCell}>
-                    {order.location === "restaurant" ? "Restaurant" : "Canteen"}
-                  </td>
-                  <td>{fulfillmentLabel(order)}</td>
-                  <td className={catalogStyles.numeric}>{order.order_items.length}</td>
-                  <td className={catalogStyles.numeric}>{money(order.total_amount)}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className={catalogStyles.editLink}
-                      onClick={() => setSelectedOrder(order)}
-                    >
-                      View
-                    </button>
-                  </td>
+        <>
+          <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+            <table className={catalogStyles.table}>
+              <thead>
+                <tr>
+                  <th>Placed</th>
+                  <th>Customer</th>
+                  <th>Location</th>
+                  <th>Fulfillment</th>
+                  <th className={catalogStyles.numeric}>Items</th>
+                  <th className={catalogStyles.numeric}>Total</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+              </thead>
+              <tbody>
+                {data.orders.map((order) => (
+                  <tr key={order.id}>
+                    <td>
+                      {new Date(order.created_at).toLocaleString("en-KE", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td>{order.customer_name}</td>
+                    <td className={styles.locationCell}>
+                      {order.location === "restaurant" ? "Restaurant" : "Canteen"}
+                    </td>
+                    <td>{fulfillmentLabel(order)}</td>
+                    <td className={catalogStyles.numeric}>{order.order_items.length}</td>
+                    <td className={catalogStyles.numeric}>{money(order.total_amount)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className={catalogStyles.editLink}
+                        onClick={() => setSelectedOrder(order)}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+            {data.orders.map((order) => (
+              <li key={order.id} className={catalogStyles.itemCard}>
+                <button
+                  type="button"
+                  className={catalogStyles.itemCardRow}
+                  onClick={() => setSelectedOrder(order)}
+                >
+                  <span className={catalogStyles.itemCardIdentity}>
+                    <span className={catalogStyles.itemCardName}>{order.customer_name}</span>
+                    <span className={catalogStyles.itemCardCategory}>
+                      {new Date(order.created_at).toLocaleString("en-KE", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {" · "}
+                      {order.location === "restaurant" ? "Restaurant" : "Canteen"}
+                      {" · "}
+                      {fulfillmentLabel(order)}
+                    </span>
+                  </span>
+                  <span className={catalogStyles.itemCardMetrics}>
+                    <span className={catalogStyles.itemCardPrice}>{money(order.total_amount)}</span>
+                    <span className={styles.itemCountBadge}>
+                      {order.order_items.length} item{order.order_items.length === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <span className={catalogStyles.itemCardChevron}>
+                    <Icon name="chevron-right" size={20} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
 
       <Modal
