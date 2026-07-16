@@ -29,7 +29,23 @@ export async function GET(request: Request) {
   }
   const location = (locationParam ?? undefined) as "restaurant" | "canteen" | undefined;
 
-  const { from, to } = dashboardPeriodRange(period as DashboardPeriod);
+  // A custom date range (Phase 10's Item Ledger date-range picker) overrides
+  // the period-derived range — same underlying dashboard_item_ledger/
+  // dashboard_ingredient_ledger RPCs, which already take explicit p_from/p_to.
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  let from: string;
+  let to: string;
+  if (fromParam && toParam) {
+    if (!isoDate.test(fromParam) || !isoDate.test(toParam) || fromParam > toParam) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+    from = fromParam;
+    to = toParam;
+  } else {
+    ({ from, to } = dashboardPeriodRange(period as DashboardPeriod));
+  }
 
   const supabase = await createServerSupabaseClient();
 

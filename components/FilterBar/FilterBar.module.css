@@ -1,21 +1,28 @@
 .bar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-5);
 }
 
 .search {
-  flex: 1 1 260px;
-  min-width: 200px;
+  flex: 1 1 240px;
+  max-width: 320px;
 }
 
 .filters {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-3);
 }
 
-.filterSelect {
-  min-width: 160px;
+/* Wraps each Select to give it a fixed box in the row — Select's own
+   `.field` div is width:100% with no basis of its own, so the
+   constraint has to live one level up, on a wrapper this component
+   renders, not on a className threaded into Select's internals. */
+.filterSlot {
+  flex: 0 0 auto;
+  width: 170px;
 }

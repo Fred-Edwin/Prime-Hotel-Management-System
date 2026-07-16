@@ -222,34 +222,56 @@
   overflow-x: auto;
 }
 
+/* Carbon-style dense grid, matching the catalog table treatment
+   (../catalog.module.css's .table) — this module can't just import
+   that file's classes, so the same rules are restated here. Keep the
+   two in sync if the grid spec changes again. */
 .comparisonTable {
   width: 100%;
   border-collapse: collapse;
   min-width: 480px;
+  border: 1px solid var(--color-border-default);
 }
 
 .comparisonTable th {
   text-align: left;
   font-family: var(--font-family-structural);
-  font-weight: 600;
-  font-size: var(--font-size-body-sm);
+  font-weight: 700;
+  font-size: var(--font-size-caption);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--color-text-secondary);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   background: var(--color-surface-sunken);
-  border-bottom: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-default);
+  border-top: none;
+}
+
+.comparisonTable th:first-child,
+.comparisonTable td:first-child {
+  border-left: none;
+}
+
+.comparisonTable th:last-child,
+.comparisonTable td:last-child {
+  border-right: none;
 }
 
 .comparisonTable td {
-  padding: var(--space-3) var(--space-4);
-  height: 48px;
+  padding: var(--space-2) var(--space-3);
+  height: 36px;
   font-family: var(--font-family-data);
-  font-size: var(--font-size-body-md);
+  font-size: var(--font-size-body-sm);
   color: var(--color-text-primary);
-  border-bottom: 1px solid var(--color-border-default);
+  border: 1px solid var(--color-border-default);
 }
 
 .comparisonTable tr:last-child td {
   border-bottom: none;
+}
+
+.comparisonTable tbody tr:hover td {
+  background: var(--color-surface-sunken);
 }
 
 /* :is() boosts specificity above .comparisonTable th/td's own element+class

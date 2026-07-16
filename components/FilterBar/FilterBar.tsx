@@ -40,14 +40,14 @@ export function FilterBar({ searchValue, onSearchChange, searchPlaceholder, filt
       {filters && filters.length > 0 && (
         <div className={styles.filters}>
           {filters.map((filter) => (
-            <Select
-              key={filter["aria-label"]}
-              value={filter.value}
-              onChange={(e) => filter.onChange(e.target.value)}
-              options={filter.options}
-              aria-label={filter["aria-label"]}
-              className={styles.filterSelect}
-            />
+            <div key={filter["aria-label"]} className={styles.filterSlot}>
+              <Select
+                value={filter.value}
+                onChange={(e) => filter.onChange(e.target.value)}
+                options={filter.options}
+                aria-label={filter["aria-label"]}
+              />
+            </div>
           ))}
         </div>
       )}

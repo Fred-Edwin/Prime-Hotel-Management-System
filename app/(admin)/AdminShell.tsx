@@ -29,6 +29,10 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  // Top bar (period-toggle slot + Add Entry/bell) is Dashboard-specific
+  // content — every other admin screen has its own page heading directly
+  // under the sidebar/mobile top bar instead, so the slot only renders here.
+  const showDesktopTopBar = pathname === "/dashboard";
   // Lazy initializer, not an effect — avoids the extra render pass and
   // the react-hooks/set-state-in-effect lint error. Server-rendered HTML
   // always starts expanded (window is undefined there); the client's
@@ -137,27 +141,29 @@ export function AdminShell({
                   10's context file: admin-acts-as-staff and a
                   notification system are both real future features, not
                   built this phase. */}
-              <header className={styles.desktopTopBar}>
-                <div className={styles.desktopTopBarSlot}>{slotContent}</div>
-                <div className={styles.desktopTopBarActions}>
-                  <button
-                    type="button"
-                    className={styles.addEntryButton}
-                    title="Lets the admin log stock/sales/orders directly, the same way staff do. Not built yet."
-                  >
-                    <Icon name="entry" size={18} />
-                    Add Entry
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    title="No notification system exists yet — a placeholder for a future feature."
-                    aria-label="Notifications"
-                  >
-                    <Icon name="bell" size={20} />
-                  </button>
-                </div>
-              </header>
+              {showDesktopTopBar && (
+                <header className={styles.desktopTopBar}>
+                  <div className={styles.desktopTopBarSlot}>{slotContent}</div>
+                  <div className={styles.desktopTopBarActions}>
+                    <button
+                      type="button"
+                      className={styles.addEntryButton}
+                      title="Lets the admin log stock/sales/orders directly, the same way staff do. Not built yet."
+                    >
+                      <Icon name="entry" size={18} />
+                      Add Entry
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.iconButton}
+                      title="No notification system exists yet — a placeholder for a future feature."
+                      aria-label="Notifications"
+                    >
+                      <Icon name="bell" size={20} />
+                    </button>
+                  </div>
+                </header>
+              )}
 
               <main className={styles.content}>{children}</main>
             </>
