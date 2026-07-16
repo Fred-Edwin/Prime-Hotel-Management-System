@@ -42,6 +42,10 @@ yarn-error.log*
 # picked up by this project's build or type-check
 docs/demo/source-v2/
 docs/screenshots/
+docs/demo/*.mp4
+docs/demo/HANDOFF.md
+docs/demo/treatment.md
+docs/demo/screens/
 
 # typescript
 *.tsbuildinfo
