@@ -39,6 +39,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor_id: string
+          changes: Json | null
+          created_at: string
+          id: string
+          target_id: string
+          target_table: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          changes?: Json | null
+          created_at?: string
+          id?: string
+          target_id: string
+          target_table: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          changes?: Json | null
+          created_at?: string
+          id?: string
+          target_id?: string
+          target_table?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_locations: {
         Row: {
           active: boolean
@@ -511,6 +549,16 @@ export type Database = {
       canteen_supplied_total: {
         Args: { p_item_id: string; p_week_end: string; p_week_start: string }
         Returns: number
+      }
+      write_audit_log: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_changes?: Json
+          p_target_id: string
+          p_target_table: string
+        }
+        Returns: undefined
       }
       create_order: {
         Args: {

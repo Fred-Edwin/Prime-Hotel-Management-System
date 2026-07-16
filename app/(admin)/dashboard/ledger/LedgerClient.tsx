@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { Input } from "@/components/Input";
+import { Modal } from "@/components/Modal";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { EmptyState } from "@/components/EmptyState";
+import { FilterBar } from "@/components/FilterBar";
 import { Icon } from "@/components/Icon";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { PlaceholderStat } from "@/components/PlaceholderStat";
+import { Toast } from "@/components/Toast";
 import { isLowStock } from "@/lib/calculations";
 import catalogStyles from "../../catalog.module.css";
 import styles from "./ledger.module.css";
@@ -77,6 +82,39 @@ function qty(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+/**
+ * Admin direct ledger-row edit (docs/backlog/04_admin_ledger_edit.md) — a
+ * quantities-only edit form opened from a row's edit affordance, submitted
+ * through PATCH /api/dashboard/ledger/entry. Price snapshots are never
+ * editable here (resolved design decision #2); the server rejects the edit
+ * outright (409) if this isn't the most-recent row for the item/ingredient
+ * (resolved design decision #1) — the modal just surfaces that message.
+ */
+type StockEntryEditTarget = {
+  kind: "stock_entries";
+  item_id: string;
+  item_name: string;
+  location: "restaurant" | "canteen";
+  entry_date: string;
+  till_quantity_sold: number;
+  added_stock: number;
+  sent_out: number;
+  wastage: number;
+};
+
+type IngredientEntryEditTarget = {
+  kind: "ingredient_entries";
+  ingredient_id: string;
+  ingredient_name: string;
+  unit: string;
+  entry_date: string;
+  received: number;
+  quantity_used: number;
+  wastage: number;
+};
+
+type EditTarget = StockEntryEditTarget | IngredientEntryEditTarget;
+
 export function LedgerClient() {
   const [period, setPeriod] = useState<Period>("week");
   const [location, setLocation] = useState<Location>("");
@@ -86,6 +124,115 @@ export function LedgerClient() {
   const [data, setData] = useState<LedgerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ingredientSearch, setIngredientSearch] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, number>>({});
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  function openStockEntryEdit(row: ItemLedgerRow) {
+    setEditError(null);
+    setEditTarget({
+      kind: "stock_entries",
+      item_id: row.item_id,
+      item_name: row.item_name,
+      location: row.location,
+      entry_date: row.entry_date,
+      till_quantity_sold: row.till_quantity_sold,
+      added_stock: row.added_stock,
+      sent_out: row.sent_out,
+      wastage: row.wastage,
+    });
+    setEditForm({
+      till_quantity_sold: row.till_quantity_sold,
+      added_stock: row.added_stock,
+      sent_out: row.sent_out,
+      wastage: row.wastage,
+    });
+  }
+
+  function openIngredientEntryEdit(row: IngredientLedgerRow) {
+    setEditError(null);
+    setEditTarget({
+      kind: "ingredient_entries",
+      ingredient_id: row.ingredient_id,
+      ingredient_name: row.ingredient_name,
+      unit: row.unit,
+      entry_date: row.entry_date,
+      received: row.received,
+      quantity_used: row.quantity_used,
+      wastage: row.wastage,
+    });
+    setEditForm({
+      received: row.received,
+      quantity_used: row.quantity_used,
+      wastage: row.wastage,
+    });
+  }
+
+  function closeEdit() {
+    setEditTarget(null);
+    setEditError(null);
+  }
+
+  async function submitEdit() {
+    if (!editTarget) return;
+    setEditSubmitting(true);
+    setEditError(null);
+
+    const payload =
+      editTarget.kind === "stock_entries"
+        ? {
+            table: "stock_entries" as const,
+            item_id: editTarget.item_id,
+            location: editTarget.location,
+            entry_date: editTarget.entry_date,
+            till_quantity_sold: editForm.till_quantity_sold,
+            added_stock: editForm.added_stock,
+            sent_out: editForm.sent_out,
+            wastage: editForm.wastage,
+          }
+        : {
+            table: "ingredient_entries" as const,
+            ingredient_id: editTarget.ingredient_id,
+            entry_date: editTarget.entry_date,
+            received: editForm.received,
+            quantity_used: editForm.quantity_used,
+            wastage: editForm.wastage,
+          };
+
+    try {
+      const res = await fetch("/api/dashboard/ledger/entry", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditError(json.error ?? "Couldn't save — please try again.");
+        return;
+      }
+      setEditTarget(null);
+      setToast("Entry updated");
+      setReloadKey((key) => key + 1);
+    } catch {
+      setEditError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
+  function toggleExpanded(key: string) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +263,7 @@ export function LedgerClient() {
     return () => {
       cancelled = true;
     };
-  }, [period, location, customRange]);
+  }, [period, location, customRange, reloadKey]);
 
   function selectPeriod(value: Period) {
     setCustomRange(null);
@@ -128,6 +275,11 @@ export function LedgerClient() {
     setCustomRange({ from: rangeDraft.from, to: rangeDraft.to });
     setRangePickerOpen(false);
   }
+
+  const filteredIngredients =
+    data?.ingredients.filter((row) =>
+      row.ingredient_name.toLowerCase().includes(ingredientSearch.trim().toLowerCase())
+    ) ?? [];
 
   return (
     <div className={styles.page}>
@@ -206,25 +358,25 @@ export function LedgerClient() {
                 body="Once staff save till or canteen entries, they'll show up here row by row."
               />
             ) : (
-              <Card className={catalogStyles.tableCard}>
+              <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
                 <table className={[catalogStyles.table, styles.ledgerTable].join(" ")}>
                   <thead>
                     <tr>
-                      <th colSpan={3} className={styles.groupHeader}>
+                      <th colSpan={5} className={[styles.groupHeader, styles.groupHeaderIdentity].join(" ")}>
                         Identity
                       </th>
-                      <th colSpan={7} className={styles.groupHeader}>
+                      <th colSpan={6} className={styles.groupHeader}>
                         Stock movement
                       </th>
                       <th colSpan={4} className={styles.groupHeader}>
                         Inventory value
                       </th>
-                      <th className={styles.groupHeader}>Staffing</th>
                     </tr>
                     <tr>
                       <th className={styles.stickyCol}>Date</th>
-                      <th>Item</th>
+                      <th className={styles.stickyColItem}>Item</th>
                       <th>Location</th>
+                      <th>Staff on shift</th>
                       <th className={catalogStyles.numeric}>Opening</th>
                       <th className={catalogStyles.numeric}>Added</th>
                       <th className={catalogStyles.numeric}>Canteen (S/R)</th>
@@ -236,7 +388,7 @@ export function LedgerClient() {
                       <th className={catalogStyles.numeric}>Cost value</th>
                       <th className={catalogStyles.numeric}>Closing stock value</th>
                       <th className={catalogStyles.numeric}>Wastage value</th>
-                      <th>Staff on shift</th>
+                      <th aria-label="Edit" />
                     </tr>
                   </thead>
                   <tbody>
@@ -246,9 +398,15 @@ export function LedgerClient() {
                       return (
                         <tr key={`${row.entry_date}-${row.item_id}-${row.location}`}>
                           <td className={styles.stickyCol}>{row.entry_date}</td>
-                          <td>{row.item_name}</td>
+                          <td className={styles.stickyColItem}>{row.item_name}</td>
                           <td className={styles.locationCell}>
                             {row.location === "restaurant" ? "Restaurant" : "Canteen"}
+                          </td>
+                          <td>
+                            <PlaceholderStat
+                              label="Staff on shift"
+                              reason="Coming with the planned lightweight clock-in feature — not built yet, so this column isn't wired to real attendance data."
+                            />
                           </td>
                           <td className={catalogStyles.numeric}>{qty(row.opening_stock)}</td>
                           <td className={catalogStyles.numeric}>{qty(row.added_stock)}</td>
@@ -285,10 +443,14 @@ export function LedgerClient() {
                           <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
                           <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>
                           <td>
-                            <PlaceholderStat
-                              label="Staff on shift"
-                              reason="Coming with the planned lightweight clock-in feature — not built yet, so this column isn't wired to real attendance data."
-                            />
+                            <button
+                              type="button"
+                              className={styles.editButton}
+                              onClick={() => openStockEntryEdit(row)}
+                              aria-label={`Edit ${row.item_name} entry`}
+                            >
+                              <Icon name="edit" size={16} />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -296,6 +458,123 @@ export function LedgerClient() {
                   </tbody>
                 </table>
               </Card>
+            )}
+
+            {/* Mobile collapsible-card treatment (<600px), matching the
+                pattern already used on Items/Ingredients/Delivery
+                Locations/Staff/Orders — the one gap left over from the
+                Phase 10 sweep. A 15-column table can't reflow onto a
+                phone screen, so each row collapses to Item + Date +
+                Closing (the figure most worth a glance) with the rest
+                behind a tap, same interaction as Items' price/margin
+                summary row. */}
+            {data.items.length > 0 && (
+              <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+                {data.items.map((row) => {
+                  const key = `${row.entry_date}-${row.item_id}-${row.location}`;
+                  const isOpen = expandedRows.has(key);
+                  const canteenSignedQty =
+                    row.location === "canteen" ? row.added_stock : -row.sent_out;
+                  return (
+                    <li key={key} className={catalogStyles.itemCard}>
+                      <button
+                        type="button"
+                        className={catalogStyles.itemCardRow}
+                        aria-expanded={isOpen}
+                        onClick={() => toggleExpanded(key)}
+                      >
+                        <span className={catalogStyles.itemCardIdentity}>
+                          <span className={catalogStyles.itemCardName}>{row.item_name}</span>
+                          <span className={catalogStyles.itemCardCategory}>
+                            {row.entry_date} · {row.location === "restaurant" ? "Restaurant" : "Canteen"}
+                          </span>
+                        </span>
+                        <span className={catalogStyles.itemCardMetrics}>
+                          <span
+                            className={[
+                              catalogStyles.itemCardPrice,
+                              isLowStock(row.closing_stock, row.low_stock_threshold)
+                                ? styles.lowValue
+                                : "",
+                            ].join(" ")}
+                          >
+                            {qty(row.closing_stock)} left
+                          </span>
+                        </span>
+                        <span
+                          className={[
+                            catalogStyles.itemCardChevron,
+                            isOpen ? catalogStyles.itemCardChevronOpen : "",
+                          ].join(" ")}
+                        >
+                          <Icon name="chevron-right" size={20} />
+                        </span>
+                      </button>
+
+                      <div
+                        className={[
+                          catalogStyles.itemCardDetails,
+                          isOpen ? catalogStyles.itemCardDetailsOpen : "",
+                        ].join(" ")}
+                      >
+                        <div className={catalogStyles.itemCardDetailsInner}>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Opening</span>
+                            <strong>{qty(row.opening_stock)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Added</span>
+                            <strong>{qty(row.added_stock)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Canteen (S/R)</span>
+                            <strong>
+                              {canteenSignedQty > 0 ? "+" : ""}
+                              {qty(canteenSignedQty)}
+                            </strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Sold (hotel till)</span>
+                            <strong>{qty(row.till_quantity_sold)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Sold (total)</span>
+                            <strong>{qty(row.quantity_sold)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Wastage</span>
+                            <strong>{qty(row.wastage)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Sales value</span>
+                            <strong>{money(row.sales_value)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Cost value</span>
+                            <strong>{money(row.cost_value)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Closing stock value</span>
+                            <strong>{money(row.closing_stock_value)}</strong>
+                          </div>
+                          <div className={catalogStyles.itemCardDetailLine}>
+                            <span>Wastage value</span>
+                            <strong>{money(row.wastage_value)}</strong>
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.editCardButton}
+                            onClick={() => openStockEntryEdit(row)}
+                          >
+                            <Icon name="edit" size={14} />
+                            Edit entry
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
 
@@ -312,61 +591,284 @@ export function LedgerClient() {
                   body="Once the store manager saves ingredient receiving/usage, they'll show up here."
                 />
               ) : (
-                <Card className={catalogStyles.tableCard}>
-                  <table className={catalogStyles.table}>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Ingredient</th>
-                        <th className={catalogStyles.numeric}>Opening</th>
-                        <th className={catalogStyles.numeric}>Received</th>
-                        <th className={catalogStyles.numeric}>Used</th>
-                        <th className={catalogStyles.numeric}>Wastage</th>
-                        <th className={catalogStyles.numeric}>Closing</th>
-                        <th className={catalogStyles.numeric}>Closing value</th>
-                        <th className={catalogStyles.numeric}>Wastage value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.ingredients.map((row) => (
-                        <tr key={`${row.entry_date}-${row.ingredient_id}`}>
-                          <td>{row.entry_date}</td>
-                          <td>{row.ingredient_name}</td>
-                          <td className={catalogStyles.numeric}>
-                            {qty(row.opening_stock)} {row.unit}
-                          </td>
-                          <td className={catalogStyles.numeric}>
-                            {qty(row.received)} {row.unit}
-                          </td>
-                          <td className={catalogStyles.numeric}>
-                            {qty(row.quantity_used)} {row.unit}
-                          </td>
-                          <td className={catalogStyles.numeric}>
-                            {qty(row.wastage)} {row.unit}
-                          </td>
-                          <td className={catalogStyles.numeric}>
-                            <span
-                              className={
-                                isLowStock(row.closing_stock, row.low_stock_threshold)
-                                  ? styles.lowValue
-                                  : undefined
-                              }
-                            >
-                              {qty(row.closing_stock)} {row.unit}
-                            </span>
-                          </td>
-                          <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
-                          <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Card>
+                <>
+                  <div className={styles.toolbarRow}>
+                    <FilterBar
+                      searchValue={ingredientSearch}
+                      onSearchChange={setIngredientSearch}
+                      searchPlaceholder="Search ingredients…"
+                    />
+                  </div>
+                  {filteredIngredients.length === 0 ? (
+                    <EmptyState
+                      icon={<Icon name="summary" size={48} />}
+                      heading="No matching ingredients"
+                      body="Try a different search term."
+                    />
+                  ) : (
+                    <>
+                      <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+                        <table className={catalogStyles.table}>
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Ingredient</th>
+                              <th className={catalogStyles.numeric}>Opening</th>
+                              <th className={catalogStyles.numeric}>Received</th>
+                              <th className={catalogStyles.numeric}>Used</th>
+                              <th className={catalogStyles.numeric}>Wastage</th>
+                              <th className={catalogStyles.numeric}>Closing</th>
+                              <th className={catalogStyles.numeric}>Closing value</th>
+                              <th className={catalogStyles.numeric}>Wastage value</th>
+                              <th aria-label="Edit" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredIngredients.map((row) => (
+                              <tr key={`${row.entry_date}-${row.ingredient_id}`}>
+                                <td>{row.entry_date}</td>
+                                <td>{row.ingredient_name}</td>
+                                <td className={catalogStyles.numeric}>
+                                  {qty(row.opening_stock)} {row.unit}
+                                </td>
+                                <td className={catalogStyles.numeric}>
+                                  {qty(row.received)} {row.unit}
+                                </td>
+                                <td className={catalogStyles.numeric}>
+                                  {qty(row.quantity_used)} {row.unit}
+                                </td>
+                                <td className={catalogStyles.numeric}>
+                                  {qty(row.wastage)} {row.unit}
+                                </td>
+                                <td className={catalogStyles.numeric}>
+                                  <span
+                                    className={
+                                      isLowStock(row.closing_stock, row.low_stock_threshold)
+                                        ? styles.lowValue
+                                        : undefined
+                                    }
+                                  >
+                                    {qty(row.closing_stock)} {row.unit}
+                                  </span>
+                                </td>
+                                <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
+                                <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className={styles.editButton}
+                                    onClick={() => openIngredientEntryEdit(row)}
+                                    aria-label={`Edit ${row.ingredient_name} entry`}
+                                  >
+                                    <Icon name="edit" size={16} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </Card>
+
+                      <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+                        {filteredIngredients.map((row) => {
+                          const key = `${row.entry_date}-${row.ingredient_id}`;
+                          const isOpen = expandedRows.has(key);
+                          return (
+                            <li key={key} className={catalogStyles.itemCard}>
+                              <button
+                                type="button"
+                                className={catalogStyles.itemCardRow}
+                                aria-expanded={isOpen}
+                                onClick={() => toggleExpanded(key)}
+                              >
+                                <span className={catalogStyles.itemCardIdentity}>
+                                  <span className={catalogStyles.itemCardName}>
+                                    {row.ingredient_name}
+                                  </span>
+                                  <span className={catalogStyles.itemCardCategory}>{row.entry_date}</span>
+                                </span>
+                                <span className={catalogStyles.itemCardMetrics}>
+                                  <span
+                                    className={[
+                                      catalogStyles.itemCardPrice,
+                                      isLowStock(row.closing_stock, row.low_stock_threshold)
+                                        ? styles.lowValue
+                                        : "",
+                                    ].join(" ")}
+                                  >
+                                    {qty(row.closing_stock)} {row.unit} left
+                                  </span>
+                                </span>
+                                <span
+                                  className={[
+                                    catalogStyles.itemCardChevron,
+                                    isOpen ? catalogStyles.itemCardChevronOpen : "",
+                                  ].join(" ")}
+                                >
+                                  <Icon name="chevron-right" size={20} />
+                                </span>
+                              </button>
+
+                              <div
+                                className={[
+                                  catalogStyles.itemCardDetails,
+                                  isOpen ? catalogStyles.itemCardDetailsOpen : "",
+                                ].join(" ")}
+                              >
+                                <div className={catalogStyles.itemCardDetailsInner}>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Opening</span>
+                                    <strong>
+                                      {qty(row.opening_stock)} {row.unit}
+                                    </strong>
+                                  </div>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Received</span>
+                                    <strong>
+                                      {qty(row.received)} {row.unit}
+                                    </strong>
+                                  </div>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Used</span>
+                                    <strong>
+                                      {qty(row.quantity_used)} {row.unit}
+                                    </strong>
+                                  </div>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Wastage</span>
+                                    <strong>
+                                      {qty(row.wastage)} {row.unit}
+                                    </strong>
+                                  </div>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Closing value</span>
+                                    <strong>{money(row.closing_stock_value)}</strong>
+                                  </div>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Wastage value</span>
+                                    <strong>{money(row.wastage_value)}</strong>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className={styles.editCardButton}
+                                    onClick={() => openIngredientEntryEdit(row)}
+                                  >
+                                    <Icon name="edit" size={14} />
+                                    Edit entry
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </>
               )}
             </section>
           )}
         </>
       ) : null}
+
+      <Modal
+        open={editTarget !== null}
+        onClose={closeEdit}
+        title={
+          editTarget?.kind === "stock_entries"
+            ? `Edit ${editTarget.item_name} — ${editTarget.entry_date}`
+            : editTarget?.kind === "ingredient_entries"
+              ? `Edit ${editTarget.ingredient_name} — ${editTarget.entry_date}`
+              : "Edit entry"
+        }
+        footer={
+          <>
+            <Button variant="tertiary" onClick={closeEdit} disabled={editSubmitting}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={submitEdit} disabled={editSubmitting}>
+              {editSubmitting ? "Saving…" : "Save"}
+            </Button>
+          </>
+        }
+      >
+        {editTarget && (
+          <div className={styles.editForm}>
+            <p className={styles.editFormMeta}>
+              Only quantities are editable here — prices stay locked to what was recorded at the
+              time. If this isn&apos;t the most recent entry for this{" "}
+              {editTarget.kind === "stock_entries" ? "item" : "ingredient"}, saving will be
+              rejected.
+            </p>
+            {editError && <p className={catalogStyles.formError}>{editError}</p>}
+
+            {editTarget.kind === "stock_entries" ? (
+              <>
+                <Input
+                  label="Till sales"
+                  type="number"
+                  numeric
+                  value={editForm.till_quantity_sold}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, till_quantity_sold: Number(e.target.value) })
+                  }
+                />
+                <Input
+                  label="Added stock"
+                  type="number"
+                  numeric
+                  value={editForm.added_stock}
+                  onChange={(e) => setEditForm({ ...editForm, added_stock: Number(e.target.value) })}
+                />
+                {editTarget.location === "restaurant" && (
+                  <Input
+                    label="Sent to canteen"
+                    type="number"
+                    numeric
+                    value={editForm.sent_out}
+                    onChange={(e) => setEditForm({ ...editForm, sent_out: Number(e.target.value) })}
+                  />
+                )}
+                <Input
+                  label="Wastage"
+                  type="number"
+                  numeric
+                  value={editForm.wastage}
+                  onChange={(e) => setEditForm({ ...editForm, wastage: Number(e.target.value) })}
+                />
+              </>
+            ) : (
+              <>
+                <Input
+                  label="Received"
+                  type="number"
+                  numeric
+                  value={editForm.received}
+                  onChange={(e) => setEditForm({ ...editForm, received: Number(e.target.value) })}
+                />
+                <Input
+                  label="Used"
+                  type="number"
+                  numeric
+                  value={editForm.quantity_used}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, quantity_used: Number(e.target.value) })
+                  }
+                />
+                <Input
+                  label="Wastage"
+                  type="number"
+                  numeric
+                  value={editForm.wastage}
+                  onChange={(e) => setEditForm({ ...editForm, wastage: Number(e.target.value) })}
+                />
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>
   );
 }

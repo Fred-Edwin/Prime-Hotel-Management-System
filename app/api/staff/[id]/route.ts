@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { staffUpdateSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { serverErrorResponse } from "@/lib/errors";
+import { writeAuditLog } from "@/lib/audit";
 
 /**
  * PATCH /api/staff/[id]
@@ -52,6 +53,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const supabase = await createServerSupabaseClient();
+
+  const { data: before } = await supabase
+    .from("users")
+    .select("name, role, location, is_store_manager, active")
+    .eq("id", id)
+    .single();
+
   const { data, error } = await supabase
     .from("users")
     .update({ name, role, location, is_store_manager, active })
@@ -60,5 +68,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .single();
 
   if (error) return serverErrorResponse(error, "staff/[id]");
+
+  // active flipping true->false or false->true is the reversible
+  // deactivate/reactivate action from Phase 9's UI; everything else on
+  // this route is a plain field edit. Distinct action names make the
+  // audit trail legible without needing to diff `changes` by hand.
+  const action =
+    before && before.active !== active ? (active ? "staff.reactivate" : "staff.deactivate") : "staff.edit";
+
+  await writeAuditLog(supabase, {
+    actorId: admin.id,
+    action,
+    targetTable: "users",
+    targetId: id,
+    changes: { before, after: { name, role, location, is_store_manager, active } },
+  });
+
   return NextResponse.json({ staff: data });
 }

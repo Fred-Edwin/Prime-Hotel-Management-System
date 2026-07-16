@@ -11,13 +11,26 @@ import styles from "./AdminShell.module.css";
 
 const SIDEBAR_COLLAPSED_KEY = "admin-sidebar-collapsed";
 
+// Dashboard's own href ("/dashboard") is a string-prefix of every
+// /dashboard/* sub-route (Ledger, Orders, Audit Log) — a plain
+// startsWith() would light up Dashboard's nav item on every one of
+// those pages too. Dashboard needs an exact match; everything else
+// still wants prefix matching (e.g. a future /staff/[id] detail route
+// should still highlight "Staff").
+function isNavItemActive(pathname: string, href: string): boolean {
+  if (href === "/dashboard") return pathname === "/dashboard";
+  return pathname.startsWith(href);
+}
+
 const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/dashboard/ledger", label: "Ledger", icon: "summary" },
   { href: "/items", label: "Items", icon: "items" },
   { href: "/ingredients", label: "Ingredients", icon: "ingredients" },
   { href: "/delivery-locations", label: "Delivery", icon: "delivery" },
   { href: "/dashboard/orders", label: "Orders", icon: "orders" },
   { href: "/staff", label: "Staff", icon: "staff" },
+  { href: "/dashboard/audit-log", label: "Audit Log", icon: "history" },
 ];
 
 export function AdminShell({
@@ -83,7 +96,7 @@ export function AdminShell({
         </div>
         <nav className={styles.sidebarNav} aria-label="Admin navigation">
           {NAV_ITEMS.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = isNavItemActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
@@ -172,7 +185,7 @@ export function AdminShell({
 
         <nav className={styles.bottomNav} aria-label="Admin navigation">
           {NAV_ITEMS.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = isNavItemActive(pathname, item.href);
             return (
               <Link
                 key={item.href}

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { staffPinResetSchema } from "@/lib/validation";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { writeAuditLog } from "@/lib/audit";
 
 /**
  * POST /api/staff/[id]/pin
@@ -40,6 +41,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       { status: 500 },
     );
   }
+
+  // Never log the PIN itself — changes records that a reset happened,
+  // not the new credential.
+  const supabase = await createServerSupabaseClient();
+  await writeAuditLog(supabase, {
+    actorId: admin.id,
+    action: "staff.pin_reset",
+    targetTable: "users",
+    targetId: id,
+  });
 
   return NextResponse.json({ ok: true });
 }

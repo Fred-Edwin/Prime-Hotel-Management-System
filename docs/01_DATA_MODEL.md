@@ -16,6 +16,7 @@ expenses            — operating costs, kept separate from stock/items
 delivery_locations  — admin-managed catalog of delivery zones + fixed fees (see §6)
 orders              — customer delivery/pickup orders, replaces the client's WhatsApp-coordinated process (see §6)
 order_items         — line items per order (see §6)
+audit_log           — admin-read-only trail of sensitive admin actions; first pass covers Staff edit/deactivate/reactivate/PIN-reset only (see §2's audit_log section)
 ```
 
 Do not add tables speculatively beyond what's listed here (e.g., a generic `locations` table for restaurant/canteen — see §5 for why). `delivery_locations`/`orders`/`order_items` were added deliberately, after initial planning, per direct client input (see §6) — not a speculative addition.
@@ -376,6 +377,33 @@ create table public.order_items (
 
 create index order_items_order_idx on public.order_items (order_id);
 create index order_items_item_idx on public.order_items (item_id);
+
+-- ============================================================
+-- AUDIT LOG
+-- Post-launch addition (docs/backlog/03_audit_log.md). First pass
+-- scoped to Staff edit/deactivate/PIN-reset only (app/api/staff/[id]/
+-- route.ts, app/api/staff/[id]/pin/route.ts) -- not a blanket trigger
+-- on every table. Written via an explicit shared helper
+-- (lib/audit.ts's writeAuditLog(), which calls the write_audit_log()
+-- function below) rather than a database trigger, matching how this
+-- codebase already centralizes logic (lib/calculations.ts) instead of
+-- hiding it in trigger bodies. See §4 for why writes are restricted
+-- to this one function, including for the admin role.
+-- ============================================================
+
+create table public.audit_log (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid not null references public.users(id) on delete restrict,
+  action text not null,              -- e.g. 'staff.edit', 'staff.deactivate', 'staff.reactivate', 'staff.pin_reset'
+  target_table text not null,        -- e.g. 'users'
+  target_id uuid not null,
+  changes jsonb,                     -- {before, after} snapshot where applicable; null for pin_reset (never logs the PIN itself)
+  created_at timestamptz not null default now()
+);
+
+create index audit_log_target_idx on public.audit_log (target_table, target_id);
+create index audit_log_actor_idx on public.audit_log (actor_id);
+create index audit_log_created_at_idx on public.audit_log (created_at desc);
 ```
 
 ---
@@ -508,6 +536,18 @@ This section exists because `orders` (§6) and the till-sale entry screen (`04_P
 
 **Batch-save wrappers (Phase 9 — see `20260713183705_batch_save_functions.sql`):** the client-side entry/store screens save a whole day's/week's sheet in one submit, but before Phase 9 the route handlers (`app/api/stock-entries/route.ts`, `app/api/ingredient-entries/route.ts`) looped over every line and `await`ed one `supabase.rpc()` call per line — a separate network round trip per item. With the real 132-item catalog (Phase 8), a single "Save" tap meant dozens of sequential round trips (the reported "Save feels slow" complaint from live client testing). **Fix:** three new plpgsql wrapper functions — `save_stock_entries_batch()`, `save_canteen_stock_entries_batch()`, `save_ingredient_entries_batch()` — each accepts the whole batch as a `jsonb` array and loops **server-side**, calling the existing single-row `save_stock_entry()`/`save_canteen_stock_entry()`/`save_ingredient_entry()` per line inside one transaction. This is a pure loop relocation (Node process → Postgres), **not** a rewrite of the correctness logic above: the per-row `lock_stock_entry_row()` advisory lock and oversell re-check still fire once per line, exactly as before. Locking stays per-row, not per-batch, so a till save and a concurrent delivery order on a *different* item in the same batch still don't block each other unnecessarily. The one behavior change (an improvement, not a regression): a failure on any line now rolls back the **entire batch** atomically in one transaction, where previously a failed line simply meant the client had made it partway through its own loop before hitting the error — earlier lines in that loop had already independently committed. Verified via `scripts/acceptance/phase9-batch-save.mjs`.
 
+### Admin direct ledger-row edit (docs/backlog/04_admin_ledger_edit.md)
+
+A third caller of `save_stock_entry()`/`save_canteen_stock_entry()`/`save_ingredient_entry()` exists alongside the staff entry-screen save path and the batch-save wrappers above: `PATCH /api/dashboard/ledger/entry`, admin-only, the edit affordance built into the Ledger screen (`app/(admin)/dashboard/ledger/LedgerClient.tsx`). No new tables or functions were added for this — it's a thin route that re-derives quantities through the exact same single-row functions staff writes already use, so none of this section's correctness guarantees (opening-stock carry-forward, oversell re-check, row locking) needed to change.
+
+Three things this route enforces that the ordinary staff save path doesn't need to, because staff only ever save "today"/"this week":
+
+1. **Most-recent-row-only, no cascade.** Before calling the save function, the route checks for a later `entry_date` row for the same `item_id`+`location` (`stock_entries`) or `ingredient_id` (`ingredient_entries`) and rejects with `409` if one exists — editing an older row would silently invalidate the `opening_stock` every row after it was derived from. To correct something further back, the admin edits forward one entry at a time. Deliberately not auto-cascaded (see the backlog doc's resolved design decision — the blast radius of silently rewriting a long dependent chain was judged too large for a first version).
+2. **Price snapshots are permanently immutable through this route.** `selling_price_snapshot`/`buying_price_snapshot` are fetched from the existing row (or the current catalog, only for a brand-new "today" row with nothing to preserve) and passed straight back into the save function unchanged — the route's Zod schema doesn't even accept these fields from the client.
+3. **`created_by` is preserved as the row's original author**, fetched before the save call and passed back in as `p_created_by` — these save functions only set `created_by` on the initial `INSERT`, so this is a no-op for an existing row's real-world attribution. A brand-new row (no existing entry for that item/date — this is also how admin logs "today's" entry herself, the same form handling both cases per the backlog doc's scope item 5) legitimately gets `created_by` = the admin's own id, since that genuinely is who logged it.
+
+Every successful edit writes an `audit_log` entry (`stock_entry.admin_edit` / `ingredient_entry.admin_edit`, before/after quantities) via `lib/audit.ts` — the audit trail is what records *which admin* made the correction, separately from `created_by` staying the original staff member.
+
 ### Duplicate-submission protection (orders)
 
 A cashier double-tapping "Save order" on a flaky connection must not create two orders and double-deduct stock. `orders.client_request_id` (a UUID the client generates once per submit attempt and resends unchanged on any retry) plus `unique (created_by, client_request_id)` makes a retried submission a no-op: the second insert attempt hits the unique constraint, the route handler catches that specific conflict and returns the original order's result instead of erroring. `stock_entries` already gets this for free from its own `unique(item_id, location, entry_date)` upsert key — `orders` did not have an equivalent until now, since it has no natural composite key (a customer can plausibly place two genuinely separate orders on the same day).
@@ -585,14 +625,21 @@ create policy "ingredients_admin_update" on public.ingredients
 -- 00_ARCHITECTURE.md §5.1, this is a UI/route-handler check, not
 -- a separate RLS-enforced role, consistent with how store-manager
 -- responsibilities are handled everywhere else); no update except
--- by admin, protects historical entries same as stock_entries
+-- by admin, protects historical entries same as stock_entries.
+-- `created_by = auth.uid() or public.is_admin()` (not created_by =
+-- auth.uid() alone) -- see stock_insert_scoped below for why: Postgres
+-- re-validates an INSERT policy's WITH CHECK on the DO UPDATE branch of
+-- ON CONFLICT too, not just genuine inserts, so admin's ledger-row edit
+-- (docs/backlog/04_admin_ledger_edit.md, PATCH /api/dashboard/ledger/entry)
+-- would otherwise be rejected purely for preserving the row's original
+-- created_by while editing as a different auth.uid().
 create policy "ingredient_entries_select_restaurant_or_admin" on public.ingredient_entries
   for select using (
     public.is_admin() or public.my_location() = 'restaurant'
   );
 create policy "ingredient_entries_insert_restaurant" on public.ingredient_entries
   for insert with check (
-    created_by = auth.uid()
+    (created_by = auth.uid() or public.is_admin())
     and (public.is_admin() or public.my_location() = 'restaurant')
   );
 create policy "ingredient_entries_update_admin_only" on public.ingredient_entries
@@ -600,14 +647,24 @@ create policy "ingredient_entries_update_admin_only" on public.ingredient_entrie
 
 -- STOCK_ENTRIES: staff see/write only their own location's rows;
 -- admin sees/writes all; nobody can update a row they didn't create
--- unless they're admin (protects historical entries -- see scope doc)
+-- unless they're admin (protects historical entries -- see scope doc).
+-- `created_by = auth.uid() or public.is_admin()`, not created_by =
+-- auth.uid() alone (discovered/fixed while building admin ledger-row
+-- editing, docs/backlog/04_admin_ledger_edit.md): save_stock_entry()/
+-- save_canteen_stock_entry() upsert via INSERT ... ON CONFLICT DO
+-- UPDATE, and Postgres evaluates the INSERT policy's WITH CHECK on the
+-- DO UPDATE branch too -- not just the separate UPDATE policy below --
+-- so admin correcting an existing row while preserving its original
+-- created_by (a different id than auth.uid(), by design -- see §3.4's
+-- "Admin direct ledger-row edit" note) was rejected with a false "new
+-- row violates row-level security policy" until this was widened.
 create policy "stock_select_scoped" on public.stock_entries
   for select using (
     public.is_admin() or location = public.my_location()
   );
 create policy "stock_insert_scoped" on public.stock_entries
   for insert with check (
-    created_by = auth.uid()
+    (created_by = auth.uid() or public.is_admin())
     and (public.is_admin() or location = public.my_location())
   );
 create policy "stock_update_admin_only" on public.stock_entries
@@ -675,6 +732,41 @@ create policy "order_items_insert_scoped" on public.order_items
   );
 
 -- ============================================================
+-- AUDIT LOG: admin-read-only, and -- unlike every other table above --
+-- no role can write to it directly, including admin. Writes only
+-- happen through write_audit_log() below, a security definer function
+-- called explicitly by route handlers (lib/audit.ts) -- never a plain
+-- table insert. This is the entire point of an audit trail: if the
+-- admin role could edit or delete entries through the client, the log
+-- couldn't be trusted as a record of what the admin actually did.
+-- ============================================================
+alter table public.audit_log enable row level security;
+
+create policy "audit_log_select_admin_only" on public.audit_log
+  for select using (public.is_admin());
+
+-- No insert/update/delete policy exists for any role. All writes go
+-- through this function instead, which bypasses RLS via security
+-- definer specifically so it can write regardless of RLS -- callers
+-- never insert into audit_log directly.
+create or replace function public.write_audit_log(
+  p_actor_id uuid,
+  p_action text,
+  p_target_table text,
+  p_target_id uuid,
+  p_changes jsonb default null
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.audit_log (actor_id, action, target_table, target_id, changes)
+  values (p_actor_id, p_action, p_target_table, p_target_id, p_changes);
+end;
+$$;
+
+-- ============================================================
 -- Cross-location exception: canteen needs the RESTAURANT's
 -- sent_out totals for canteen_supplied items to populate its
 -- weekly added_stock (see §3.1). Table-level RLS on stock_entries
@@ -725,7 +817,7 @@ RLS policies alone are not sufficient — Postgres requires baseline `GRANT` pri
 - **No `locations` table.** Only two locations will ever exist for this business (per discovery); a `location_type` enum is simpler and sufficient. If a third location is ever added, that's a deliberate future migration, not an oversight.
 - **No debtor/credit ledger table.** Explicitly Phase 2 per the scope document. Don't add it speculatively.
 - **Wastage is V1, not Phase 2 — this reverses an earlier decision.** It was originally deferred, but client input made clear it's needed now: without it, closing stock silently doesn't reconcile with a physical count after spoilage. See §3.3 for the full column-level treatment on both `stock_entries` and `ingredient_entries`. No separate wastage table — it's columns on the existing entry tables, not its own ledger, since a wastage event is always tied to a specific item/ingredient's entry for that period.
-- **No soft-delete on `stock_entries`/`expenses`.** Historical entries are never deleted, only correctable by admin via update (with the update itself still logged via `updated_at`). If an audit trail of *changes* (not just current state) becomes a requirement, that's a new decision to make explicitly, not something to bolt on silently.
+- **No soft-delete on `stock_entries`/`expenses`.** Historical entries are never deleted, only correctable by admin via update (with the update itself still logged via `updated_at`, and — for `stock_entries`/`ingredient_entries` specifically — via `audit_log` too, see §3.4's "Admin direct ledger-row edit" note). If an audit trail of *changes* (not just current state) becomes a requirement for `expenses` as well, that's a new decision to make explicitly, not something to bolt on silently.
 - **`items.supply_type` is deliberate, not speculative.** It exists specifically because the restaurant's central store supplies only a subset of items to canteen daily, while canteen also stocks unrelated items (cyber, some retail) entirely on its own — see §3.1. Don't remove or simplify this enum thinking it's over-engineering; it's load-bearing for the canteen `added_stock` aggregation.
 - **No formal recipe / bill-of-materials linking `ingredients` to `items`.** The client only has a rough, informal sense of ingredient-to-dish conversion, not precise recipes — see §3.2. `ingredient_entries.quantity_used` and `stock_entries.added_stock` are independent numbers with no enforced relationship. Don't build automatic yield calculation speculatively; it's a real Phase 2 candidate if the client asks, not a V1 gap to quietly fill in.
 

@@ -231,6 +231,48 @@ export const canteenStockEntriesSaveSchema = z.object({
 export type CanteenStockEntriesSaveInput = z.infer<typeof canteenStockEntriesSaveSchema>;
 
 /**
+ * Admin direct ledger-row edit (docs/backlog/04_admin_ledger_edit.md) —
+ * PATCH /api/dashboard/ledger/entry. Quantities only: price snapshots are
+ * permanently immutable through this feature (resolved design decision #2),
+ * and quantity_sold/closing_stock are never accepted from the client —
+ * they're re-derived server-side by the same save_stock_entry()/
+ * save_canteen_stock_entry()/save_ingredient_entry() functions staff
+ * writes already use.
+ */
+export const stockEntryAdminEditSchema = z.object({
+  table: z.literal("stock_entries"),
+  item_id: z.string().uuid(),
+  location: z.enum(["restaurant", "canteen"]),
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  till_quantity_sold: nonNegativeQuantity,
+  added_stock: nonNegativeQuantity,
+  sent_out: nonNegativeQuantity,
+  wastage: nonNegativeQuantity,
+  wastage_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type StockEntryAdminEditInput = z.infer<typeof stockEntryAdminEditSchema>;
+
+export const ingredientEntryAdminEditSchema = z.object({
+  table: z.literal("ingredient_entries"),
+  ingredient_id: z.string().uuid(),
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  received: nonNegativeQuantity,
+  quantity_used: nonNegativeQuantity,
+  wastage: nonNegativeQuantity,
+  wastage_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type IngredientEntryAdminEditInput = z.infer<typeof ingredientEntryAdminEditSchema>;
+
+export const ledgerEntryAdminEditSchema = z.discriminatedUnion("table", [
+  stockEntryAdminEditSchema,
+  ingredientEntryAdminEditSchema,
+]);
+
+export type LedgerEntryAdminEditInput = z.infer<typeof ledgerEntryAdminEditSchema>;
+
+/**
  * Delivery/pickup order — see docs/01_DATA_MODEL.md §6, §3.4. `items` mirrors
  * a receipt's line items; `client_request_id` is the idempotency key the
  * client generates once per submit attempt and resends unchanged on retry

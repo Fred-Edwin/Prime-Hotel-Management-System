@@ -30,7 +30,9 @@ export type IconName =
   | "logout"
   | "bell"
   | "chevron-right"
-  | "more";
+  | "more"
+  | "history"
+  | "edit";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -180,6 +182,21 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <circle cx="12" cy="5.5" r="1.3" fill="currentColor" stroke="none" />
       <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
       <circle cx="12" cy="18.5" r="1.3" fill="currentColor" stroke="none" />
+    </>
+  ),
+  // History — a clock with a counter-clockwise sweep arrow, the audit trail
+  history: (
+    <>
+      <path d="M4 9.5A8 8 0 1 1 4.5 15" />
+      <path d="M4 4.5V9.5H9" />
+      <path d="M12 8v4.5l3 2" />
+    </>
+  ),
+  // Edit — a pencil, the admin ledger-row edit affordance
+  edit: (
+    <>
+      <path d="M15.5 4.5 19.5 8.5 8 20H4v-4Z" strokeLinejoin="round" />
+      <path d="m13.5 6.5 4 4" />
     </>
   ),
 };

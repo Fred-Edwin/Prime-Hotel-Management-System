@@ -76,10 +76,22 @@
   color: var(--color-status-success);
 }
 
-/* Column-grouped sub-headers (Identity / Stock movement / Inventory value /
-   Staffing) sitting above the existing flat header row — Phase 10, matching
-   the Stitch reference's grouped-14-column treatment. */
+/* Column-grouped sub-headers (Stock movement / Inventory value) sitting
+   above the existing flat header row — Phase 10, matching the Stitch
+   reference's grouped-column treatment. Identity (Date/Item/Location) and
+   the former one-column "Staffing" group are left ungrouped: a single
+   unwired PlaceholderStat column doesn't earn its own group header, and
+   folding it into Identity avoids implying it's as substantial a section
+   as the 4-column Inventory-value group. Sticky (stacks above the column
+   header row via top offset — see .ledgerTable's --header-row-h var).
+   Also sticky horizontally in the Date/Item columns so the corner cell
+   doesn't go transparent as both axes scroll at once. */
 .groupHeader {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 28px;
+  box-sizing: border-box;
   text-align: center;
   font-family: var(--font-family-structural);
   font-weight: 600;
@@ -88,27 +100,85 @@
   text-transform: uppercase;
   color: var(--color-text-secondary);
   background: var(--color-surface-sunken);
-  border-bottom: 1px solid var(--color-border-default);
-  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-default);
+  border-top: none;
+  padding: 0 var(--space-3);
 }
 
+.groupHeaderIdentity {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+
+/* Carbon-style dense grid, matching catalog.module.css's .table pilot —
+   tighter rows than the default catalog tables since Ledger is the
+   longest table in the admin (a month of both locations can run 60+
+   rows), and every extra px of row height compounds into extra scroll
+   distance between the sticky header and the row being read. */
 .ledgerTable {
-  min-width: 1400px;
+  min-width: 1500px;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-/* Sticky first (Date) column — this table is wide enough (15 columns) to
-   need a horizontal-scroll anchor so a scrolled-right row can still be
-   traced back to its date. */
+.ledgerTable td {
+  height: 28px;
+  padding: 2px var(--space-2);
+  white-space: nowrap;
+  font-size: var(--font-size-caption);
+}
+
+.ledgerTable tbody tr:nth-child(even) td {
+  background: var(--color-surface-sunken);
+}
+
+.ledgerTable tbody tr:nth-child(even) td.stickyCol,
+.ledgerTable tbody tr:nth-child(even) td.stickyColItem {
+  background: var(--color-surface-sunken);
+}
+
+/* Column header row sticks directly beneath the group header row — the
+   two stack rather than compete, since .groupHeader's `top: 0` and this
+   row's offset both anchor to the scroll container, not to each other. */
+.ledgerTable thead tr:nth-child(2) th {
+  position: sticky;
+  top: 28px;
+  z-index: 2;
+  padding: var(--space-1) var(--space-2);
+}
+
+/* Sticky Date + Item columns — two identity anchors, not just one. A
+   15-column table scrolled fully right used to leave only a bare date
+   with no item name to tie it to; Item now pins immediately after Date
+   so both "when" and "what" stay on screen through horizontal scroll.
+   Date gets an explicit width + nowrap: without it, "2026-07-16" wraps
+   onto two lines inside a content-sized sticky column, which silently
+   inflates every row's height — this was the actual cause of the
+   table reading as "still not compact enough," not the row padding. */
 .stickyCol {
   position: sticky;
   left: 0;
   z-index: 1;
+  width: 96px;
+  min-width: 96px;
+  white-space: nowrap;
   background: var(--color-surface-raised);
 }
 
-thead .stickyCol {
+.stickyColItem {
+  position: sticky;
+  left: 96px;
+  z-index: 1;
+  white-space: nowrap;
+  background: var(--color-surface-raised);
+  border-right: 2px solid var(--color-border-default);
+}
+
+thead .stickyCol,
+thead .stickyColItem {
   background: var(--color-surface-sunken);
-  z-index: 2;
+  z-index: 3;
 }
 
 .rangePicker {
@@ -174,4 +244,72 @@ thead .stickyCol {
   font-size: var(--font-size-body-sm);
   font-weight: 600;
   cursor: pointer;
+}
+
+.toolbarRow {
+  margin-bottom: var(--space-1);
+}
+
+/* Admin ledger-row edit affordance (docs/backlog/04_admin_ledger_edit.md)
+   — a small icon button, not a full "Edit" text link like the catalog
+   screens, since it sits inside an already-dense 28px ledger row. */
+.editButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.editButton:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-brand-primary);
+}
+
+.editCardButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.editFormMeta {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Below tablet width the two sticky data columns eat too much of a
+   375px viewport (84px + item-name width) to leave a usable scroll
+   area, and WaPrecious is a laptop-primary user (00_FOUNDATIONS.md
+   §2.4) — so the tradeoff here is dropping the horizontal sticky
+   behavior at narrow widths rather than building a full mobile
+   card-list rewrite of a 15-column ledger, which the catalog screens'
+   simpler ~6-column tables could justify but this one doesn't. Vertical
+   sticky header is kept; it still helps on a scrolled phone view. */
+@media (max-width: 599px) {
+  .stickyCol,
+  .stickyColItem,
+  .groupHeaderIdentity {
+    position: static;
+  }
 }
