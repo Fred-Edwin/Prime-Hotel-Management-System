@@ -73,71 +73,201 @@
   background: var(--color-surface-sunken);
 }
 
-/* Below --breakpoint-tablet (600px, see 00_FOUNDATIONS.md §breakpoints):
-   collapse the dense grid into stacked label:value cards rather than
-   forcing horizontal scroll on a phone — matches Carbon's own responsive
-   DataTable pattern. Same table/tr/td markup throughout; only the CSS
-   display mode changes, driven by each <td>'s data-label attribute. */
+/* Desktop table / mobile card-list toggle, split at --breakpoint-tablet
+   (600px, see 00_FOUNDATIONS.md §breakpoints). Below 600px the dense grid
+   is replaced by a separate collapsible card list (.cardList/.itemCard*
+   below) rather than reshaping the same <table> markup — the
+   expand/collapse interaction doesn't map cleanly onto table semantics.
+   Superseded the earlier "spec sheet" 2-column <td> reflow piloted here;
+   kept as two sibling renders (table + list) gated by these toggles
+   rather than one shape-shifting table. */
+.desktopOnly {
+  display: block;
+}
+
+.mobileOnly {
+  display: none;
+}
+
 @media (max-width: 599px) {
-  .tableCard {
-    overflow-x: visible;
-  }
-
-  .table {
-    display: block;
-    min-width: 0;
-    border: none;
-  }
-
-  .table thead {
+  .desktopOnly {
     display: none;
   }
 
-  .table tbody {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .table tr {
+  .mobileOnly {
     display: block;
-    position: relative;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-md);
-    overflow: hidden;
   }
+}
 
-  .table td {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    height: auto;
-    min-height: var(--space-touch);
-    border: none;
-    border-bottom: 1px solid var(--color-border-default);
-    text-align: right;
-  }
+.cardList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
 
-  .table tr td:last-child {
-    border-bottom: none;
-  }
+.itemCard {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
 
-  .table td[data-label]::before {
-    content: attr(data-label);
-    flex-shrink: 0;
-    font-family: var(--font-family-structural);
-    font-weight: 700;
-    font-size: var(--font-size-caption);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--color-text-secondary);
-    text-align: left;
-  }
+.itemCardRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--space-touch);
+  padding: var(--space-3) var(--space-4);
+  background: none;
+  border: none;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
 
-  .table :is(th, td).numeric {
-    text-align: right;
-  }
+.itemCardRow:active {
+  background: var(--color-surface-sunken);
+}
+
+.itemCardIdentity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.itemCardName {
+  font-family: var(--font-family-structural);
+  font-weight: 700;
+  font-size: var(--font-size-body-lg);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemCardCategory {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+.itemCardMetrics {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.itemCardPrice {
+  font-family: var(--font-family-data);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-body-lg);
+  color: var(--color-text-primary);
+}
+
+.itemCardMargin {
+  font-family: var(--font-family-data);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-caption);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+}
+
+.itemCardMarginGood {
+  color: var(--color-status-success);
+  background: var(--color-status-success-bg);
+}
+
+.itemCardMarginMid {
+  color: var(--color-status-warning);
+  background: var(--color-status-warning-bg);
+}
+
+.itemCardMarginLow {
+  color: var(--color-status-error);
+  background: var(--color-status-error-bg);
+}
+
+.itemCardStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.itemCardChevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  transition: transform var(--motion-base);
+}
+
+.itemCardChevronOpen {
+  transform: rotate(90deg);
+}
+
+.itemCardDetails {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--motion-base);
+}
+
+.itemCardDetailsOpen {
+  grid-template-rows: 1fr;
+}
+
+.itemCardDetailsInner {
+  overflow: hidden;
+  border-top: 1px solid var(--color-border-default);
+  margin: 0 var(--space-4);
+  padding-top: var(--space-3);
+}
+
+.itemCardDetailLine {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.itemCardDetailLine + .itemCardDetailLine {
+  margin-top: var(--space-2);
+}
+
+.itemCardDetailLine strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.itemCardFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-2) 0 var(--space-3);
+}
+
+.itemCardEditBtn {
+  font-family: var(--font-family-structural);
+  font-weight: 600;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-brand-primary);
+  background: var(--color-surface-sunken);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--space-touch);
+  cursor: pointer;
 }
 
 /* :is() boosts specificity above .table th/td's own element+class rules

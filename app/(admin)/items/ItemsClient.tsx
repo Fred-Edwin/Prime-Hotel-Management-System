@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
-import { Modal } from "@/components/Modal";
+import { Drawer } from "@/components/Drawer";
+import { FormSection } from "@/components/FormSection";
+import { FilterBar } from "@/components/FilterBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
@@ -51,23 +53,72 @@ const emptyForm: ItemInput = {
   active: true,
 };
 
+function marginPercent(buying: number, selling: number): number | null {
+  if (!selling) return null;
+  return ((selling - buying) / selling) * 100;
+}
+
+// Illustrative bands for the mobile card's at-a-glance margin color —
+// confirm real thresholds with the client before treating these as final.
+function marginBand(margin: number | null): "good" | "mid" | "low" | null {
+  if (margin === null) return null;
+  if (margin >= 40) return "good";
+  if (margin >= 20) return "mid";
+  return "low";
+}
+
+const MARGIN_BAND_CLASS = {
+  good: "itemCardMarginGood",
+  mid: "itemCardMarginMid",
+  low: "itemCardMarginLow",
+} as const;
+
 export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
   const [items, setItems] = useState<Item[]>(initialItems);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ItemInput>(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ItemInput, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  function openAddModal() {
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (categoryFilter && item.category !== categoryFilter) return false;
+      if (locationFilter === "restaurant" && item.supply_type === "canteen_independent") return false;
+      if (locationFilter === "canteen" && item.supply_type === "restaurant_only") return false;
+      return true;
+    });
+  }, [items, search, categoryFilter, locationFilter]);
+
+  const formMargin = marginPercent(form.buying_price, form.selling_price);
+
+  function openAddDrawer() {
     setEditingId(null);
     setForm(emptyForm);
     setFieldErrors({});
-    setModalOpen(true);
+    setDrawerOpen(true);
   }
 
-  function openEditModal(item: Item) {
+  function openEditDrawer(item: Item) {
     setEditingId(item.id);
     setForm({
       name: item.name,
@@ -79,7 +130,7 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
       active: item.active,
     });
     setFieldErrors({});
-    setModalOpen(true);
+    setDrawerOpen(true);
   }
 
   async function handleSubmit() {
@@ -114,7 +165,7 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
       setItems((prev) =>
         editingId ? prev.map((i) => (i.id === saved.id ? saved : i)) : [...prev, saved],
       );
-      setModalOpen(false);
+      setDrawerOpen(false);
       setToast(editingId ? "Item updated" : "Item added");
     } catch {
       setFieldErrors({ name: "Couldn't reach the server — check your connection and try again." });
@@ -127,9 +178,47 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
     <div>
       <div className={styles.header}>
         <h1 className={styles.title}>Item Master</h1>
-        <Button variant="primary" onClick={openAddModal}>
+        <Button variant="primary" onClick={openAddDrawer}>
           Add item
         </Button>
+      </div>
+
+      <div className={styles.toolbarRow}>
+        <FilterBar
+          searchValue={search}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setExpandedIds(new Set());
+          }}
+          searchPlaceholder="Search menu items…"
+          filters={[
+            {
+              value: locationFilter,
+              onChange: (value) => {
+                setLocationFilter(value);
+                setExpandedIds(new Set());
+              },
+              "aria-label": "Filter by location",
+              options: [
+                { value: "", label: "All locations" },
+                { value: "restaurant", label: "Restaurant" },
+                { value: "canteen", label: "Canteen" },
+              ],
+            },
+            {
+              value: categoryFilter,
+              onChange: (value) => {
+                setCategoryFilter(value);
+                setExpandedIds(new Set());
+              },
+              "aria-label": "Filter by category",
+              options: [
+                { value: "", label: "All categories" },
+                ...CATEGORY_OPTIONS.map(([value, label]) => ({ value, label })),
+              ],
+            },
+          ]}
+        />
       </div>
 
       {items.length === 0 ? (
@@ -138,71 +227,171 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
           heading="No items yet"
           body="Add your first menu item to get started."
           actionLabel="Add item"
-          onAction={openAddModal}
+          onAction={openAddDrawer}
+        />
+      ) : filteredItems.length === 0 ? (
+        <EmptyState
+          icon={<Icon name="items" size={48} />}
+          heading="No items match your filters"
+          body="Try a different search term or clear a filter."
         />
       ) : (
-        <Card className={styles.tableCard}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Supply type</th>
-                <th className={styles.numeric}>Buying</th>
-                <th className={styles.numeric}>Selling</th>
-                <th className={styles.numeric}>Low stock at</th>
-                <th>Status</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.name}</td>
-                  <td>{CATEGORY_LABELS[item.category]}</td>
-                  <td>{SUPPLY_TYPE_LABELS[item.supply_type]}</td>
-                  <td className={styles.numeric}>KES {item.buying_price.toFixed(2)}</td>
-                  <td className={styles.numeric}>KES {item.selling_price.toFixed(2)}</td>
-                  <td className={styles.numeric}>{item.low_stock_threshold}</td>
-                  <td>
-                    <span className={item.active ? styles.badgeActive : styles.badgeInactive}>
-                      {item.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className={styles.editLink}
-                      onClick={() => openEditModal(item)}
-                    >
-                      Edit
-                    </button>
-                  </td>
+        <>
+          <Card className={`${styles.tableCard} ${styles.desktopOnly}`}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Supply type</th>
+                  <th className={styles.numeric}>Buying</th>
+                  <th className={styles.numeric}>Selling</th>
+                  <th className={styles.numeric}>Margin</th>
+                  <th className={styles.numeric}>Low stock at</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+              </thead>
+              <tbody>
+                {filteredItems.map((item) => {
+                  const margin = marginPercent(item.buying_price, item.selling_price);
+                  return (
+                    <tr key={item.id}>
+                      <td>{item.name}</td>
+                      <td>{CATEGORY_LABELS[item.category]}</td>
+                      <td>{SUPPLY_TYPE_LABELS[item.supply_type]}</td>
+                      <td className={styles.numeric}>KES {item.buying_price.toFixed(2)}</td>
+                      <td className={styles.numeric}>KES {item.selling_price.toFixed(2)}</td>
+                      <td className={styles.numeric}>
+                        {margin === null ? "—" : `${margin.toFixed(1)}%`}
+                      </td>
+                      <td className={styles.numeric}>{item.low_stock_threshold}</td>
+                      <td>
+                        <span className={styles.statusCell}>
+                          <span
+                            className={`${styles.statusDot} ${
+                              item.active ? styles.statusDotActive : styles.statusDotInactive
+                            }`}
+                          />
+                          {item.active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className={styles.editLink}
+                          onClick={() => openEditDrawer(item)}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+
+          <ul className={`${styles.cardList} ${styles.mobileOnly}`}>
+            {filteredItems.map((item) => {
+              const margin = marginPercent(item.buying_price, item.selling_price);
+              const band = marginBand(margin);
+              const isOpen = expandedIds.has(item.id);
+              return (
+                <li key={item.id} className={styles.itemCard}>
+                  <button
+                    type="button"
+                    className={styles.itemCardRow}
+                    aria-expanded={isOpen}
+                    onClick={() => toggleExpanded(item.id)}
+                  >
+                    <span className={styles.itemCardIdentity}>
+                      <span className={styles.itemCardName}>{item.name}</span>
+                      <span className={styles.itemCardCategory}>
+                        {CATEGORY_LABELS[item.category]}
+                      </span>
+                    </span>
+                    <span className={styles.itemCardMetrics}>
+                      <span className={styles.itemCardPrice}>
+                        KES {item.selling_price.toFixed(2)}
+                      </span>
+                      {margin !== null && band && (
+                        <span
+                          className={`${styles.itemCardMargin} ${styles[MARGIN_BAND_CLASS[band]]}`}
+                        >
+                          {margin.toFixed(1)}%
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={`${styles.itemCardStatusDot} ${
+                        item.active ? styles.statusDotActive : styles.statusDotInactive
+                      }`}
+                      title={item.active ? "Active" : "Inactive"}
+                    />
+                    <span
+                      className={`${styles.itemCardChevron} ${
+                        isOpen ? styles.itemCardChevronOpen : ""
+                      }`}
+                    >
+                      <Icon name="chevron-right" size={20} />
+                    </span>
+                  </button>
+
+                  <div
+                    className={`${styles.itemCardDetails} ${
+                      isOpen ? styles.itemCardDetailsOpen : ""
+                    }`}
+                  >
+                    <div className={styles.itemCardDetailsInner}>
+                      <div className={styles.itemCardDetailLine}>
+                        <span>Buying price</span>
+                        <strong>KES {item.buying_price.toFixed(2)}</strong>
+                      </div>
+                      <div className={styles.itemCardDetailLine}>
+                        <span>Supply type</span>
+                        <strong>{SUPPLY_TYPE_LABELS[item.supply_type]}</strong>
+                      </div>
+                      <div className={styles.itemCardDetailLine}>
+                        <span>Low stock at</span>
+                        <strong>{item.low_stock_threshold}</strong>
+                      </div>
+                      <div className={styles.itemCardFooter}>
+                        <button
+                          type="button"
+                          className={styles.itemCardEditBtn}
+                          onClick={() => openEditDrawer(item)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         title={editingId ? "Edit item" : "Add item"}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? "Saving…" : "Save"}
+              {submitting ? "Saving…" : "Save item"}
             </Button>
           </>
         }
       >
-        <div className={styles.form}>
+        <FormSection label="Identity">
           <Input
-            label="Name"
+            label="Item name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             error={fieldErrors.name}
@@ -222,24 +411,9 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
               ))}
             </select>
           </label>
+        </FormSection>
 
-          <label className={styles.selectField}>
-            <span className={styles.selectLabel}>Supply type</span>
-            <select
-              className={styles.select}
-              value={form.supply_type}
-              onChange={(e) =>
-                setForm({ ...form, supply_type: e.target.value as ItemSupplyType })
-              }
-            >
-              {SUPPLY_TYPE_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-
+        <FormSection label="Pricing">
           <Input
             label="Buying price (KES)"
             type="number"
@@ -262,6 +436,30 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
             error={fieldErrors.selling_price}
           />
 
+          <p className={styles.marginHint}>
+            Margin:{" "}
+            <strong>{formMargin === null ? "—" : `${formMargin.toFixed(1)}%`}</strong>
+          </p>
+        </FormSection>
+
+        <FormSection label="Stock behavior">
+          <label className={styles.selectField}>
+            <span className={styles.selectLabel}>Supply type</span>
+            <select
+              className={styles.select}
+              value={form.supply_type}
+              onChange={(e) =>
+                setForm({ ...form, supply_type: e.target.value as ItemSupplyType })
+              }
+            >
+              {SUPPLY_TYPE_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <Input
             label="Low stock alert threshold"
             type="number"
@@ -272,7 +470,9 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
             onChange={(e) => setForm({ ...form, low_stock_threshold: Number(e.target.value) })}
             error={fieldErrors.low_stock_threshold}
           />
+        </FormSection>
 
+        <FormSection label="Status">
           <label className={styles.checkboxField}>
             <input
               type="checkbox"
@@ -281,8 +481,8 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
             />
             <span>Active</span>
           </label>
-        </div>
-      </Modal>
+        </FormSection>
+      </Drawer>
 
       {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>
