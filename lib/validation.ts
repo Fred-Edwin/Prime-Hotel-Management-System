@@ -192,6 +192,23 @@ export const stockEntryLineSaveSchema = z.object({
 export type StockEntryLineSaveInput = z.infer<typeof stockEntryLineSaveSchema>;
 
 /**
+ * Single-line autosave payload for the cashier's own PUT /api/stock-entries
+ * branch — regular (non-store-manager) restaurant staff's "quantity sold"
+ * field on /entry autosaves per item (post-launch redesign) instead of
+ * batching behind the day's Save button, mirroring the store manager's
+ * own autosave above. No added_stock/sent_out here: those stay
+ * store-manager-only (stockEntryLineSaveSchema above); this route only
+ * ever owns till_quantity_sold.
+ */
+export const stockEntryCashierLineSaveSchema = z.object({
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  item_id: z.string().uuid(),
+  till_quantity_sold: nonNegativeQuantity,
+});
+
+export type StockEntryCashierLineSaveInput = z.infer<typeof stockEntryCashierLineSaveSchema>;
+
+/**
  * One ingredient's received/used/wastage line on the store manager's
  * ingredient entry screen — see docs/01_DATA_MODEL.md §2 `ingredient_entries`.
  */

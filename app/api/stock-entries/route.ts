@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { canteenStockEntriesSaveSchema, stockEntriesSaveSchema, stockEntryLineSaveSchema } from "@/lib/validation";
+import {
+  canteenStockEntriesSaveSchema,
+  stockEntriesSaveSchema,
+  stockEntryCashierLineSaveSchema,
+  stockEntryLineSaveSchema,
+} from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 import { weekEndSunday, weekStartMonday } from "@/lib/calculations";
@@ -142,6 +147,71 @@ export async function POST(request: Request) {
     });
   }
 
+  // First-writer oversell pre-check (docs/01_DATA_MODEL.md §3.4): if
+  // today's added_stock is genuinely 0 for an item (no row yet, or a row
+  // with added_stock = 0 — the store manager hasn't logged "Added stock"
+  // today) and this line's till_quantity_sold alone exceeds
+  // opening_stock, save_stock_entry() would reject it as a generic
+  // oversell even though nothing was actually oversold — it's a
+  // data-ordering issue, not user error. Diagnosed here at the route
+  // layer (not inside save_stock_entry() itself, since that function is
+  // also called by the admin ledger edit path where this framing
+  // doesn't apply) so the batch save can surface the same
+  // correctly-diagnosed message the cashier's own PUT autosave gives
+  // (see 20260717130000_stock_entry_cashier_autosave.sql's errcode
+  // P0002 for the single-line equivalent of this check).
+  const existingQuery = supabase
+    .from("stock_entries")
+    .select("item_id, opening_stock, added_stock, sent_out, wastage")
+    .eq("location", user.location)
+    .eq("entry_date", entry_date)
+    .in("item_id", itemIds);
+  const { data: existingRows, error: existingError }: Awaited<typeof existingQuery> = await existingQuery;
+  if (existingError) return serverErrorResponse(existingError, "stock-entries");
+
+  const existingByItemId = new Map((existingRows ?? []).map((row) => [row.item_id, row]));
+
+  // For any item with no row yet today, opening_stock isn't 0 by
+  // default — it carries forward from the prior period's closing_stock
+  // (§3.1), exactly like save_stock_entry() itself computes it. Without
+  // this lookup, an item legitimately being sold purely against
+  // yesterday's leftover stock (a normal, common case — no "Added
+  // stock" needed today at all) would be wrongly flagged as "not yet
+  // stocked."
+  const itemsMissingToday = itemIds.filter((id) => !existingByItemId.has(id));
+  const priorClosingByItemId = new Map<string, number>();
+  if (itemsMissingToday.length > 0) {
+    const priorQuery = supabase
+      .from("stock_entries")
+      .select("item_id, closing_stock, entry_date")
+      .eq("location", user.location)
+      .lt("entry_date", entry_date)
+      .in("item_id", itemsMissingToday)
+      .order("entry_date", { ascending: false });
+    const { data: priorRows, error: priorError }: Awaited<typeof priorQuery> = await priorQuery;
+    if (priorError) return serverErrorResponse(priorError, "stock-entries");
+    for (const row of priorRows ?? []) {
+      if (!priorClosingByItemId.has(row.item_id)) {
+        priorClosingByItemId.set(row.item_id, row.closing_stock);
+      }
+    }
+  }
+
+  for (const line of lines) {
+    const existing = existingByItemId.get(line.item_id);
+    const addedStock = existing?.added_stock ?? 0;
+    if (addedStock > 0) continue;
+    const openingStock = existing?.opening_stock ?? priorClosingByItemId.get(line.item_id) ?? 0;
+    const sentOut = existing?.sent_out ?? 0;
+    const wastage = existing?.wastage ?? 0;
+    if (sentOut + line.till_quantity_sold + wastage > openingStock) {
+      return NextResponse.json(
+        { error: "Ask the store manager to log today's added stock first." },
+        { status: 409 },
+      );
+    }
+  }
+
   // Single round trip: save_stock_entries_batch() loops server-side over
   // save_stock_entry() per line (docs/01_DATA_MODEL.md §3.4 correctness
   // untouched — each line still gets its own row lock + oversell re-check).
@@ -233,12 +303,35 @@ async function saveCanteenEntries(
 
 /**
  * PUT /api/stock-entries
- * Store-manager-only single-line autosave for "Added stock"/"Sent to
- * canteen" — /entry's store-manager view autosaves per field
- * (post-launch redesign, docs/backlog/entry-store-manager-redesign-handover.md)
- * instead of batching behind the day's TillStrip Save button. Regular
- * staff's till_quantity_sold field is unaffected and keeps using the
- * batch POST above.
+ * Single-line autosave, dispatched by role — /entry's store-manager and
+ * cashier views both autosave their own field per item (post-launch
+ * redesign, docs/backlog/entry-store-manager-redesign-handover.md and
+ * docs/backlog/entry-cashier-redesign-handover.md) instead of batching
+ * behind the day's TillStrip Save button. The two branches below are
+ * kept explicitly separate — different schema, different RPC, different
+ * RBAC check — rather than merged into one undifferentiated handler:
+ * store-manager owns added_stock/sent_out, cashier owns
+ * till_quantity_sold, and neither role may write the other's field
+ * through this route.
+ */
+export async function PUT(request: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "staff" || user.location !== "restaurant") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const supabase = await createServerSupabaseClient();
+
+  if (user.is_store_manager) {
+    return putStoreManagerField(body, supabase, user.id);
+  }
+
+  return putCashierField(body, supabase, user.id);
+}
+
+/**
+ * Store-manager-only branch: "Added stock"/"Sent to canteen".
  *
  * Calls save_stock_entry_store_manager_fields() (see
  * 20260717090000_stock_entry_store_manager_autosave.sql), NOT
@@ -258,13 +351,11 @@ async function saveCanteenEntries(
  * underlying function preserves whatever wastage value already exists
  * (e.g. set via the admin ledger edit path) rather than zeroing it.
  */
-export async function PUT(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || user.location !== "restaurant" || !user.is_store_manager) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const body = await request.json().catch(() => null);
+async function putStoreManagerField(
+  body: unknown,
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+) {
   const parsed = stockEntryLineSaveSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -275,7 +366,6 @@ export async function PUT(request: Request) {
   }
 
   const { entry_date, item_id, added_stock, sent_out } = parsed.data;
-  const supabase = await createServerSupabaseClient();
 
   const priceQuery = supabase
     .from("items")
@@ -296,7 +386,69 @@ export async function PUT(request: Request) {
     p_sent_out: sent_out,
     p_selling_price_snapshot: item.selling_price,
     p_buying_price_snapshot: item.buying_price,
-    p_created_by: user.id,
+    p_created_by: userId,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entry: data });
+}
+
+/**
+ * Cashier-only branch (regular, non-store-manager restaurant staff):
+ * "quantity sold" — /entry's cashier view (post-launch redesign,
+ * docs/backlog/entry-cashier-redesign-handover.md).
+ *
+ * Calls save_stock_entry_cashier_field() (see
+ * 20260717130000_stock_entry_cashier_autosave.sql), NOT
+ * save_stock_entry() directly, for the same "don't clobber a concurrent
+ * writer's field" reason the store-manager branch above uses its own
+ * dedicated function — this one preserves added_stock/sent_out/wastage
+ * and only ever writes till_quantity_sold. Distinguishes a genuine
+ * oversell from the "store manager hasn't logged today's added stock
+ * yet" false-rejection case via a distinct SQLSTATE (P0002), surfaced by
+ * describeSaveError() (lib/errors.ts) as a specifically-diagnosed
+ * message instead of the generic oversell error — see
+ * docs/01_DATA_MODEL.md §3.4.
+ */
+async function putCashierField(
+  body: unknown,
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+) {
+  const parsed = stockEntryCashierLineSaveSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+
+  const { entry_date, item_id, till_quantity_sold } = parsed.data;
+
+  const priceQuery = supabase
+    .from("items")
+    .select("id, selling_price, buying_price")
+    .eq("id", item_id)
+    .single();
+  const { data: item, error: priceError }: Awaited<typeof priceQuery> = await priceQuery;
+
+  if (priceError || !item) {
+    return NextResponse.json({ error: "Unknown item in save request" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase.rpc("save_stock_entry_cashier_field", {
+    p_item_id: item_id,
+    p_location: "restaurant",
+    p_entry_date: entry_date,
+    p_till_quantity_sold: till_quantity_sold,
+    p_selling_price_snapshot: item.selling_price,
+    p_buying_price_snapshot: item.buying_price,
+    p_created_by: userId,
   });
 
   if (error) {

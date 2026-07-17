@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { TillStrip } from "@/components/TillStrip";
 import { StatusStrip, type StatusStripState } from "@/components/StatusStrip";
 import { CategoryChips } from "@/components/CategoryChips";
 import { SearchBar } from "@/components/SearchBar";
@@ -38,6 +37,8 @@ const LOW_STOCK_THRESHOLD = 5;
 const AUTOSAVE_DEBOUNCE_MS = 700;
 
 type StoreManagerFieldKey = "addedStock" | "sentOut";
+type CashierFieldKey = "quantitySold";
+type AutosaveFieldKey = StoreManagerFieldKey | CashierFieldKey;
 
 interface LineState {
   tillQuantitySold: number;
@@ -61,14 +62,14 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
 
-  // Store-manager-only autosave state (addedStock/sentOut) — regular
-  // staff's quantitySold field keeps the batch TillStrip Save flow below
-  // untouched, so none of this applies to them.
+  // Per-field autosave state, shared by both roles: store manager owns
+  // addedStock/sentOut (PUT, store-manager branch), cashier owns
+  // quantitySold (PUT, cashier branch) — see app/api/stock-entries/route.ts's
+  // putStoreManagerField()/putCashierField() split.
   const [fieldStates, setFieldStates] = useState<
-    Record<string, Record<StoreManagerFieldKey, ItemEntryFieldSaveState>>
+    Record<string, Partial<Record<AutosaveFieldKey, ItemEntryFieldSaveState>>>
   >({});
   const [pendingSaves, setPendingSaves] = useState(0);
   const [lastAutosaveError, setLastAutosaveError] = useState<string | null>(null);
@@ -143,14 +144,10 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     return total - line.tillQuantitySold - line.sentOut;
   }
 
-  function updateLine(itemId: string, patch: Partial<LineState>) {
-    setLines((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? emptyLine()), ...patch } }));
-  }
-
-  function setFieldState(itemId: string, field: StoreManagerFieldKey, state: ItemEntryFieldSaveState) {
+  function setFieldState(itemId: string, field: AutosaveFieldKey, state: ItemEntryFieldSaveState) {
     setFieldStates((prev) => ({
       ...prev,
-      [itemId]: { ...(prev[itemId] ?? { addedStock: "idle", sentOut: "idle" }), [field]: state },
+      [itemId]: { ...prev[itemId], [field]: state },
     }));
   }
 
@@ -191,6 +188,42 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     [entryDate],
   );
 
+  const saveCashierField = useCallback(
+    async (itemId: string, line: LineState) => {
+      setFieldState(itemId, "quantitySold", "saving");
+      setPendingSaves((n) => n + 1);
+
+      try {
+        const res = await fetch("/api/stock-entries", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entry_date: entryDate,
+            item_id: itemId,
+            till_quantity_sold: line.tillQuantitySold,
+          }),
+        });
+        const body = await res.json();
+
+        if (!res.ok) {
+          setFieldState(itemId, "quantitySold", "error");
+          setLastAutosaveError(body.error ?? "Couldn't save — please try again.");
+          return;
+        }
+
+        setSavedEntries((prev) => ({ ...prev, [itemId]: body.entry }));
+        setFieldState(itemId, "quantitySold", "saved");
+        setLastAutosaveError(null);
+      } catch {
+        setFieldState(itemId, "quantitySold", "error");
+        setLastAutosaveError("Couldn't reach the server — check your connection and try again.");
+      } finally {
+        setPendingSaves((n) => n - 1);
+      }
+    },
+    [entryDate],
+  );
+
   function updateStoreManagerField(itemId: string, field: StoreManagerFieldKey, value: number) {
     const nextLine: LineState = { ...(lines[itemId] ?? emptyLine()), [field]: value };
     setLines((prev) => ({ ...prev, [itemId]: nextLine }));
@@ -204,17 +237,25 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     }, AUTOSAVE_DEBOUNCE_MS);
   }
 
+  function updateCashierField(itemId: string, value: number) {
+    const nextLine: LineState = { ...(lines[itemId] ?? emptyLine()), tillQuantitySold: value };
+    setLines((prev) => ({ ...prev, [itemId]: nextLine }));
+
+    const timerKey = `${itemId}:quantitySold`;
+    if (debounceTimers.current[timerKey]) {
+      clearTimeout(debounceTimers.current[timerKey]);
+    }
+    debounceTimers.current[timerKey] = setTimeout(() => {
+      saveCashierField(itemId, nextLine);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
   useEffect(() => {
     const timers = debounceTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
     };
   }, []);
-
-  const itemCount = useMemo(
-    () => Object.values(lines).reduce((sum, line) => sum + line.tillQuantitySold, 0),
-    [lines],
-  );
 
   const totalValue = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -223,45 +264,6 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
       return sum + line.tillQuantitySold * item.selling_price;
     }, 0);
   }, [items, lines]);
-
-  async function handleSave() {
-    setSaving(true);
-    const payload = {
-      entry_date: entryDate,
-      lines: items.map((item) => {
-        const line = lines[item.id] ?? emptyLine();
-        return {
-          item_id: item.id,
-          till_quantity_sold: line.tillQuantitySold,
-        };
-      }),
-    };
-
-    try {
-      const res = await fetch("/api/stock-entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json();
-
-      if (!res.ok) {
-        setToast({ message: body.error ?? "Couldn't save today's entries", status: "error" });
-        return;
-      }
-
-      const nextSaved: Record<string, StockEntryRow> = {};
-      for (const entry of body.entries as StockEntryRow[]) {
-        nextSaved[entry.item_id] = entry;
-      }
-      setSavedEntries(nextSaved);
-      setToast({ message: "Today's entries saved", status: "success" });
-    } catch {
-      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
-    } finally {
-      setSaving(false);
-    }
-  }
 
   const autosaveStripState: StatusStripState = lastAutosaveError
     ? "error"
@@ -272,25 +274,14 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
         : "idle";
 
   useTillStripSlot(
-    loading || items.length === 0
-      ? null
-      : isStoreManager ? (
-          <StatusStrip
-            state={autosaveStripState}
-            totalValueLabel={`KES ${totalValue.toFixed(2)} sold today`}
-            errorMessage={lastAutosaveError ?? undefined}
-          />
-        ) : (
-          <TillStrip
-            itemCount={itemCount}
-            totalValueLabel={`KES ${totalValue.toFixed(2)}`}
-            onSave={handleSave}
-            saving={saving}
-          />
-        ),
-    isStoreManager
-      ? `${loading}:${items.length}:${autosaveStripState}:${totalValue}`
-      : `${loading}:${items.length}:${itemCount}:${totalValue}:${saving}`,
+    loading || items.length === 0 ? null : (
+      <StatusStrip
+        state={autosaveStripState}
+        totalValueLabel={`KES ${totalValue.toFixed(2)} sold today`}
+        errorMessage={lastAutosaveError ?? undefined}
+      />
+    ),
+    `${loading}:${items.length}:${autosaveStripState}:${totalValue}`,
   );
 
   if (loading) {
@@ -336,7 +327,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
           const opening = openingStockFor(item.id);
           const remaining = remainingStockFor(item.id);
           const isLow = remaining <= LOW_STOCK_THRESHOLD;
-          const states = fieldStates[item.id] ?? { addedStock: "idle", sentOut: "idle" };
+          const states = fieldStates[item.id] ?? {};
 
           const fields: ItemEntryField[] = isStoreManager
             ? [
@@ -347,7 +338,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                   numericInput: {
                     value: line.addedStock,
                     onChange: (next) => updateStoreManagerField(item.id, "addedStock", next),
-                    saveState: states.addedStock,
+                    saveState: states.addedStock ?? "idle",
                   },
                 },
                 {
@@ -358,19 +349,19 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                     onChange: (next) => updateStoreManagerField(item.id, "sentOut", next),
                     max: opening + line.addedStock - line.tillQuantitySold,
                     limitMessage: `Only ${remaining} left`,
-                    saveState: states.sentOut,
+                    saveState: states.sentOut ?? "idle",
                   },
                 },
               ]
             : [
                 {
                   key: "quantitySold",
-                  label: "quantity sold",
-                  stepper: {
+                  label: "Quantity sold",
+                  showLabel: true,
+                  numericInput: {
                     value: line.tillQuantitySold,
-                    onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
-                    max: opening + line.addedStock - line.sentOut,
-                    limitMessage: `Only ${remaining} left`,
+                    onChange: (next) => updateCashierField(item.id, next),
+                    saveState: states.quantitySold ?? "idle",
                   },
                 },
               ];
@@ -381,7 +372,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={isStoreManager ? `Opening: ${opening}` : undefined}
-              availableLabel={isStoreManager ? undefined : `Available: ${remaining}`}
+              availableLabel={`Available: ${remaining}`}
               isLow={isLow}
               fields={fields}
             />

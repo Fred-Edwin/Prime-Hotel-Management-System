@@ -23,6 +23,19 @@ export function serverErrorResponse(error: PostgrestError, context: string) {
  * logging today's till sales.
  */
 export function describeSaveError(error: PostgrestError): { message: string; status: number } {
+  // Distinct from a genuine oversell (below): the store manager hasn't
+  // logged today's "Added stock" for this item yet, so total_stock is
+  // just opening_stock and any till sale looks like it exceeds it —
+  // even though the cashier did nothing wrong. See
+  // docs/01_DATA_MODEL.md §3.4's cashier-autosave writer and
+  // 20260717130000_stock_entry_cashier_autosave.sql (errcode P0002).
+  if (error.code === "P0002" || error.message.includes("not_yet_stocked")) {
+    return {
+      message: "Ask the store manager to log today's added stock first.",
+      status: 409,
+    };
+  }
+
   if (error.message.includes("oversell")) {
     return { message: "That's more than the available stock available.", status: 409 };
   }

@@ -1,0 +1,59 @@
+# Handover prompt — `/entry` regular-staff (cashier) view redesign
+
+Paste the block below as the opening message of a fresh session.
+
+---
+
+**Role:** You are a senior mobile UX/UI designer specializing in enterprise UI/UX design (POS/retail data-entry lens — same lens used for the prior `/entry` store-manager redesign this session continues from).
+
+I need you to apply the same redesign treatment already done for `/entry`'s store-manager view to the **regular-staff ("cashier") view** — the `quantity_sold` field shown when `is_store_manager = false`, per `app/(staff)/entry/EntryClient.tsx`. The store-manager branch of this same file (`isStoreManager` true) is **already done — do not touch it**. Canteen's `/entry` (`app/(staff)/entry/CanteenEntryClient.tsx`) is **out of scope** — do not touch it.
+
+## Context you need
+
+Read `docs/phases/phase9_context.md` once for current repo state if you haven't this session, then:
+- `docs/01_DATA_MODEL.md` §3.4 ("Two writers, one stock figure") — **read this in full before touching `stock_entries` or its write paths.** The store-manager redesign already extended this section twice this week (see the two most-recent inline corrections in §3.4, dated today) — both are directly relevant precedent for this task.
+- `docs/00_ARCHITECTURE.md` §12 (Wastage) — already has a post-launch correction note; `/entry` no longer collects wastage from any role, this is settled, do not re-litigate.
+- `app/(staff)/entry/EntryClient.tsx` in full — the store-manager branch (`isStoreManager` true) is the reference implementation for everything below. The cashier branch (`isStoreManager` false) is what you're changing.
+- `app/api/stock-entries/route.ts` — has `GET`, `POST` (batch, cashier's current save path), and `PUT` (store-manager's per-field autosave, added this week). You'll likely need a new branch or sibling route for the cashier's own autosave — see task 2 below.
+- `supabase/migrations/20260717090000_stock_entry_store_manager_autosave.sql` and `supabase/migrations/20260717093000_preserve_wastage_on_stock_entry_save.sql` — read both in full. These are the two most recent migrations and are the direct precedent for the SQL work this task needs. **Both are already applied to production** (verified via `select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('save_stock_entry','save_canteen_stock_entry','save_stock_entry_store_manager_fields');` — should return exactly 3 rows, one signature each, no duplicates).
+
+## What was already decided (previous session) — implement these as given, do not re-litigate
+
+The user directly approved this list of changes for the cashier view, mapped 1:1 from the store-manager redesign:
+
+1. **Typed numeric input, replacing the stepper.** `quantity_sold` moves from `Stepper` to the existing `numericInput` variant on `ItemEntryField` (`components/ItemEntryCard/ItemEntryCard.tsx` — already built, no component changes needed, just usage), with `showLabel: true` so "Quantity sold" is visible above it — same visual pattern as the store manager's "Added stock" field.
+
+2. **Per-field autosave, replacing the batch Save button.** The cashier's `quantity_sold` should autosave on a debounced change (same `AUTOSAVE_DEBOUNCE_MS = 700` pattern already in `EntryClient.tsx` for the store-manager fields), not require a manual "Save" tap. This needs a **new single-line save path** — the existing `PUT /api/stock-entries` (added this week) only handles the store manager's `added_stock`/`sent_out`; `till_quantity_sold` is a different field owned by a different role and needs its own branch of that route (or a cleanly separated sibling handler — your call, but keep the RBAC boundary explicit: store-manager-only vs cashier-only, never both through one undifferentiated code path).
+
+3. **Remove `TillStrip`, replace with `StatusStrip`** for the cashier view — same status-only strip (saving/saved/error + running total) the store manager already sees, instead of a Save button. `EntryClient.tsx` already imports and uses `StatusStrip` for the store-manager branch (see the `useTillStripSlot` call near the bottom of the file) — extend that same conditional to also route cashiers through `StatusStrip`, meaning **`TillStrip` becomes fully unused in this file** once this is done. Check whether `TillStrip` is used anywhere else in the app before deleting the component itself; if it's still used elsewhere (e.g. Orders — check `app/(staff)/orders/`), leave the component but remove the import/usage from `EntryClient.tsx`.
+
+4. **Drop the redundant "Available: X" / "Only X left" messaging.** Currently the cashier sees both a persistent `availableLabel="Available: {remaining}"` on the card AND a separate `limitMessage="Only {remaining} left"` on the stepper (same number, said twice, in two different visual registers — a static label plus a transient shake-toast). Keep exactly one of these; the user has not specified which, so use judgment (the persistent label is probably more useful than a message that only appears momentarily on rejection — but flag this specific choice back to the user before finalizing, it's a real design call, not an obvious one).
+
+## The first-writer oversell bug — confirmed root cause, confirmed fix approach
+
+**This is a real, currently-live correctness bug in production, not a hypothetical.** Read `docs/01_DATA_MODEL.md` §3.4's two most recent corrections (both dated today, both about this exact area) before touching anything — they document the full mechanism this bug lives in.
+
+**The bug:** `stock_entries.added_stock`/`sent_out` are now "preserve if not provided" (default `null` = keep whatever the row already has) on `save_stock_entry()`, so the store manager's autosave and the cashier's till save can't clobber each other. But this means: if a cashier is the **very first person of the day** to touch a given item's row (no row exists yet, store manager hasn't entered "Added stock" yet), `added_stock` resolves to `0` (nothing to preserve), so `total_stock = opening_stock + 0`, and any `till_quantity_sold > 0` gets rejected as an oversell — even though the cashier didn't do anything wrong. The rejection message ("That's more than the available stock available") reads as user error when it's actually a data-ordering/timing issue invisible to the cashier.
+
+**The user has explicitly chosen the fix approach — implement this, do not re-litigate or propose the alternative:**
+
+> Block with a clear message: if `added_stock` is genuinely not yet set today (no row exists yet, or a row exists with `added_stock = 0` and no prior-day carryover implies otherwise), reject the cashier's save with a **specific, correctly-diagnosed message** — something like *"Ask the store manager to log today's added stock first"* — instead of the generic oversell error. **No schema or calculation change** — `total_stock`/oversell math stays exactly as-is. This is purely a better-diagnosed rejection: detect the specific "nothing added yet today" case server-side (in the route handler or the SQL function — your call on which layer, but the message needs access to enough context to distinguish "genuinely oversold" from "nothing added yet today") and return a distinct, clear error instead of the generic oversell message.
+
+The alternative the user did **not** choose (do not implement): silently allowing the till sale against `opening_stock` alone when nothing's been added yet today. This was explicitly rejected in favor of the block-with-clear-message approach.
+
+**Implementation notes to consider, not prescriptive:**
+- The distinguishing signal is probably: no `stock_entries` row exists yet for this item/location/date, or one exists with `added_stock = 0`. Either way, `total_stock = opening_stock` exactly, and the cashier's `till_quantity_sold` alone exceeds it. That's different from a genuine oversell where `added_stock > 0` but the combined total still isn't enough — that case should keep the existing generic oversell message, since it's an accurate diagnosis.
+- `describeSaveError()` in `lib/errors.ts` currently pattern-matches on `error.message.includes("oversell")` to produce the generic message — you likely need either a distinct Postgres exception message/errcode for this specific case (mirroring how `oversell` is currently detected), or a pre-check in the route handler before calling the RPC, whichever is cleaner given the existing `describeSaveError` pattern.
+- This fix applies specifically to the **cashier's new autosave path** (task 2 above) — check whether the same false-rejection risk exists on the existing batch `POST /api/stock-entries` handler too (it likely does, same mechanism, same root cause) and fix both call sites consistently rather than only the new one.
+
+## Process reminders (same discipline as the store-manager session)
+
+- Summarize your understanding back to the user before writing code — restate the four approved changes and the oversell fix approach in your own words, and flag the one open design call (label vs. limitMessage redundancy) explicitly.
+- Any new/changed DB write path needs `pnpm build`, `curl`-based verification (happy path, oversell — both the "genuine oversell" and "nothing added yet" cases distinctly, RBAC), and a visual check via the `verify` skill.
+- **Local Supabase gotcha hit repeatedly last session:** after `npx supabase db reset`, the Kong gateway container sometimes comes up before Auth is ready, causing `scripts/seed-staff.ts` to fail with empty `{}` errors and `/auth/v1/health` to return "invalid response from upstream." Fix: `docker restart supabase_kong_mqtlxuwbjzsjtywhjjtf_Reference_used_in_A`, wait ~5s, retry. Also remember to regenerate `lib/supabase/types.ts` after any SQL function signature change: `npx supabase gen types typescript --db-url "postgresql://postgres:postgres@127.0.0.1:54322/postgres" > lib/supabase/types.ts` (the `--local` flag was unreliable last session against this same "project_id" warning quirk — use `--db-url` directly instead).
+- **If you `create or replace function` with a different parameter list/order, Postgres does NOT drop the old overload** — it leaves both, and every named-argument call becomes ambiguous ("is not unique"). Explicitly `drop function if exists ...(<old signature>)` first, by exact type list. This bit the previous session twice.
+- Update `docs/01_DATA_MODEL.md` §3.4 (and `00_ARCHITECTURE.md` if the architecture-level framing changes) in the same piece of work — this is a genuine extension of the two-writers-one-row mechanism (now arguably three writers: store manager, cashier, orders), not a cosmetic change.
+- Write or extend a `scripts/acceptance/post-launch-*.mjs` script for the new cashier autosave path, same bar as `scripts/acceptance/post-launch-store-autosave.mjs` (read that file as the template — it already covers the exact test shape needed: happy path, oversell, RBAC, concurrent first-writer race).
+- This is post-launch maintenance work, not a new phase — no `docs/phases/phaseX_context.md` file needed, per `CLAUDE.md`.
+- **Deploy is manual, not automatic.** A push to `main` does NOT auto-deploy. After committing and pushing, the user will ask you to run `vercel --prod --yes` explicitly (project already linked via `.vercel/project.json`) — do not assume Vercel's GitHub integration handles this.
+- **Migrations must be applied to production manually via the Supabase SQL Editor**, one file at a time, in filename order — there is no CI/automatic migration runner for this project currently. After writing new migration file(s), tell the user exactly which file(s) to paste into the SQL Editor and in what order, and give them a verification query (mirroring the `pg_proc`/`regprocedure` query used last session) to confirm no duplicate function overloads resulted.
