@@ -13,8 +13,9 @@ import { Icon } from "@/components/Icon";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { MetricCard } from "@/components/MetricCard";
 import { PlaceholderStat } from "@/components/PlaceholderStat";
+import { Select } from "@/components/Select";
 import { Toast } from "@/components/Toast";
-import { isLowStock } from "@/lib/calculations";
+import { isLowStock, nairobiToday } from "@/lib/calculations";
 import catalogStyles from "../../catalog.module.css";
 import styles from "./ledger.module.css";
 
@@ -105,6 +106,7 @@ type StockEntryEditTarget = {
 
 type IngredientEntryEditTarget = {
   kind: "ingredient_entries";
+  mode: "edit" | "create";
   ingredient_id: string;
   ingredient_name: string;
   unit: string;
@@ -115,6 +117,12 @@ type IngredientEntryEditTarget = {
 };
 
 type EditTarget = StockEntryEditTarget | IngredientEntryEditTarget;
+
+interface IngredientCatalogRow {
+  id: string;
+  name: string;
+  unit: string;
+}
 
 export function LedgerClient() {
   const [period, setPeriod] = useState<Period>("today");
@@ -134,6 +142,7 @@ export function LedgerClient() {
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [isTableMaximized, setIsTableMaximized] = useState(false);
+  const [ingredientCatalog, setIngredientCatalog] = useState<IngredientCatalogRow[]>([]);
 
   function openStockEntryEdit(row: ItemLedgerRow) {
     setEditError(null);
@@ -160,6 +169,7 @@ export function LedgerClient() {
     setEditError(null);
     setEditTarget({
       kind: "ingredient_entries",
+      mode: "edit",
       ingredient_id: row.ingredient_id,
       ingredient_name: row.ingredient_name,
       unit: row.unit,
@@ -175,6 +185,29 @@ export function LedgerClient() {
     });
   }
 
+  // "Log today's ingredient entry as admin" (docs/backlog/07_admin_ux_sweep.md
+  // item 6) — the same PATCH /api/dashboard/ledger/entry route already
+  // creates a brand-new row when none exists yet for the given
+  // ingredient/date (see that route's editIngredientEntry doc comment), so
+  // this reuses the identical edit form/submit path with an empty starting
+  // ingredient selection instead of adding a second write path.
+  function openIngredientEntryCreate() {
+    setEditError(null);
+    const first = ingredientCatalog[0];
+    setEditTarget({
+      kind: "ingredient_entries",
+      mode: "create",
+      ingredient_id: first?.id ?? "",
+      ingredient_name: first?.name ?? "",
+      unit: first?.unit ?? "",
+      entry_date: nairobiToday(),
+      received: 0,
+      quantity_used: 0,
+      wastage: 0,
+    });
+    setEditForm({ received: 0, quantity_used: 0, wastage: 0 });
+  }
+
   function closeEdit() {
     setEditTarget(null);
     setEditError(null);
@@ -182,6 +215,10 @@ export function LedgerClient() {
 
   async function submitEdit() {
     if (!editTarget) return;
+    if (editTarget.kind === "ingredient_entries" && editTarget.mode === "create" && !editTarget.ingredient_id) {
+      setEditError("Select an ingredient first.");
+      return;
+    }
     setEditSubmitting(true);
     setEditError(null);
 
@@ -217,8 +254,9 @@ export function LedgerClient() {
         setEditError(json.error ?? "Couldn't save — please try again.");
         return;
       }
+      const wasCreate = editTarget.kind === "ingredient_entries" && editTarget.mode === "create";
       setEditTarget(null);
-      setToast("Entry updated");
+      setToast(wasCreate ? "Entry logged" : "Entry updated");
       setReloadKey((key) => key + 1);
     } catch {
       setEditError("Couldn't reach the server — check your connection and try again.");
@@ -279,6 +317,29 @@ export function LedgerClient() {
       cancelled = true;
     };
   }, [period, location, customRange, reloadKey]);
+
+  // Ingredient catalog for the "New ingredient entry" picker — admin-only,
+  // location-independent (ingredients aren't scoped by location), loaded
+  // once rather than re-fetched per period/location change like the ledger
+  // data above.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalog() {
+      try {
+        const res = await fetch("/api/ingredients");
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        if (!cancelled) setIngredientCatalog(json.ingredients ?? []);
+      } catch {
+        // Non-fatal — the "New entry" picker just starts empty; the rest
+        // of the Ledger screen doesn't depend on this.
+      }
+    }
+    loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function selectPeriod(value: Period) {
     setCustomRange(null);
@@ -709,12 +770,20 @@ export function LedgerClient() {
               <div className={styles.sectionHeader}>
                 <h2 className={styles.sectionTitle}>Ingredients</h2>
                 <LowStockIndicator variant="pill" label="Restaurant only" />
+                <Button
+                  variant="secondary"
+                  className={styles.newEntryButton}
+                  onClick={openIngredientEntryCreate}
+                  disabled={ingredientCatalog.length === 0}
+                >
+                  New entry
+                </Button>
               </div>
               {data.ingredients.length === 0 ? (
                 <EmptyState
                   icon={<Icon name="summary" size={48} />}
                   heading="No ingredient entries this period"
-                  body="Once the store manager saves ingredient receiving/usage, they'll show up here."
+                  body="Once the store manager saves ingredient receiving/usage, they'll show up here. Or log one yourself with New entry above."
                 />
               ) : (
                 <>
@@ -751,7 +820,11 @@ export function LedgerClient() {
                           </thead>
                           <tbody>
                             {filteredIngredients.map((row) => (
-                              <tr key={`${row.entry_date}-${row.ingredient_id}`}>
+                              <tr
+                                key={`${row.entry_date}-${row.ingredient_id}`}
+                                className={styles.editableRow}
+                                onClick={() => openIngredientEntryEdit(row)}
+                              >
                                 <td>{row.entry_date}</td>
                                 <td>{row.ingredient_name}</td>
                                 <td className={catalogStyles.numeric}>
@@ -783,7 +856,10 @@ export function LedgerClient() {
                                   <button
                                     type="button"
                                     className={styles.editButton}
-                                    onClick={() => openIngredientEntryEdit(row)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openIngredientEntryEdit(row);
+                                    }}
                                     aria-label={`Edit ${row.ingredient_name} entry`}
                                   >
                                     <Icon name="edit" size={16} />
@@ -904,7 +980,9 @@ export function LedgerClient() {
           editTarget?.kind === "stock_entries"
             ? `Edit ${editTarget.item_name} — ${editTarget.entry_date}`
             : editTarget?.kind === "ingredient_entries"
-              ? `Edit ${editTarget.ingredient_name} — ${editTarget.entry_date}`
+              ? editTarget.mode === "create"
+                ? "New ingredient entry"
+                : `Edit ${editTarget.ingredient_name} — ${editTarget.entry_date}`
               : "Edit entry"
         }
         footer={
@@ -921,12 +999,42 @@ export function LedgerClient() {
         {editTarget && (
           <div className={styles.editForm}>
             <p className={styles.editFormMeta}>
-              Only quantities are editable here — prices stay locked to what was recorded at the
-              time. If this isn&apos;t the most recent entry for this{" "}
-              {editTarget.kind === "stock_entries" ? "item" : "ingredient"}, saving will be
-              rejected.
+              {editTarget.kind === "ingredient_entries" && editTarget.mode === "create"
+                ? "Logs a new receiving/usage entry the same way the store manager would from /store. Buying price is taken from the current ingredient catalog. If an entry already exists for this ingredient and date, saving will update it instead — and is still blocked if it isn't the most recent entry."
+                : "Only quantities are editable here — prices stay locked to what was recorded at the time. If this isn't the most recent entry for this " +
+                  (editTarget.kind === "stock_entries" ? "item" : "ingredient") +
+                  ", saving will be rejected."}
             </p>
             {editError && <p className={catalogStyles.formError}>{editError}</p>}
+
+            {editTarget.kind === "ingredient_entries" && editTarget.mode === "create" && (
+              <>
+                <Select
+                  label="Ingredient"
+                  value={editTarget.ingredient_id}
+                  options={ingredientCatalog.map((ing) => ({
+                    value: ing.id,
+                    label: `${ing.name} (${ing.unit})`,
+                  }))}
+                  onChange={(e) => {
+                    const selected = ingredientCatalog.find((ing) => ing.id === e.target.value);
+                    setEditTarget({
+                      ...editTarget,
+                      ingredient_id: e.target.value,
+                      ingredient_name: selected?.name ?? "",
+                      unit: selected?.unit ?? "",
+                    });
+                  }}
+                />
+                <Input
+                  label="Date"
+                  type="date"
+                  value={editTarget.entry_date}
+                  max={nairobiToday()}
+                  onChange={(e) => setEditTarget({ ...editTarget, entry_date: e.target.value })}
+                />
+              </>
+            )}
 
             {editTarget.kind === "stock_entries" ? (
               <>

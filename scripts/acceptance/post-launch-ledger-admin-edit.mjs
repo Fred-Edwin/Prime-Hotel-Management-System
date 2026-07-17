@@ -287,6 +287,53 @@ async function main() {
     psql(`delete from stock_entries where item_id = '${newItemId}' and location = 'restaurant' and entry_date = '${TODAY}';`);
   }
 
+  console.log(
+    "\n=== TEST 7: Admin can log a brand-new ingredient_entries row (docs/backlog/07_admin_ux_sweep.md item 6, Ledger's 'New entry') ===",
+  );
+  {
+    const newIngredientId = psql(`select id from ingredients where name = 'Rice';`); // untouched fixture ingredient
+    psql(`delete from ingredient_entries where ingredient_id = '${newIngredientId}' and entry_date = '${TODAY}';`);
+    const adminId = psql(`select id from users where name = 'WaPrecious';`);
+    const riceBuyingPrice = psql(`select buying_price from ingredients where name = 'Rice';`);
+
+    const res = await api(admin, "PATCH", "/api/dashboard/ledger/entry", {
+      table: "ingredient_entries",
+      ingredient_id: newIngredientId,
+      entry_date: TODAY,
+      received: 25,
+      quantity_used: 4,
+      wastage: 1,
+    });
+    check("Creating a new ingredient entry as admin succeeds (200)", res.status === 200, res);
+    check(
+      "created_by is the admin's own id for a genuinely new row (no prior author to preserve)",
+      res.body?.entry?.created_by === adminId,
+      res.body,
+    );
+    // opening_stock (0, no prior row) + received(25) - quantity_used(4) - wastage(1) = 20
+    check("closing_stock derived correctly (0 + 25 - 4 - 1 = 20)", res.body?.entry?.closing_stock === 20, res.body);
+    check(
+      "buying_price_snapshot pulled from the current ingredient catalog, not left null/zero",
+      res.body?.entry?.buying_price_snapshot === Number(riceBuyingPrice),
+      res.body,
+    );
+
+    const audit = psql(
+      `select actor_id, changes from audit_log where action = 'ingredient_entry.admin_edit' and target_id = '${res.body?.entry?.id}' order by created_at desc limit 1;`,
+    );
+    const [auditActor, auditChangesRaw] = audit.split("|");
+    check("New-entry creation also writes an audit_log entry, actor = admin", auditActor === adminId, audit);
+    const auditChanges = JSON.parse(auditChangesRaw);
+    check(
+      "Audit entry's before is null (nothing existed prior) and after matches what was saved",
+      auditChanges.before === null && auditChanges.after?.received === 25,
+      auditChanges,
+    );
+
+    psql(`delete from ingredient_entries where ingredient_id = '${newIngredientId}' and entry_date = '${TODAY}';`);
+    psql(`delete from audit_log where action = 'ingredient_entry.admin_edit' and target_id = '${res.body?.entry?.id}';`);
+  }
+
   cleanup();
   const stockLeftover = psql(
     `select count(*) from stock_entries where item_id = '${itemId}' and location = 'restaurant' and entry_date in ('${YESTERDAY}', '${TODAY}');`,

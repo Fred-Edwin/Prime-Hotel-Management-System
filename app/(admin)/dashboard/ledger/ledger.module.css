@@ -71,6 +71,10 @@
   gap: var(--space-2);
 }
 
+.newEntryButton {
+  margin-left: auto;
+}
+
 .sectionTitle {
   font-family: var(--font-family-structural);
   font-size: var(--font-size-heading-md);
