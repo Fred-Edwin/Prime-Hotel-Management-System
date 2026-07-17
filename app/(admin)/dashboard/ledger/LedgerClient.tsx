@@ -117,7 +117,7 @@ type IngredientEntryEditTarget = {
 type EditTarget = StockEntryEditTarget | IngredientEntryEditTarget;
 
 export function LedgerClient() {
-  const [period, setPeriod] = useState<Period>("week");
+  const [period, setPeriod] = useState<Period>("today");
   const [location, setLocation] = useState<Location>("");
   const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
   const [rangeDraft, setRangeDraft] = useState({ from: "", to: "" });
@@ -133,6 +133,7 @@ export function LedgerClient() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [isTableMaximized, setIsTableMaximized] = useState(false);
 
   function openStockEntryEdit(row: ItemLedgerRow) {
     setEditError(null);
@@ -234,6 +235,19 @@ export function LedgerClient() {
       return next;
     });
   }
+
+  // Escape backs out of maximized-table mode — standard fullscreen-toggle
+  // convention (docs/backlog/07_admin_ux_sweep.md's "expand/maximize the
+  // table" ask), matching how Modal (components/Modal) already handles
+  // Escape elsewhere in this app rather than inventing a new convention.
+  useEffect(() => {
+    if (!isTableMaximized) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setIsTableMaximized(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isTableMaximized]);
 
   useEffect(() => {
     let cancelled = false;
@@ -381,7 +395,40 @@ export function LedgerClient() {
                 body="Once staff save till or canteen entries, they'll show up here row by row."
               />
             ) : (
-              <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+              <>
+                {isTableMaximized && (
+                  <div className={styles.maximizeBackdrop} onClick={() => setIsTableMaximized(false)} />
+                )}
+                <Card
+                  className={[
+                    catalogStyles.tableCard,
+                    styles.ledgerTableCard,
+                    isTableMaximized ? styles.ledgerTableCardMaximized : "",
+                    catalogStyles.desktopOnly,
+                  ].join(" ")}
+                >
+                  {/* Maximize/restore toggle — docs/backlog/07_admin_ux_sweep.md's
+                      "the table takes up such a small part of the screen" ask,
+                      redesigned per direct human feedback from a labeled
+                      bordered-pill button (felt heavy) to an icon-only ghost
+                      button sitting in the card's own top-right corner —
+                      matching the window-control convention of Notion/
+                      Airtable/Linear's own data tables rather than reading as
+                      a separate toolbar bolted above the table. Lives inside
+                      the Card (not a sibling above it) so it rides along with
+                      the Card's own position: fixed when maximized instead of
+                      needing its own separate fixed-position handling. */}
+                  <div className={styles.maximizeButtonShell}>
+                    <button
+                      type="button"
+                      className={styles.maximizeButton}
+                      onClick={() => setIsTableMaximized((prev) => !prev)}
+                      aria-label={isTableMaximized ? "Restore table size" : "Maximize table"}
+                      title={isTableMaximized ? "Restore table size (Esc)" : "Maximize table"}
+                    >
+                      <Icon name={isTableMaximized ? "collapse" : "expand"} size={16} />
+                    </button>
+                  </div>
                 <table
                   className={[
                     catalogStyles.table,
@@ -440,10 +487,10 @@ export function LedgerClient() {
                         >
                           <td className={styles.stickyCol}>{row.entry_date}</td>
                           <td className={styles.stickyColItem}>{row.item_name}</td>
-                          <td className={styles.locationCell}>
+                          <td className={[styles.locationCell, styles.groupWashIdentity].join(" ")}>
                             {row.location === "restaurant" ? "Restaurant" : "Canteen"}
                           </td>
-                          <td>
+                          <td className={styles.groupWashIdentity}>
                             <PlaceholderStat
                               label="Staff on shift"
                               reason="Coming with the planned lightweight clock-in feature — not built yet, so this column isn't wired to real attendance data."
@@ -482,21 +529,36 @@ export function LedgerClient() {
                             </span>
                           </td>
                           <td
-                            className={[catalogStyles.numeric, styles.numericStrong, styles.groupDividerStart].join(
-                              " "
-                            )}
+                            className={[
+                              catalogStyles.numeric,
+                              styles.numericStrong,
+                              styles.groupDividerStart,
+                              styles.groupWashValue,
+                            ].join(" ")}
                           >
                             <span className={row.sales_value > 0 ? styles.salesValuePositive : undefined}>
                               {money(row.sales_value)}
                             </span>
                           </td>
-                          <td className={[catalogStyles.numeric, styles.numericStrong].join(" ")}>
+                          <td
+                            className={[catalogStyles.numeric, styles.numericStrong, styles.groupWashValue].join(
+                              " "
+                            )}
+                          >
                             {money(row.cost_value)}
                           </td>
-                          <td className={[catalogStyles.numeric, styles.numericStrong].join(" ")}>
+                          <td
+                            className={[catalogStyles.numeric, styles.numericStrong, styles.groupWashValue].join(
+                              " "
+                            )}
+                          >
                             {money(row.closing_stock_value)}
                           </td>
-                          <td className={[catalogStyles.numeric, styles.numericStrong].join(" ")}>
+                          <td
+                            className={[catalogStyles.numeric, styles.numericStrong, styles.groupWashValue].join(
+                              " "
+                            )}
+                          >
                             <span className={row.wastage_value > 0 ? styles.wastageValueNotable : undefined}>
                               {money(row.wastage_value)}
                             </span>
@@ -519,7 +581,8 @@ export function LedgerClient() {
                     })}
                   </tbody>
                 </table>
-              </Card>
+                </Card>
+              </>
             )}
 
             {/* Mobile collapsible-card treatment (<600px), matching the

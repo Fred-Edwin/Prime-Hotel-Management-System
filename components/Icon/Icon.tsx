@@ -32,7 +32,9 @@ export type IconName =
   | "chevron-right"
   | "more"
   | "history"
-  | "edit";
+  | "edit"
+  | "expand"
+  | "collapse";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -197,6 +199,19 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M15.5 4.5 19.5 8.5 8 20H4v-4Z" strokeLinejoin="round" />
       <path d="m13.5 6.5 4 4" />
+    </>
+  ),
+  // Expand — four corner arrows pointing outward, maximize-to-fullscreen
+  expand: (
+    <>
+      <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" />
+    </>
+  ),
+  // Collapse — four corner arrows pointing inward, the "expand" affordance's
+  // toggled-back state
+  collapse: (
+    <>
+      <path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" />
     </>
   ),
 };

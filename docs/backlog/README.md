@@ -12,5 +12,8 @@ Each item has its own standalone brief in this folder. They are **not** sequence
 | 04 | [Admin acting as any staff role](04_admin_impersonation.md) | Yes — flag for phase-style treatment | Recommend after 03 |
 | 05 | [Admin-only historical-entry edit](05_admin_historical_edit.md) | Yes — flag for phase-style treatment | Recommend after 03 |
 | 06 | [Staff hard-delete semantics](06_staff_hard_delete.md) | No — small, self-contained | None |
+| 07 | [Admin UX sweep (bottom nav, Ledger, Audit Log, Store-for-admin, help, Sidebar)](07_admin_ux_sweep.md) | Item 6 only, maybe — rest are normal fixes | None; item 6 overlaps 04's original scope |
 
 Each brief is written to be handed to a fresh agent/session with no other context loaded beyond this repo's `CLAUDE.md`. When picking one up, read `docs/phases/phase9_context.md` for current repo state per the standard read order, then the brief itself.
+
+**03 and 04 have both actually shipped** despite this table's original framing as deferred — see their own status lines for what's real.

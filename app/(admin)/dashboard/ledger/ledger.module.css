@@ -153,12 +153,33 @@
    first. A visible divider (.groupDivider) runs the full table height at
    each boundary so the grouping stays legible while scanning down rows,
    not just across the header. */
+/* height + line-height + !important on padding actually enforce 28px —
+   catalog.module.css's shared `.table th` rule (padding: var(--space-2)
+   var(--space-3), i.e. 8px top/bottom) is a descendant selector
+   (specificity 0,1,1), which beats this module's plain `.groupHeader`
+   class selector (0,1,0) regardless of source order, so this rule's own
+   `padding: 0 var(--space-3)` was silently losing and the row rendered
+   at 41-45px instead of the 28px the column header row below assumes
+   (see that rule's `top: 28px`, hardcoded to sit directly beneath this
+   one). The result: a 13-17px gap opened between the two sticky header
+   rows that body content — including the horizontally-sticky Date/Item
+   columns, which have no vertical stickiness of their own — showed
+   through, producing a stray row-fragment overlapping the header on
+   scroll. Found via the verify skill against a live page, matching
+   docs/backlog/07_admin_ux_sweep.md item 3's original screenshot (one
+   row further into the scroll). !important is the pragmatic fix for a
+   cross-module specificity fight rather than restructuring
+   catalog.module.css's shared table styles, which every other catalog
+   table (Items/Ingredients/Delivery/Staff) also depends on. */
 .groupHeader {
   position: sticky;
   top: 0;
   z-index: 3;
   height: 28px;
+  line-height: 28px;
   box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
   text-align: center;
   font-family: var(--font-family-structural);
   font-weight: var(--font-weight-bold);
@@ -169,7 +190,7 @@
   background: var(--color-surface-sunken);
   border: 1px solid var(--color-border-default);
   border-top: none;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-3) !important;
 }
 
 .groupHeaderIdentity {
@@ -196,6 +217,116 @@
   border-left: 2px solid var(--color-border-default);
 }
 
+/* Bounds the items table's own Card so it becomes a real internal scroll
+   container, not just a content-sized box that grows until the *page*
+   has to scroll instead. Without this, .tableCard's overflow-x: auto
+   (catalog.module.css) computes overflow-y as auto too (per the CSS
+   overflow-x/y interaction: any non-visible axis forces the other axis's
+   default off "visible"), making the Card *technically* a scroll
+   container — but since nothing constrains its height, it never actually
+   needs to scroll internally; the outer page scrolls instead, and the
+   sticky thead (which sticks relative to this Card) scrolls away with
+   it. Confirmed via the verify skill: on a real viewport with more rows
+   than fit, headers vanished off-screen with only data rows visible —
+   this reproduced docs/backlog/07_admin_ux_sweep.md item 3's screenshot
+   exactly. calc() leaves room for the top bar + page header + summary
+   strip above it so this card scrolls on its own without pushing the
+   whole page into a second, competing scroll context.
+
+   Raised from 340px to 220px of reserved space (i.e. a taller table) per
+   direct human feedback that the default table felt too small relative
+   to the empty space around it — the reserved amount is still enough to
+   keep the summary strip and page header from being pushed off, just
+   less conservative than the original estimate. */
+.ledgerTableCard {
+  position: relative;
+  max-height: calc(100dvh - 220px);
+  overflow-y: auto;
+}
+
+/* Icon-only maximize/restore control, redesigned per direct human
+   feedback away from a labeled bordered-pill button sitting in a
+   separate toolbar above the table (felt heavy) — now a small ghost
+   button anchored to the table Card's own top-right corner, matching
+   the window-control convention data-table products (Notion, Airtable,
+   Linear) use for this exact affordance.
+
+   The button is a JSX sibling of <table>, both inside .ledgerTableCard
+   — the same element that scrolls internally in both axes (see that
+   rule's own comment). A plain position: absolute here would still
+   scroll away with the table content, since the button lives inside
+   the same scrolling box it's absolutely positioned against; it needs
+   position: sticky (not absolute) with both top and right set, which
+   pins it to the *visible* top-right corner of .ledgerTableCard's own
+   viewport as the user scrolls, the same mechanism already used for
+   the table's sticky header cells. z-index 6 (above thead's isolated
+   z-index 5, see that rule's own comment on the stacking-context fix)
+   keeps it clickable over the sticky header rather than just visually
+   on top of it. Wrapped in its own positioning shell (.maximizeButtonShell)
+   so the button's own size doesn't force the table wider — a sticky
+   element with `float`/inline layout inside a table-adjacent flow can
+   otherwise distort column widths. */
+.maximizeButtonShell {
+  position: sticky;
+  top: 0;
+  left: 100%;
+  width: 0;
+  height: 0;
+  z-index: 6;
+}
+
+.maximizeButton {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-elevation-1);
+}
+
+.maximizeButton:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-primary);
+}
+
+/* Dims the rest of the page behind the maximized table, same treatment
+   Modal (components/Modal) already uses for its own overlay — reusing
+   an established pattern rather than inventing a new one for this
+   screen. Click-to-dismiss, same as a modal backdrop. */
+.maximizeBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(27, 0, 43, 0.32);
+}
+
+/* Maximized mode: the table's own Card lifts out of the page's normal
+   flow entirely (position: fixed, near-fullscreen inset) rather than
+   just growing .ledgerTableCard's max-height within the existing
+   layout — per the human's explicit ask to hide the top sections
+   (summary strip, page header, sidebar/top bar) too, not just claim
+   more of the space already left over around the table. z-index sits
+   above .maximizeBackdrop (199) and above AdminShell's own sticky
+   sidebar/top bar (var(--z-index-sticky), 200) so the maximized table
+   is genuinely on top of everything, matching a real fullscreen/
+   maximize affordance rather than a partial one. */
+.ledgerTableCardMaximized {
+  position: fixed;
+  inset: var(--space-5);
+  z-index: 201;
+  max-height: none;
+  height: auto;
+  box-shadow: var(--shadow-elevation-2);
+}
+
 /* Carbon-style dense grid, matching catalog.module.css's .table pilot —
    tighter rows than the default catalog tables since Ledger is the
    longest table in the admin (a month of both locations can run 60+
@@ -212,6 +343,25 @@
   min-width: 1500px;
   border-collapse: separate;
   border-spacing: 0;
+}
+
+/* Forces <thead> into its own stacking context above the whole <tbody>,
+   not just individual sticky cells above individual sticky cells. Table
+   rows can each become their own implicit stacking context, which makes
+   z-index comparisons between a <thead> cell and a <tbody> cell
+   unreliable across row boundaries — in practice this let a scrolled-up
+   body row's sticky Date/Item cell (position: sticky; left: 0, no top —
+   only meant to stick horizontally) visually paint on top of the sticky
+   group-header row above it once the two occupied overlapping y-ranges
+   during scroll, producing a stray row-fragment glitch matching the
+   human's screenshot. isolation: isolate + a z-index above every
+   possible tbody z-index (tbody cells top out at 1) settles this
+   deterministically for the whole section at once, rather than chasing
+   the interaction cell-by-cell. */
+.ledgerTable thead {
+  position: relative;
+  isolation: isolate;
+  z-index: 5;
 }
 
 .ledgerTableSparse {
@@ -245,9 +395,38 @@
   background: var(--color-surface-page);
 }
 
-.ledgerTable tbody tr:nth-child(even) td.stickyCol,
-.ledgerTable tbody tr:nth-child(even) td.stickyColItem {
-  background: var(--color-surface-page);
+/* .stickyCol/.stickyColItem's own even-row zebra rule lives further
+   down, next to their base declaration — those two columns sit in the
+   Identity group-wash zone too, so their zebra tint is pre-blended with
+   the wash tint rather than plain --color-surface-page (see the comment
+   there). */
+
+/* Column-group background wash, carried down from the header's existing
+   Identity/Movement/Value tint (.groupHeaderIdentity/Movement/Value
+   above) into the body rows — docs/backlog/07_admin_ux_sweep.md item 4.
+   Previously the group tint existed only in the header; scrolled past
+   it, a 15-column row gave no visual cue which group a given cell
+   belonged to. A flat background swap per group would fight the
+   existing zebra-stripe (this table's primary row-scanning aid), so
+   this uses color-mix() to lay a faint, translucent wash of the same
+   --color-surface-sunken token used in the header on top of whatever
+   the zebra/hover state already painted — both systems compose instead
+   of one overriding the other. No new colors: same token as the header
+   tint, just blended at low opacity rather than used flat. Movement
+   (the middle group) is left unwashed, matching the header's own
+   raised/sunken/raised-adjacent alternation, so the three groups still
+   read as alternating rather than two competing washes. */
+.groupWashIdentity {
+  background-color: color-mix(in srgb, var(--color-surface-sunken) 35%, transparent);
+}
+
+.groupWashValue {
+  background-color: color-mix(in srgb, var(--color-surface-sunken) 35%, transparent);
+}
+
+.ledgerTable tbody tr:nth-child(even) td.groupWashIdentity,
+.ledgerTable tbody tr:nth-child(even) td.groupWashValue {
+  background-color: color-mix(in srgb, var(--color-surface-sunken) 55%, var(--color-surface-page));
 }
 
 /* Column header row sticks directly beneath the group header row — the
@@ -255,7 +434,12 @@
    row's offset both anchor to the scroll container, not to each other. */
 .ledgerTable thead tr:nth-child(2) th {
   position: sticky;
-  top: 28px;
+  /* 29px, not 28 — .groupHeader's declared 28px height plus its own
+     1px border (box-sizing: border-box normally absorbs this, but a
+     sub-pixel rounding remainder was still measurable live). Verified
+     via the verify skill, not assumed — see .groupHeader's comment for
+     the fuller story of why this offset needs to be exact. */
+  top: 29px;
   z-index: 2;
   padding: var(--space-1) var(--space-2);
 }
@@ -268,6 +452,15 @@
    onto two lines inside a content-sized sticky column, which silently
    inflates every row's height — this was the actual cause of the
    table reading as "still not compact enough," not the row padding. */
+/* Solid (not translucent) tint on the sticky Identity columns — these
+   sit in the group-wash zone (.groupWashIdentity) too, but being
+   position: sticky they must stay fully opaque to occlude the columns
+   scrolling beneath them, so a color-mix() wash over transparent
+   doesn't work here the way it does on the table's ordinary cells.
+   color-mix() against the *opaque* zebra token instead, pre-blended to
+   the same visual weight the translucent wash produces elsewhere in the
+   Identity/Value groups, keeps the two sticky columns visually
+   consistent with the rest of their group without losing opacity. */
 .stickyCol {
   position: sticky;
   left: 0;
@@ -275,7 +468,7 @@
   width: 96px;
   min-width: 96px;
   white-space: nowrap;
-  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--color-surface-sunken) 35%, var(--color-surface-raised));
 }
 
 .stickyColItem {
@@ -283,8 +476,13 @@
   left: 96px;
   z-index: 1;
   white-space: nowrap;
-  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--color-surface-sunken) 35%, var(--color-surface-raised));
   border-right: 2px solid var(--color-border-default);
+}
+
+.ledgerTable tbody tr:nth-child(even) td.stickyCol,
+.ledgerTable tbody tr:nth-child(even) td.stickyColItem {
+  background: color-mix(in srgb, var(--color-surface-sunken) 55%, var(--color-surface-page));
 }
 
 thead .stickyCol,

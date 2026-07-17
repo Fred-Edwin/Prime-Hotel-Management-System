@@ -1,6 +1,6 @@
 # System-wide audit/event log
 
-**Status:** Deferred at Phase 10 scoping. Not started.
+**Status:** Shipped. `audit_log` table (`supabase/migrations/20260716120000_audit_log.sql`), `GET /api/audit-log`, admin-facing screen at `app/(admin)/dashboard/audit-log/`. Scoped to the actions listed below plus `stock_entry.admin_edit`/`ingredient_entry.admin_edit` (added alongside [04_admin_ledger_edit.md](04_admin_ledger_edit.md)). See [07_admin_ux_sweep.md](07_admin_ux_sweep.md) item 5 for further improvements planned on top of this.
 **Depends on:** Nothing to start, but should land **before** [04 (admin-as-staff)](04_admin_impersonation.md) and [05 (admin historical edit)](05_admin_historical_edit.md) — both of those let the admin mutate or impersonate other people's operational data, and shouldn't ship without a trace of who really performed the action.
 **Phase-scale?** Borderline — touches every write path in the app, even if each individual touch is small. Flag this explicitly to the human and confirm whether it warrants its own phase-style plan (own `docs/04_PHASE_PLAN.md` section, own context file) before starting, per `CLAUDE.md`'s guidance on genuinely large post-launch work.
 

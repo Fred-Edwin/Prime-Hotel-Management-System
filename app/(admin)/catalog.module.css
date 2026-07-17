@@ -12,9 +12,18 @@
   color: var(--color-text-primary);
 }
 
+/* border-radius: 0 overrides Card's shared var(--radius-lg) — per direct
+   human feedback, admin data tables (Items/Ingredients/Delivery/Staff/
+   Orders/Audit Log/Ledger, every screen using this class) should read
+   as square-cornered grids, not rounded cards, distinct from Card's
+   other uses elsewhere in the app (MetricCard, form sections, etc.)
+   which keep the rounded treatment. Scoped to .tableCard specifically
+   rather than changing Card.module.css's own default, so this doesn't
+   silently affect every Card usage app-wide. */
 .tableCard {
   padding: 0;
   overflow-x: auto;
+  border-radius: 0;
 }
 
 /* Carbon-style dense data grid (piloted on Items — see catalog table

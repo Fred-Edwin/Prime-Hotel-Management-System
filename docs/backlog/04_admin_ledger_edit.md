@@ -1,6 +1,6 @@
 # Admin direct ledger-row edit (supersedes 04_admin_impersonation.md and 05_admin_historical_edit.md)
 
-**Status:** Design resolved 2026-07-16, not yet implemented.
+**Status:** Shipped. `PATCH /api/dashboard/ledger/entry`, wired into the edit modal in `app/(admin)/dashboard/ledger/LedgerClient.tsx`. Quantities-only, rejects (409) if not the most-recent row, writes an `audit_log` entry per edit.
 **Depends on:** [03 (audit log)](03_audit_log.md) — done. Every edit under this feature must write an audit entry with before/after values, same pattern as the Staff routes.
 **Phase-scale?** Yes — flag explicitly and confirm scope with the human before a large implementation session. Touches `stock_entries`/`ingredient_entries` write paths and the derived-quantity/opening-stock invariants those tables depend on.
 

@@ -1,0 +1,108 @@
+# Admin section UX sweep — bottom nav, Ledger, Audit Log, Store-for-admin, help affordance, Sidebar fixes
+
+**Status:** Scoped and batched — ready to hand each batch to its own agent session.
+**Depends on:** None functionally, but corrects two stale backlog docs in passing (see "Docs to correct" below).
+**Phase-scale?** Batch D (full audit trail) only — see its section. Everything else is normal post-launch work per `CLAUDE.md`'s "Post-launch maintenance work."
+
+This is a working plan for a backlog the human gave in one pass (screenshot: `/dashboard/ledger` with the column header scrolled out of view). Below is corrected/clarified scope for each of the human's 8 original items, then a batch plan grouping them into independent, single-session units of work. **Every batch that touches UI must hold the same "premium" visual bar as the rest of the admin section** — reuse existing tokens/components per `CLAUDE.md`'s design-system rules, run the `02_PATTERNS_AND_CHECKLIST.md` §6 review before calling any batch done, and don't let a "small fix" look visually cheaper or more ad hoc than the screens around it.
+
+---
+
+## What exists today (don't re-derive this)
+
+- **Audit log has already shipped** in a narrow form, despite `docs/backlog/03_audit_log.md` previously saying "Deferred / Not started" (now corrected — see below). Real: `supabase/migrations/20260716120000_audit_log.sql`, `app/api/audit-log/route.ts`, `app/(admin)/dashboard/audit-log/AuditLogClient.tsx`. Currently scoped to only 6 action types: `staff.edit`, `staff.deactivate`, `staff.reactivate`, `staff.pin_reset`, `stock_entry.admin_edit`, `ingredient_entry.admin_edit`. **Batch D below expands this to every write, every role** — that's a materially larger scope than what exists today, not a refinement of it.
+- **Admin direct ledger-row edit has also shipped** (`docs/backlog/04_admin_ledger_edit.md`, now corrected). Real: `PATCH /api/dashboard/ledger/entry`, wired into `LedgerClient.tsx`'s edit modal. Quantities-only, rejected with 409 if not the most-recent row, writes an audit entry.
+- **Admin-acting-as-staff (impersonation) was explicitly superseded** by the ledger-edit approach above (see `04_admin_impersonation.md`'s superseded banner) — don't resurrect "act as" mode without asking the human first, that door was deliberately closed.
+- Ledger's group headers (`.groupHeader`, `ledger.module.css`) already have `position: sticky; top: 0` and the column-header row beneath has `position: sticky; top: 28px` — meaning the sticky-header item may already be substantially built, not a from-scratch feature. See Batch A.
+- `InfoTooltip` (`docs/design/01_COMPONENTS.md` §4.26, `components/InfoTooltip`) already exists — a click/tap `?`-in-circle popover trigger. Right primitive for the help-icon item (Batch E).
+- `PlaceholderStat` is the established pattern for shipping UI ahead of its backend (dashed border, `InfoTooltip` built in) — reuse this, don't invent a new "coming soon" treatment.
+- Ledger's existing column-group header shading (`.groupHeaderIdentity`/`.groupHeaderMovement`/`.groupHeaderValue`, alternating `--color-surface-sunken`/`--color-surface-raised`) is the precedent for Batch B/C's column-background item — it currently exists only in the header row, not carried down through body cells.
+
+---
+
+## Docs to correct
+
+Already done as part of this scoping pass: `docs/backlog/03_audit_log.md` and `docs/backlog/04_admin_ledger_edit.md` status lines corrected to reflect shipped state, `docs/backlog/README.md` table updated. No further action needed here unless Batch D changes 03's shape enough to warrant another status update (it will — see Batch D).
+
+---
+
+## Corrected item-by-item scope
+
+### 1. Bottom nav too congested
+8 nav items (`NAV_ITEMS` in `AdminShell.tsx`) squeeze into one mobile bottom-nav row (<1024px), each getting ~1/8 of viewport width. Fix: primary items stay visible, rest move behind a "More" overflow (the `Icon` set already has a `"more"` glyph, suggesting this was anticipated). **Needs the human to pick which 4–5 items stay primary** before implementation — see Batch B.
+
+### 2. Ledger defaults to Today
+`LedgerClient.tsx:120` — `useState<Period>("week")` → `"today"`. One-line change. Confirm whether this should also apply to Dashboard's own period toggle, or Ledger only.
+
+### 3. Ledger headers stick during vertical scroll
+CSS sticky rules already exist (`.groupHeader`, `thead tr:nth-child(2) th`). The screenshot showing zero visible header suggests either (a) the sticky context isn't actually the scrolling ancestor, or (b) the screenshot is the mobile card layout, which has no header concept at all. **Investigate via the `verify` skill against the live page before touching CSS** — per `CLAUDE.md`'s explicit warning against escalating fix complexity without first confirming root cause.
+
+### 4. Column background shading (corrected)
+Not about number color (red/green for negative/positive) — those already exist and are fine. This is about **column background tinting**, to help the eye track which column group you're in while scanning a 15-column-wide table. Precedent already exists in the header row (`.groupHeaderIdentity`/`Movement`/`Value` alternating tints) but doesn't carry down into the body rows — currently only the even/odd zebra-stripe (`nth-child(even)`) exists there, which stripes by *row*, not by *column group*. Fix: extend a subtle per-group background tint down through body cells too, so a column's group membership is visible at any scroll position, not just at the header. Must stay within existing tokens (`--color-surface-sunken`/`--color-surface-raised`, no new colors) and must still read cleanly layered with the existing row zebra-striping — don't let the two tinting systems fight each other or muddy into an unreadable checkerboard.
+
+### 5. Full audit trail (corrected — significantly bigger than originally scoped)
+Not "the existing 6 admin actions, described better." The human wants **every create/edit by every role** (staff and admin) across every operational table — `stock_entries`, `ingredient_entries`, `orders`, `expenses`, catalog tables — logged, so any discrepancy in the numbers can be traced to exactly who did what and when. This is genuinely phase-scale: it touches every write path in the app, and per the existing `03_audit_log.md` reasoning, a per-route "remember to call the audit helper" discipline is much easier to silently miss a spot on at this scope than at the original 6-action scope — a DB-trigger-based approach (capture automatically, filter noise at read time) is worth seriously reconsidering here even though the original doc leaned toward explicit per-route calls for the smaller scope. See Batch D.
+
+### 6. Admin does what the store manager does
+`/store` (ingredient receiving/usage logging) is gated to `is_store_manager` staff only. The existing superseded-impersonation doc chose "admin edits ledger rows directly" over "admin acts as staff" — but item 6 asks for **creating** new entries (what `/store` does), not editing existing ones (what already shipped). Two real options, needs a human decision, not covered in this pass's batching (see "Not yet batched" below):
+1. Extend the existing ledger-edit modal to also support creating a new row.
+2. Give admin a parallel `/store`-equivalent screen, with RLS widened to accept admin writes on `ingredient_entries`.
+
+### 7. Help icon + tutorial per page
+Start with a static per-page `InfoTooltip`-style popover (reuse the existing component, smallest lift) rather than a guided/spotlight walkthrough (no precedent in this design system, would need its own spec). See Batch E.
+
+### 8. Sidebar design mistakes
+Not enough information yet — human didn't specify which mistakes. Candidate issues identified during this scoping pass (collapsed state hides staff name/role entirely, subtle active-item contrast, undiscoverable collapse toggle) are folded into Batch B, but **should be confirmed against an actual sidebar screenshot from the human before that batch starts**, the same way the Ledger screenshot grounded item 3.
+
+---
+
+## Batch plan
+
+Each batch is sized for one agent session and is internally independent of the others (aside from the shared "premium feel" bar and design-system conformance rules that apply to all of them). Hand each batch's section below directly to a fresh session.
+
+### Batch A — Quick wins — **Done, 2026-07-17**
+- Item 2: Ledger defaults to Today. `LedgerClient.tsx`'s `useState<Period>` initial value changed from `"week"` to `"today"`.
+- Item 3: sticky-header fixed. Root cause (confirmed via the `verify` skill against a live page, not guessed from CSS): `catalog.module.css`'s `.tableCard` sets `overflow-x: auto`, which per the CSS overflow-x/y interaction forces `overflow-y`'s computed value to `auto` too — technically making the Card a scroll container, but with no bounded height it just grows to fit content instead of ever needing to scroll internally. The real scroll was happening on the outer page/`<body>`, and since the sticky `<thead>` sticks relative to `.tableCard`'s own box (not the page), it scrolled away with the page instead of staying pinned — this exactly reproduced the human's original screenshot (rows visible, zero header) once real seeded data was scrolled past viewport height. Fix: new `.ledgerTableCard` class (`ledger.module.css`) adds `max-height: calc(100dvh - 340px); overflow-y: auto;`, composed onto the existing `.tableCard` on the items table's `Card` only (not the shorter ingredients table below it, which doesn't need it). This makes the Card itself the actual scrolling frame, so the sticky header now has a real scroll context to stick against. Verified: header stays pinned scrolled to the very bottom of a 19-row seeded dataset at a 1440×700 viewport (matches the original screenshot's apparent viewport), mobile card layout (<600px) confirmed unaffected.
+- No open decisions needed from the human — this batch had none.
+
+### Batch B — Navigation (bottom nav + sidebar)
+- Item 1: bottom nav restructure (primary items + "More" overflow).
+- Item 8: sidebar fixes.
+- **Blocked on human input:** which 4–5 nav items stay primary; a screenshot or explicit list of what looks wrong on the sidebar.
+
+### Batch C — Ledger visual polish — **Done, 2026-07-17**
+- Item 4 (corrected scope, confirmed with the human: column *background* tinting for scan-ability, not number-value coloring — that already existed and was untouched): the header's existing Identity/Movement/Value group tint (`.groupHeaderIdentity`/`Movement`/`Value`) is now carried down through every body row via new `.groupWashIdentity`/`.groupWashValue` classes (`ledger.module.css`). Uses `color-mix(in srgb, var(--color-surface-sunken) 35%, transparent)` layered on top of the existing zebra-stripe rather than replacing it, so both systems compose instead of fighting — confirmed visually via the `verify` skill that the result reads as a soft group-wash + faint zebra, not a checkerboard. The two sticky columns (`.stickyCol`/`.stickyColItem`, Date/Item) needed their own opaque pre-blended version of the same tint rather than the translucent wash, since `position: sticky` cells must stay fully opaque to occlude content scrolling beneath them — a plain `color-mix()`-over-transparent doesn't work there. No new colors: everything derives from the existing `--color-surface-sunken`/`--color-surface-page` tokens, just blended at different opacities instead of used flat.
+- Premium-polish pass: reviewed borders/spacing/hover states against the new tinted backgrounds — existing `--color-border-default` divider/cell borders still read cleanly against both tinted and neutral zones, no further changes needed. `PlaceholderStat`'s dashed-border "Staff on shift" column is an established, deliberate pattern (`01_COMPONENTS.md`) and was left untouched — out of scope for a column-shading pass.
+- Verified live: desktop table scrolled both vertically and horizontally (group tint holds through both), mobile card layout (<600px, different markup entirely) confirmed unaffected.
+
+**Follow-up fixes from live human testing (same day, still Batch C):**
+- **Sticky-header rendering glitch** (screenshot from the human: a stray row fragment overlapping "DATE/ITEM"). Root cause was two separate bugs found via the `verify` skill against a live page, not by reasoning about CSS: (1) `.groupHeader`'s declared `height: 28px` was silently losing to `catalog.module.css`'s shared `.table th` padding rule (`padding: var(--space-2) var(--space-3)`, a descendant selector that beats `.groupHeader`'s plain class selector on specificity regardless of source order) — the row was actually rendering at 41-45px, so the column-header row's hardcoded `top: 28px` offset left a real gap between the two sticky rows. Fixed with `padding: 0 var(--space-3) !important` on `.groupHeader` plus `line-height`/`overflow: hidden`/`white-space: nowrap` to enforce the real 28px, and the column header's offset corrected to the measured `29px`. (2) Separately, HTML tables can let each `<tr>` establish its own implicit stacking context, which makes z-index comparisons between `<thead>` sticky cells and `<tbody>` sticky cells (the horizontally-sticky Date/Item columns) unreliable across row boundaries — a scrolled-up body row's sticky cell was painting on top of the sticky group-header row above it whenever their y-ranges overlapped during scroll. Fixed by forcing `<thead>` into its own stacking context (`position: relative; isolation: isolate; z-index: 5`) above the entire `<tbody>` at once, rather than chasing individual cell z-index values. Verified clean across 6 different scroll positions with a real mouse-wheel scroll (not programmatic `scrollTop`, which didn't reproduce the bug as faithfully).
+- **Table felt too small, requested taller default + a maximize/fullscreen toggle.** `.ledgerTableCard`'s reserved-space calc changed from `100dvh - 340px` to `100dvh - 220px` (taller default, human-confirmed too-small-before). Added a maximize control (new `expand`/`collapse` icons added to `components/Icon`) that lifts the table's Card into a `position: fixed`, near-fullscreen overlay (with a dimmed click-to-dismiss backdrop, matching `Modal`'s existing overlay pattern) — hiding the sidebar/top bar/summary strip entirely, not just growing within the existing layout, per the human's explicit ask. Escape key and the same corner control (icon swaps to "collapse") both exit maximized mode. Desktop-only (mobile uses the separate card-list layout, unaffected).
+- **Maximize control redesigned per direct human feedback** ("not impressed... would have been more sleek") — the first pass was a labeled, bordered pill button ("Maximize"/"Restore" text) in a separate toolbar row above the table; this read as visually heavy. Redesigned as a small icon-only ghost button (28×28px, no border, no label) living in the table Card's own top-right corner — matching the window-control convention used by Notion/Airtable/Linear's own data-grid UIs, rather than a bolted-on toolbar. Implementation note for anyone touching this again: the button can't simply be `position: absolute` inside `.ledgerTableCard`, since that Card is itself the element that scrolls internally in both axes (see `.ledgerTableCard`'s own comment) — an absolutely-positioned child scrolls away with the table content. It needs `position: sticky` (wrapped in a zero-size `.maximizeButtonShell` so the sticky element doesn't distort the table's column layout), the same mechanism the table's own sticky header cells use, so it stays pinned to the visible corner at any scroll position.
+- **Tables de-rounded per direct human feedback** ("The tables should not be rounded"). `Card.module.css`'s shared `border-radius: var(--radius-lg)` was deliberately left untouched (it's used by every `Card` in the app — MetricCard, form sections, etc. — not just tables), and instead `catalog.module.css`'s `.tableCard` class (the wrapper every admin table uses: Items, Ingredients, Delivery, Staff, Orders, Audit Log, Ledger) got an explicit `border-radius: 0` override. This is a one-place change that squares off every admin table at once, since they all share this class.
+
+### Batch D — Full audit trail (phase-scale)
+- Item 5, corrected scope: log every write, every role, every operational table.
+- Redesign the write-capture mechanism (trigger-based vs. expanded explicit calls — re-evaluate the original `03_audit_log.md` recommendation given the larger scope).
+- Rebuild `AuditLogClient.tsx` to actually be useful for tracing issues: resolve `target_id` to human-readable names, show real before/after diffs (not just an action label), date-range filtering, filter by actor role/location.
+- **Flag explicitly at the start of the session and confirm with the human whether this gets its own phase-style plan** (own `04_PHASE_PLAN.md` section, own context file) before implementation — this is exactly the scale `CLAUDE.md` says warrants that treatment.
+- Depends on nothing else in this backlog, but should probably land before Batch F if Batch F's option 2 (new admin write surface) is chosen, since that new write path should be covered by the expanded audit trail from day one rather than needing to be retrofitted in.
+
+### Batch E — Help / tutorial
+- Item 7: static `InfoTooltip`-style help popover on all 8 admin pages, with real per-page copy (not boilerplate).
+- No open decisions blocking start, though copy for each page should be drafted and reviewed as part of the session, not treated as an afterthought.
+
+### Not yet batched — needs a scope decision first
+
+**Item 6 (admin-as-store-manager)** isn't in a batch yet because it needs the human to choose between the two options above before it can be sized. Once chosen: option 1 (extend edit modal) is roughly Batch-A-sized; option 2 (parallel screen + RLS widening) is its own phase-scale batch, similar in weight to Batch D, and should probably be sequenced after Batch D so its new write path is covered by the expanded audit trail immediately.
+
+---
+
+## Suggested order
+
+1. Batch A (no blockers, cheapest).
+2. Batch C (no blockers).
+3. Batch E (no blockers).
+4. Batch B (once the human picks primary nav items + shares sidebar specifics).
+5. Batch D (flag phase-scale, get human sign-off on approach, then build — largest single piece of work here).
+6. Item 6, once scoped — likely after Batch D for the reason above.
