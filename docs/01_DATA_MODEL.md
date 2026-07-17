@@ -556,6 +556,8 @@ A fourth writer of `stock_entries` was added alongside the till-entry batch save
 
 Instead, a dedicated function — `save_stock_entry_store_manager_fields()` (`20260717090000_stock_entry_store_manager_autosave.sql`) — mirrors how `apply_order_to_stock_entry()` already solves the identical problem for orders: it reads `till_quantity_sold`/`wastage`/`wastage_note` from the existing row (or defaults a brand-new row to 0/null) and preserves them unchanged, only ever writing `added_stock`/`sent_out`. Locked via the same `lock_stock_entry_row()` advisory lock as every other writer, so this is a safely-serialized fourth writer, not a new race. Regular staff's `till_quantity_sold` field is completely unaffected — it still only ever goes through the batch `POST` path described above.
 
+**RLS fix: any same-location staffer can update a same-day row, not just its original creator (post-launch, 2026-07-17):** the store-manager autosave above assumes any restaurant staffer's write can be the first one to touch a given item's row on a given day, and any other restaurant staffer's write can safely land on that same row afterward. But `stock_entries`'s RLS `UPDATE` policy originally gated on `created_by = auth.uid()` — whoever's write created the row became its sole owner, and the RLS layer (not the plpgsql functions above) then rejected every other same-location staffer's `ON CONFLICT DO UPDATE` on that row for the rest of the day, surfaced to the client as a confusing "you can only save today's entry" 403. Found live-testing the store-manager screens (Janiffer autosaving `added_stock`, then Sarah trying to log a till sale on the same item, both real restaurant staff). **Fix (`20260717120000_stock_update_location_scoped.sql`):** the UPDATE policy now checks `location = my_location()` instead of `created_by = auth.uid()` — see §4's policy listing below for the exact clause. `created_by` itself is unchanged; it still records whoever's write actually created the row, it just stopped being the gate on who else may update it. Regression-checked by `scripts/acceptance/post-launch-stock-entry-multi-writer-rls.mjs`.
+
 ### Duplicate-submission protection (orders)
 
 A cashier double-tapping "Save order" on a flaky connection must not create two orders and double-deduct stock. `orders.client_request_id` (a UUID the client generates once per submit attempt and resends unchanged on any retry) plus `unique (created_by, client_request_id)` makes a retried submission a no-op: the second insert attempt hits the unique constraint, the route handler catches that specific conflict and returns the original order's result instead of erroring. `stock_entries` already gets this for free from its own `unique(item_id, location, entry_date)` upsert key — `orders` did not have an equivalent until now, since it has no natural composite key (a customer can plausibly place two genuinely separate orders on the same day).
@@ -675,8 +677,42 @@ create policy "stock_insert_scoped" on public.stock_entries
     (created_by = auth.uid() or public.is_admin())
     and (public.is_admin() or location = public.my_location())
   );
-create policy "stock_update_admin_only" on public.stock_entries
-  for update using (public.is_admin());
+-- Note: the UPDATE policy actually shipped is NOT admin-only -- it
+-- evolved twice after this section was first written:
+--  1. 20260711120001_same_day_update_policies.sql widened it to also
+--     let a row's own created_by update it on the same day (staff
+--     need to re-save/correct a stepper tap without admin help).
+--  2. 20260711150001_canteen_current_week_update_policy.sql extended
+--     "same day" to "same day, or same ISO week for canteen" to match
+--     canteen's weekly cadence.
+--  3. 20260717120000_stock_update_location_scoped.sql (post-launch,
+--     2026-07-17) replaced the created_by check with a location check
+--     -- see below for why.
+create policy "stock_update_admin_or_current_period_location" on public.stock_entries
+  for update using (
+    public.is_admin()
+    or (
+      location = public.my_location()
+      and (
+        entry_date = current_date
+        or (location = 'canteen' and entry_date = date_trunc('week', current_date)::date)
+      )
+    )
+  );
+-- Gated by LOCATION, not by created_by = auth.uid(): a same-day/same-
+-- week row is editable by admin, or by ANY staffer scoped to that
+-- row's own location -- not just whoever's write happened to create
+-- it. Fixed post-launch (2026-07-17) after live testing found the
+-- prior created_by-scoped version let whichever restaurant staffer's
+-- write created today's row for an item become its sole owner --
+-- every OTHER same-location staffer (store manager vs. cashier, or
+-- cashier vs. cashier) was then blocked with a raw RLS 403 from
+-- writing that same item/day, breaking the "two writers, one stock
+-- figure" invariant this very doc describes in §3.4: Janiffer's
+-- added_stock/sent_out autosave and any cashier's till-sale save are
+-- meant to land on the same row regardless of who touches it first.
+-- Regression-checked by scripts/acceptance/post-launch-stock-entry-
+-- multi-writer-rls.mjs.
 
 -- EXPENSES: same pattern as stock_entries
 create policy "expenses_select_scoped" on public.expenses
