@@ -4,6 +4,26 @@
   gap: var(--space-6);
 }
 
+/* Opts Ledger's content out of AdminShell's standard max-width: 1280px
+   cap (AdminShell.module.css .content) — every other admin screen keeps
+   that cap; this is the one table wide enough that a reading-width
+   constraint actively hides columns instead of aiding readability.
+   Without this, collapsing the sidebar (which frees ~168px) did nothing
+   for the ledger table: the freed width just became extra centered
+   margin, since .content's own width was already capped below the
+   available space.
+
+   AdminShell renders <main className={content}>{children}</main>, and
+   this page is that subtree's root — this module can't reference
+   .content's own hashed class, but :has() lets the <main> element react
+   to whether the child it's wrapping opted in, scoped to >=1024px to
+   match AdminShell's own desktop-only max-width rule. */
+@media (min-width: 1024px) {
+  main:has(> .pageFullBleed) {
+    max-width: none;
+  }
+}
+
 .headerRow {
   display: flex;
   align-items: flex-start;
@@ -68,12 +88,51 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Mobile card secondary line — sales value is now the card's headline
+   metric (catalogStyles.itemCardPrice), since an admin scanning this
+   list is here for financial oversight, not a stock count. Closing
+   stock is demoted to this smaller line beneath it rather than dropped,
+   since it's still worth a glance (and still needs the low-stock
+   warning color when relevant). */
+.itemCardClosingStock {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
 .negativeValue {
   color: var(--color-status-error);
 }
 
 .positiveValue {
   color: var(--color-status-success);
+}
+
+/* Wastage value / sales value color-coding — previously every figure in
+   the Inventory value group was the same neutral gray regardless of
+   magnitude, so nothing stood out on a scan. Wastage is a loss figure
+   and only needs to read as "notable" once it's non-trivial (a wastage
+   value of 0 shouldn't glow warning-orange); sales value leans success
+   only when it's the meaningfully positive case, same reasoning as the
+   existing canteen +/- treatment above. */
+.wastageValueNotable {
+  color: var(--color-status-warning);
+  font-weight: var(--font-weight-semibold);
+}
+
+.salesValuePositive {
+  color: var(--color-status-success);
+}
+
+/* Summary strip — total sales/cost/wastage value for the current
+   period/location filter, reusing MetricCard (already used on
+   /dashboard) rather than inventing a new stat treatment. Answers "how
+   did this period do" at a glance and gives the page something
+   substantial to show even when the underlying result set is 1 row. */
+.summaryStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
 }
 
 /* Column-grouped sub-headers (Stock movement / Inventory value) sitting
@@ -85,7 +144,15 @@
    as the 4-column Inventory-value group. Sticky (stacks above the column
    header row via top offset — see .ledgerTable's --header-row-h var).
    Also sticky horizontally in the Date/Item columns so the corner cell
-   doesn't go transparent as both axes scroll at once. */
+   doesn't go transparent as both axes scroll at once.
+
+   Post-launch contrast pass: each group gets a distinct neutral tint
+   (alternating sunken/raised, no new colors) plus a heavier weight than
+   the column-header row beneath it, so the grouping is felt at a glance
+   instead of reading as a second identical header row stacked on the
+   first. A visible divider (.groupDivider) runs the full table height at
+   each boundary so the grouping stays legible while scanning down rows,
+   not just across the header. */
 .groupHeader {
   position: sticky;
   top: 0;
@@ -94,7 +161,7 @@
   box-sizing: border-box;
   text-align: center;
   font-family: var(--font-family-structural);
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
   font-size: var(--font-size-caption);
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -109,17 +176,47 @@
   position: sticky;
   left: 0;
   z-index: 4;
+  background: var(--color-surface-sunken);
+}
+
+.groupHeaderMovement {
+  background: var(--color-surface-raised);
+}
+
+.groupHeaderValue {
+  background: var(--color-surface-sunken);
+}
+
+/* Full-height group-boundary divider, heavier than the table's ordinary
+   1px cell borders — applied to the first cell of "Stock movement" and
+   "Inventory value" in both header rows and every body row, so the
+   visual seam between groups survives vertical scrolling, not just the
+   header. */
+.groupDividerStart {
+  border-left: 2px solid var(--color-border-default);
 }
 
 /* Carbon-style dense grid, matching catalog.module.css's .table pilot —
    tighter rows than the default catalog tables since Ledger is the
    longest table in the admin (a month of both locations can run 60+
    rows), and every extra px of row height compounds into extra scroll
-   distance between the sticky header and the row being read. */
+   distance between the sticky header and the row being read.
+
+   min-width is conditional: the full 1500px grid only applies once a
+   result set is actually wide enough to need horizontal scrolling
+   (.ledgerTableSparse below drops it). Without this, a 1-row result
+   (very plausible on a "Today" filter) rendered a 1500px-wide grid with
+   a single row lost in the top-left corner — reading as broken, not
+   empty. */
 .ledgerTable {
   min-width: 1500px;
   border-collapse: separate;
   border-spacing: 0;
+}
+
+.ledgerTableSparse {
+  min-width: 0;
+  width: auto;
 }
 
 .ledgerTable td {
@@ -129,13 +226,28 @@
   font-size: var(--font-size-caption);
 }
 
+/* Numeric/value cells carry more visual weight than identity cells
+   (item name, date, location) — the figures are what an admin is
+   actually here to read, so they get tabular-nums + a heavier weight
+   instead of matching the surrounding text's regular weight. */
+.ledgerTable td.numericStrong {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Zebra tint pulled distinct from the header's --color-surface-sunken —
+   previously both used the same token, which flattened the header/body
+   distinction. --color-surface-page sits a shade lighter than sunken
+   (an existing token, not a new color) so the header still reads as
+   sitting "above" the data. */
 .ledgerTable tbody tr:nth-child(even) td {
-  background: var(--color-surface-sunken);
+  background: var(--color-surface-page);
 }
 
 .ledgerTable tbody tr:nth-child(even) td.stickyCol,
 .ledgerTable tbody tr:nth-child(even) td.stickyColItem {
-  background: var(--color-surface-sunken);
+  background: var(--color-surface-page);
 }
 
 /* Column header row sticks directly beneath the group header row — the
@@ -248,6 +360,26 @@ thead .stickyColItem {
 
 .toolbarRow {
   margin-bottom: var(--space-1);
+}
+
+/* Whole row opens the edit modal, not just the pencil icon — a click
+   anywhere on the row (not the row's own edit button, which stops
+   propagation) starts the edit, cutting the precision needed to fix a
+   value from "hit a 16px icon" to "hit any of a 28px row's ~1500px of
+   width." The icon button remains as an explicit, discoverable
+   affordance (hover/focus target, keyboard-reachable) — this is in
+   addition to it, not a replacement. */
+.editableRow {
+  cursor: pointer;
+}
+
+.editableRow:hover td {
+  background: var(--color-surface-sunken);
+}
+
+.editableRow:hover td.stickyCol,
+.editableRow:hover td.stickyColItem {
+  background: var(--color-surface-sunken);
 }
 
 /* Admin ledger-row edit affordance (docs/backlog/04_admin_ledger_edit.md)

@@ -99,13 +99,9 @@ export default function StyleGuidePage() {
   const [searchValue, setSearchValue] = useState("");
   const [activeNavItem, setActiveNavItem] = useState("Entry");
   const [cashierSold, setCashierSold] = useState(0);
-  const [cashierWastage, setCashierWastage] = useState(0);
-  const [cashierNote, setCashierNote] = useState("");
   const [storeAdded, setStoreAdded] = useState(0);
   const [storeSentOut, setStoreSentOut] = useState(0);
   const [storeSold, setStoreSold] = useState(0);
-  const [storeWastage, setStoreWastage] = useState(2);
-  const [storeNote, setStoreNote] = useState("left out overnight");
   const [canteenSold, setCanteenSold] = useState(0);
   const [canteenWastage, setCanteenWastage] = useState(0);
   const [canteenNote, setCanteenNote] = useState("");
@@ -299,8 +295,11 @@ export default function StyleGuidePage() {
           <h2 className={styles.sectionHeading}>Item Entry Card</h2>
           <p className={styles.sectionDescription}>
             Redesigned for density (see the entry-screen critique) — name, price, and the primary
-            stepper share one row instead of stacking with dead space; wastage collapses to a
-            small icon-button instead of a full-width row.
+            stepper share one row instead of stacking with dead space. As of the store-manager
+            /entry redesign, wastage is no longer collected on this screen at all (moved to the
+            admin ledger edit path) — the wastage icon-button/panel shown in the last tile below
+            remains supported by the component for any future caller, but /entry itself never
+            passes the `wastage` prop anymore.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-6)" }}>
             <div className={styles.tile} style={{ width: 360, flex: "0 0 auto" }}>
@@ -310,47 +309,46 @@ export default function StyleGuidePage() {
                   name="African Tea"
                   priceLabel="KES 30.00"
                   openingLabel="Opening: 12"
-                  availableLabel={`Available: ${12 - cashierSold - cashierWastage}`}
-                  isLow={12 - cashierSold - cashierWastage <= 5}
+                  availableLabel={`Available: ${12 - cashierSold}`}
+                  isLow={12 - cashierSold <= 5}
                   fields={[
                     {
                       key: "sold",
                       label: "quantity sold",
-                      stepper: { value: cashierSold, onChange: setCashierSold, max: 12 - cashierWastage },
+                      stepper: { value: cashierSold, onChange: setCashierSold, max: 12 },
                     },
                   ]}
-                  wastageValue={cashierWastage}
-                  onWastageChange={setCashierWastage}
-                  wastageMax={12 - cashierSold}
-                  wastageNote={cashierNote}
-                  onWastageNoteChange={setCashierNote}
                 />
               </ul>
             </div>
             <div className={styles.tile} style={{ width: 360, flex: "0 0 auto" }}>
-              <p className={styles.tileLabel}>Store manager — three fields (Added / Sent to canteen / Sold)</p>
+              <p className={styles.tileLabel}>
+                Store manager — typed numeric inputs (Added / Sent to canteen), autosaved per field
+              </p>
               <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
                 <ItemEntryCard
                   name="Samosa"
                   priceLabel="KES 35.00"
                   openingLabel="Opening: 20"
                   fields={[
-                    { key: "added", label: "Added stock", stepper: { value: storeAdded, onChange: setStoreAdded } },
+                    {
+                      key: "added",
+                      label: "Added stock",
+                      showLabel: true,
+                      numericInput: { value: storeAdded, onChange: setStoreAdded, saveState: "saved" },
+                    },
                     {
                       key: "sentOut",
                       label: "Sent to canteen",
-                      stepper: { value: storeSentOut, onChange: setStoreSentOut, max: 20 + storeAdded - storeSold - storeWastage },
-                    },
-                    {
-                      key: "sold",
-                      label: "Quantity sold",
-                      stepper: { value: storeSold, onChange: setStoreSold, max: 20 + storeAdded - storeSentOut - storeWastage },
+                      numericInput: {
+                        value: storeSentOut,
+                        onChange: setStoreSentOut,
+                        max: 20 + storeAdded - storeSold,
+                        limitMessage: `Only ${20 + storeAdded - storeSold - storeSentOut} left`,
+                        saveState: "idle",
+                      },
                     },
                   ]}
-                  wastageValue={storeWastage}
-                  onWastageChange={setStoreWastage}
-                  wastageNote={storeNote}
-                  onWastageNoteChange={setStoreNote}
                 />
               </ul>
             </div>
@@ -366,13 +364,34 @@ export default function StyleGuidePage() {
                     {
                       key: "sold",
                       label: "Quantity sold",
-                      stepper: { value: canteenSold, onChange: setCanteenSold, max: 8 + 15 - canteenWastage },
+                      stepper: { value: canteenSold, onChange: setCanteenSold, max: 8 + 15 },
                     },
                   ]}
-                  wastageValue={canteenWastage}
-                  onWastageChange={setCanteenWastage}
-                  wastageNote={canteenNote}
-                  onWastageNoteChange={setCanteenNote}
+                />
+              </ul>
+            </div>
+            <div className={styles.tile} style={{ width: 360, flex: "0 0 auto" }}>
+              <p className={styles.tileLabel}>Wastage affordance (component-level support, not used on /entry)</p>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <ItemEntryCard
+                  name="Ndengu"
+                  priceLabel="KES 40.00"
+                  openingLabel="Opening: 10"
+                  fields={[
+                    {
+                      key: "sold",
+                      label: "quantity sold",
+                      stepper: { value: canteenSold, onChange: setCanteenSold, max: 10 - canteenWastage },
+                    },
+                  ]}
+                  wastage={{
+                    value: canteenWastage,
+                    onChange: setCanteenWastage,
+                    max: 10 - canteenSold,
+                    note: canteenNote,
+                    onNoteChange: setCanteenNote,
+                    tooltip: "Stock spoiled, broken, or lost — not sold.",
+                  }}
                 />
               </ul>
             </div>

@@ -133,3 +133,77 @@
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border-default);
 }
+
+.numericInputWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-end;
+}
+
+.numericInputRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.numericInput {
+  width: 96px;
+  min-height: var(--space-touch);
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-body-lg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  transition: border-color var(--motion-fast);
+  appearance: textfield;
+}
+
+.numericInput::-webkit-outer-spin-button,
+.numericInput::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.numericInput:focus {
+  outline: none;
+  border-width: var(--border-width-focus);
+  border-color: var(--color-border-focus);
+  padding: calc(var(--space-2) - var(--border-width-default)) calc(var(--space-8) - var(--border-width-default))
+    calc(var(--space-2) - var(--border-width-default)) calc(var(--space-3) - var(--border-width-default));
+}
+
+.numericInputIndicatorSaving,
+.numericInputIndicatorSaved,
+.numericInputIndicatorError {
+  position: absolute;
+  right: var(--space-3);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.numericInputIndicatorSaving {
+  color: var(--color-text-secondary);
+}
+
+.numericInputIndicatorSaved {
+  color: var(--color-status-success);
+}
+
+.numericInputIndicatorError {
+  color: var(--color-status-error);
+}
+
+.numericInputLimitMessage {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  color: var(--color-status-error);
+}

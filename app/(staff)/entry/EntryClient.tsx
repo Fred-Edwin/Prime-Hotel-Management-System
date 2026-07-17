@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TillStrip } from "@/components/TillStrip";
+import { StatusStrip, type StatusStripState } from "@/components/StatusStrip";
 import { CategoryChips } from "@/components/CategoryChips";
 import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
-import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
+import { ItemEntryCard, type ItemEntryField, type ItemEntryFieldSaveState } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
@@ -34,13 +35,14 @@ const CATEGORY_LABELS: Record<ItemCategory, string> = {
 };
 
 const LOW_STOCK_THRESHOLD = 5;
+const AUTOSAVE_DEBOUNCE_MS = 700;
+
+type StoreManagerFieldKey = "addedStock" | "sentOut";
 
 interface LineState {
   tillQuantitySold: number;
   addedStock: number;
   sentOut: number;
-  wastage: number;
-  wastageNote: string;
 }
 
 function todayISO(): string {
@@ -48,7 +50,7 @@ function todayISO(): string {
 }
 
 function emptyLine(): LineState {
-  return { tillQuantitySold: 0, addedStock: 0, sentOut: 0, wastage: 0, wastageNote: "" };
+  return { tillQuantitySold: 0, addedStock: 0, sentOut: 0 };
 }
 
 export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
@@ -61,6 +63,16 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
+
+  // Store-manager-only autosave state (addedStock/sentOut) — regular
+  // staff's quantitySold field keeps the batch TillStrip Save flow below
+  // untouched, so none of this applies to them.
+  const [fieldStates, setFieldStates] = useState<
+    Record<string, Record<StoreManagerFieldKey, ItemEntryFieldSaveState>>
+  >({});
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const [lastAutosaveError, setLastAutosaveError] = useState<string | null>(null);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +102,6 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               tillQuantitySold: entry.till_quantity_sold,
               addedStock: entry.added_stock,
               sentOut: entry.sent_out,
-              wastage: entry.wastage,
-              wastageNote: entry.wastage_note ?? "",
             }
           : emptyLine();
       }
@@ -129,13 +139,77 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     const line = lines[itemId] ?? emptyLine();
     const opening = openingStockFor(itemId);
     const total = opening + line.addedStock;
-    // How much more (sold + sent + wasted) can still be taken from total_stock.
-    return total - line.tillQuantitySold - line.sentOut - line.wastage;
+    // How much more (sold + sent) can still be taken from total_stock.
+    return total - line.tillQuantitySold - line.sentOut;
   }
 
   function updateLine(itemId: string, patch: Partial<LineState>) {
     setLines((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? emptyLine()), ...patch } }));
   }
+
+  function setFieldState(itemId: string, field: StoreManagerFieldKey, state: ItemEntryFieldSaveState) {
+    setFieldStates((prev) => ({
+      ...prev,
+      [itemId]: { ...(prev[itemId] ?? { addedStock: "idle", sentOut: "idle" }), [field]: state },
+    }));
+  }
+
+  const saveStoreManagerField = useCallback(
+    async (itemId: string, field: StoreManagerFieldKey, line: LineState) => {
+      setFieldState(itemId, field, "saving");
+      setPendingSaves((n) => n + 1);
+
+      try {
+        const res = await fetch("/api/stock-entries", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entry_date: entryDate,
+            item_id: itemId,
+            added_stock: line.addedStock,
+            sent_out: line.sentOut,
+          }),
+        });
+        const body = await res.json();
+
+        if (!res.ok) {
+          setFieldState(itemId, field, "error");
+          setLastAutosaveError(body.error ?? "Couldn't save — please try again.");
+          return;
+        }
+
+        setSavedEntries((prev) => ({ ...prev, [itemId]: body.entry }));
+        setFieldState(itemId, field, "saved");
+        setLastAutosaveError(null);
+      } catch {
+        setFieldState(itemId, field, "error");
+        setLastAutosaveError("Couldn't reach the server — check your connection and try again.");
+      } finally {
+        setPendingSaves((n) => n - 1);
+      }
+    },
+    [entryDate],
+  );
+
+  function updateStoreManagerField(itemId: string, field: StoreManagerFieldKey, value: number) {
+    const nextLine: LineState = { ...(lines[itemId] ?? emptyLine()), [field]: value };
+    setLines((prev) => ({ ...prev, [itemId]: nextLine }));
+
+    const timerKey = `${itemId}:${field}`;
+    if (debounceTimers.current[timerKey]) {
+      clearTimeout(debounceTimers.current[timerKey]);
+    }
+    debounceTimers.current[timerKey] = setTimeout(() => {
+      saveStoreManagerField(itemId, field, nextLine);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  useEffect(() => {
+    const timers = debounceTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
 
   const itemCount = useMemo(
     () => Object.values(lines).reduce((sum, line) => sum + line.tillQuantitySold, 0),
@@ -159,10 +233,6 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
         return {
           item_id: item.id,
           till_quantity_sold: line.tillQuantitySold,
-          added_stock: line.addedStock,
-          sent_out: line.sentOut,
-          wastage: line.wastage,
-          wastage_note: line.wastageNote.trim() ? line.wastageNote.trim() : null,
         };
       }),
     };
@@ -193,16 +263,34 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     }
   }
 
+  const autosaveStripState: StatusStripState = lastAutosaveError
+    ? "error"
+    : pendingSaves > 0
+      ? "saving"
+      : Object.keys(savedEntries).length > 0
+        ? "saved"
+        : "idle";
+
   useTillStripSlot(
-    !loading && items.length > 0 ? (
-      <TillStrip
-        itemCount={itemCount}
-        totalValueLabel={`KES ${totalValue.toFixed(2)}`}
-        onSave={handleSave}
-        saving={saving}
-      />
-    ) : null,
-    `${loading}:${items.length}:${itemCount}:${totalValue}:${saving}`,
+    loading || items.length === 0
+      ? null
+      : isStoreManager ? (
+          <StatusStrip
+            state={autosaveStripState}
+            totalValueLabel={`KES ${totalValue.toFixed(2)} sold today`}
+            errorMessage={lastAutosaveError ?? undefined}
+          />
+        ) : (
+          <TillStrip
+            itemCount={itemCount}
+            totalValueLabel={`KES ${totalValue.toFixed(2)}`}
+            onSave={handleSave}
+            saving={saving}
+          />
+        ),
+    isStoreManager
+      ? `${loading}:${items.length}:${autosaveStripState}:${totalValue}`
+      : `${loading}:${items.length}:${itemCount}:${totalValue}:${saving}`,
   );
 
   if (loading) {
@@ -247,25 +335,30 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
           const line = lines[item.id] ?? emptyLine();
           const opening = openingStockFor(item.id);
           const remaining = remainingStockFor(item.id);
-          const isLow = !isStoreManager && remaining <= LOW_STOCK_THRESHOLD;
+          const isLow = remaining <= LOW_STOCK_THRESHOLD;
+          const states = fieldStates[item.id] ?? { addedStock: "idle", sentOut: "idle" };
 
           const fields: ItemEntryField[] = isStoreManager
             ? [
                 {
                   key: "addedStock",
                   label: "Added stock",
-                  tooltip: "Stock added today",
-                  stepper: { value: line.addedStock, onChange: (next) => updateLine(item.id, { addedStock: next }) },
+                  showLabel: true,
+                  numericInput: {
+                    value: line.addedStock,
+                    onChange: (next) => updateStoreManagerField(item.id, "addedStock", next),
+                    saveState: states.addedStock,
+                  },
                 },
                 {
                   key: "sentOut",
                   label: "Sent to canteen",
-                  tooltip: "Stock sent to the canteen today. The canteen sees it automatically.",
-                  stepper: {
+                  numericInput: {
                     value: line.sentOut,
-                    onChange: (next) => updateLine(item.id, { sentOut: next }),
-                    max: opening + line.addedStock - line.tillQuantitySold - line.wastage,
+                    onChange: (next) => updateStoreManagerField(item.id, "sentOut", next),
+                    max: opening + line.addedStock - line.tillQuantitySold,
                     limitMessage: `Only ${remaining} left`,
+                    saveState: states.sentOut,
                   },
                 },
               ]
@@ -276,7 +369,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                   stepper: {
                     value: line.tillQuantitySold,
                     onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
-                    max: opening + line.addedStock - line.sentOut - line.wastage,
+                    max: opening + line.addedStock - line.sentOut,
                     limitMessage: `Only ${remaining} left`,
                   },
                 },
@@ -288,16 +381,9 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={isStoreManager ? `Opening: ${opening}` : undefined}
-              openingTooltip={isStoreManager ? "Yesterday's leftover stock. You don't type this in." : undefined}
               availableLabel={isStoreManager ? undefined : `Available: ${remaining}`}
               isLow={isLow}
               fields={fields}
-              wastageValue={line.wastage}
-              onWastageChange={(next) => updateLine(item.id, { wastage: next })}
-              wastageMax={opening + line.addedStock - line.tillQuantitySold - line.sentOut}
-              wastageNote={line.wastageNote}
-              onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}
-              wastageTooltip="Stock spoiled, broken, or lost — not sold."
             />
           );
         })}

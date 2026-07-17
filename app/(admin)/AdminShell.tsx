@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/Wordmark";
 import { RoleLocationBadge } from "@/components/RoleLocationBadge";
 import { Icon, type IconName } from "@/components/Icon";
@@ -46,14 +46,21 @@ export function AdminShell({
   // content — every other admin screen has its own page heading directly
   // under the sidebar/mobile top bar instead, so the slot only renders here.
   const showDesktopTopBar = pathname === "/dashboard";
-  // Lazy initializer, not an effect — avoids the extra render pass and
-  // the react-hooks/set-state-in-effect lint error. Server-rendered HTML
-  // always starts expanded (window is undefined there); the client's
-  // first render reads localStorage synchronously before paint, so a
-  // returning user doesn't see a visible collapse-toggle flash.
-  const [collapsed, setCollapsed] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"
-  );
+  // Always starts expanded on both server and the client's first render
+  // — a lazy initializer reading localStorage here was tried, but React
+  // still reconciles that first client render against the server's HTML
+  // (which always sees collapsed=false, since window is undefined during
+  // SSR), so a returning user with a collapsed sidebar hit a real
+  // hydration mismatch (server: expanded, client: collapsed) rather than
+  // avoiding one. Reading the real preference in an effect after mount
+  // means the client's first render matches the server's, at the cost of
+  // one extra render (a brief expanded-then-collapsed flash) instead of
+  // a hydration error.
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
+  }, []);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {

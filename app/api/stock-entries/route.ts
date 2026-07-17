@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { canteenStockEntriesSaveSchema, stockEntriesSaveSchema } from "@/lib/validation";
+import { canteenStockEntriesSaveSchema, stockEntriesSaveSchema, stockEntryLineSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 import { weekEndSunday, weekStartMonday } from "@/lib/calculations";
@@ -137,10 +137,6 @@ export async function POST(request: Request) {
     batchLines.push({
       item_id: line.item_id,
       till_quantity_sold: line.till_quantity_sold,
-      added_stock: line.added_stock,
-      sent_out: line.sent_out,
-      wastage: line.wastage,
-      wastage_note: line.wastage_note ?? null,
       selling_price_snapshot: prices.selling_price,
       buying_price_snapshot: prices.buying_price,
     });
@@ -149,6 +145,16 @@ export async function POST(request: Request) {
   // Single round trip: save_stock_entries_batch() loops server-side over
   // save_stock_entry() per line (docs/01_DATA_MODEL.md §3.4 correctness
   // untouched — each line still gets its own row lock + oversell re-check).
+  // No added_stock/sent_out/wastage keys in each line: this route is now
+  // regular (non-store-manager) staff's till_quantity_sold ONLY — the
+  // store manager's added_stock/sent_out moved to their own PUT autosave
+  // (save_stock_entry_store_manager_fields()), and /entry no longer
+  // collects wastage at all (post-launch correction to §3.3). Omitting
+  // these keys means save_stock_entry()'s p_added_stock/p_sent_out/
+  // p_wastage stay null, which preserves whatever the row already has
+  // instead of overwriting it with this staff member's stale
+  // page-load snapshot of fields they don't even see in their own UI.
+  // See 20260717093000_preserve_wastage_on_stock_entry_save.sql.
   const { data, error } = await supabase.rpc("save_stock_entries_batch", {
     p_location: user.location,
     p_entry_date: entry_date,
@@ -204,13 +210,13 @@ async function saveCanteenEntries(
       is_canteen_supplied: item.supply_type === "canteen_supplied",
       added_stock_input: line.added_stock,
       till_quantity_sold: line.till_quantity_sold,
-      wastage: line.wastage,
-      wastage_note: line.wastage_note ?? null,
       selling_price_snapshot: item.selling_price,
       buying_price_snapshot: item.buying_price,
     });
   }
 
+  // No wastage key: same "preserve, don't zero" rationale as the
+  // restaurant batch above.
   const { data, error } = await supabase.rpc("save_canteen_stock_entries_batch", {
     p_entry_date: entry_date,
     p_created_by: createdBy,
@@ -223,4 +229,80 @@ async function saveCanteenEntries(
   }
 
   return NextResponse.json({ entries: data });
+}
+
+/**
+ * PUT /api/stock-entries
+ * Store-manager-only single-line autosave for "Added stock"/"Sent to
+ * canteen" — /entry's store-manager view autosaves per field
+ * (post-launch redesign, docs/backlog/entry-store-manager-redesign-handover.md)
+ * instead of batching behind the day's TillStrip Save button. Regular
+ * staff's till_quantity_sold field is unaffected and keeps using the
+ * batch POST above.
+ *
+ * Calls save_stock_entry_store_manager_fields() (see
+ * 20260717090000_stock_entry_store_manager_autosave.sql), NOT
+ * save_stock_entry() — that function always overwrites
+ * till_quantity_sold wholesale on every call, which is safe for its one
+ * existing caller (the till-entry batch save, the only writer of that
+ * field) but would silently revert a concurrent till save if this route
+ * called it too. The dedicated function instead preserves
+ * till_quantity_sold/wastage/wastage_note from whatever the row already
+ * has and only ever writes added_stock/sent_out — see the migration's
+ * header comment for the full race it avoids. Same
+ * lock_stock_entry_row() advisory lock as every other stock_entries
+ * writer (docs/01_DATA_MODEL.md §3.4).
+ *
+ * wastage/wastage_note are not part of this payload at all — /entry no
+ * longer collects wastage (post-launch correction to §3.3), and the
+ * underlying function preserves whatever wastage value already exists
+ * (e.g. set via the admin ledger edit path) rather than zeroing it.
+ */
+export async function PUT(request: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "staff" || user.location !== "restaurant" || !user.is_store_manager) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const parsed = stockEntryLineSaveSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+
+  const { entry_date, item_id, added_stock, sent_out } = parsed.data;
+  const supabase = await createServerSupabaseClient();
+
+  const priceQuery = supabase
+    .from("items")
+    .select("id, selling_price, buying_price")
+    .eq("id", item_id)
+    .single();
+  const { data: item, error: priceError }: Awaited<typeof priceQuery> = await priceQuery;
+
+  if (priceError || !item) {
+    return NextResponse.json({ error: "Unknown item in save request" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase.rpc("save_stock_entry_store_manager_fields", {
+    p_item_id: item_id,
+    p_location: "restaurant",
+    p_entry_date: entry_date,
+    p_added_stock: added_stock,
+    p_sent_out: sent_out,
+    p_selling_price_snapshot: item.selling_price,
+    p_buying_price_snapshot: item.buying_price,
+    p_created_by: user.id,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entry: data });
 }

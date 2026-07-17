@@ -142,17 +142,23 @@ const nonNegativeQuantity = z
   .nonnegative("Must be 0 or greater");
 
 /**
- * One item's till/added/sent/wastage line on the daily restaurant entry
- * screen — see docs/01_DATA_MODEL.md §2 `stock_entries`, §3.4 (till_quantity_sold
- * is the only field this route writes; quantity_sold is server-derived).
+ * One item's till-sale line on the daily restaurant entry screen — see
+ * docs/01_DATA_MODEL.md §2 `stock_entries`, §3.4 (till_quantity_sold is
+ * the only field this route writes; quantity_sold is server-derived).
+ * No added_stock/sent_out: those moved to the store manager's own PUT
+ * autosave (see stockEntryLineSaveSchema below) — this is regular
+ * (non-store-manager) staff's field only, and their client-side
+ * added_stock/sent_out would otherwise be a stale page-load snapshot
+ * that could clobber a concurrent store-manager edit (post-launch
+ * correction, see 20260717093000_preserve_wastage_on_stock_entry_save.sql).
+ * No wastage/wastage_note either: /entry no longer collects wastage
+ * (post-launch correction to §3.3, same precedent as
+ * ingredient_entries.wastage) — the route always preserves whatever
+ * wastage the row already has.
  */
 export const stockEntryLineSchema = z.object({
   item_id: z.string().uuid(),
   till_quantity_sold: nonNegativeQuantity,
-  added_stock: nonNegativeQuantity,
-  sent_out: nonNegativeQuantity,
-  wastage: nonNegativeQuantity,
-  wastage_note: z.string().trim().min(1).nullable().optional(),
 });
 
 export type StockEntryLineInput = z.infer<typeof stockEntryLineSchema>;
@@ -164,6 +170,26 @@ export const stockEntriesSaveSchema = z.object({
 });
 
 export type StockEntriesSaveInput = z.infer<typeof stockEntriesSaveSchema>;
+
+/**
+ * Single-line autosave payload for PUT /api/stock-entries — the
+ * store-manager's "Added stock"/"Sent to canteen" fields on /entry
+ * autosave per field (post-launch redesign) instead of batching behind
+ * the day's Save button, mirroring PUT /api/ingredient-entries. No
+ * till_quantity_sold here: that field stays on the batch POST path,
+ * written only by the till-entry flow (docs/01_DATA_MODEL.md §3.4). No
+ * wastage/wastage_note: removed from /entry entirely (post-launch
+ * correction to §3.3, same precedent as ingredient_entries.wastage) —
+ * this route always saves wastage as 0.
+ */
+export const stockEntryLineSaveSchema = z.object({
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  item_id: z.string().uuid(),
+  added_stock: nonNegativeQuantity,
+  sent_out: nonNegativeQuantity,
+});
+
+export type StockEntryLineSaveInput = z.infer<typeof stockEntryLineSaveSchema>;
 
 /**
  * One ingredient's received/used/wastage line on the store manager's
@@ -210,14 +236,14 @@ export type IngredientEntryLineSaveInput = z.infer<typeof ingredientEntryLineSav
  * added_stock is only accepted from the client for canteen_independent
  * items; the route ignores it for canteen_supplied items and derives the
  * value server-side via canteen_supplied_total() instead (never trusted
- * from the client, same principle as opening_stock).
+ * from the client, same principle as opening_stock). No wastage/wastage_note:
+ * /entry no longer collects wastage (post-launch correction to §3.3) —
+ * the route always saves wastage as 0 for its own writes.
  */
 export const canteenStockEntryLineSchema = z.object({
   item_id: z.string().uuid(),
   till_quantity_sold: nonNegativeQuantity,
   added_stock: nonNegativeQuantity,
-  wastage: nonNegativeQuantity,
-  wastage_note: z.string().trim().min(1).nullable().optional(),
 });
 
 export type CanteenStockEntryLineInput = z.infer<typeof canteenStockEntryLineSchema>;

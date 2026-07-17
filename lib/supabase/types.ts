@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -550,16 +545,6 @@ export type Database = {
         Args: { p_item_id: string; p_week_end: string; p_week_start: string }
         Returns: number
       }
-      write_audit_log: {
-        Args: {
-          p_action: string
-          p_actor_id: string
-          p_changes?: Json
-          p_target_id: string
-          p_target_table: string
-        }
-        Returns: undefined
-      }
       create_order: {
         Args: {
           p_buying_prices: Json
@@ -692,6 +677,10 @@ export type Database = {
         }[]
       }
       is_admin: { Args: never; Returns: boolean }
+      lock_ingredient_entry_row: {
+        Args: { p_entry_date: string; p_ingredient_id: string }
+        Returns: undefined
+      }
       lock_stock_entry_row: {
         Args: {
           p_entry_date: string
@@ -752,7 +741,7 @@ export type Database = {
           p_item_id: string
           p_selling_price_snapshot: number
           p_till_quantity_sold: number
-          p_wastage: number
+          p_wastage?: number
           p_wastage_note?: string
         }
         Returns: {
@@ -885,16 +874,16 @@ export type Database = {
       }
       save_stock_entry: {
         Args: {
-          p_added_stock: number
+          p_added_stock?: number
           p_buying_price_snapshot: number
           p_created_by: string
           p_entry_date: string
           p_item_id: string
           p_location: Database["public"]["Enums"]["location_type"]
           p_selling_price_snapshot: number
-          p_sent_out: number
+          p_sent_out?: number
           p_till_quantity_sold: number
-          p_wastage: number
+          p_wastage?: number
           p_wastage_note?: string
         }
         Returns: {
@@ -926,6 +915,57 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_stock_entry_store_manager_fields: {
+        Args: {
+          p_added_stock: number
+          p_buying_price_snapshot: number
+          p_created_by: string
+          p_entry_date: string
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_selling_price_snapshot: number
+          p_sent_out: number
+        }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      write_audit_log: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_changes?: Json
+          p_target_id: string
+          p_target_table: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
@@ -1108,3 +1148,4 @@ export const Constants = {
     },
   },
 } as const
+

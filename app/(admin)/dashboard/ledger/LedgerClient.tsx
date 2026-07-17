@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { FilterBar } from "@/components/FilterBar";
 import { Icon } from "@/components/Icon";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
+import { MetricCard } from "@/components/MetricCard";
 import { PlaceholderStat } from "@/components/PlaceholderStat";
 import { Toast } from "@/components/Toast";
 import { isLowStock } from "@/lib/calculations";
@@ -281,8 +282,21 @@ export function LedgerClient() {
       row.ingredient_name.toLowerCase().includes(ingredientSearch.trim().toLowerCase())
     ) ?? [];
 
+  // Summary strip totals — computed client-side from the already-loaded
+  // filtered result set (no new endpoint needed). Answers "how did this
+  // period do" at a glance, and gives the page something substantial to
+  // show even when the filtered result is a single row.
+  const totals = (data?.items ?? []).reduce(
+    (acc, row) => ({
+      salesValue: acc.salesValue + row.sales_value,
+      costValue: acc.costValue + row.cost_value,
+      wastageValue: acc.wastageValue + row.wastage_value,
+    }),
+    { salesValue: 0, costValue: 0, wastageValue: 0 }
+  );
+
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.pageFullBleed}`}>
       <div className={styles.headerRow}>
         <div>
           <h1 className={catalogStyles.title}>Item Ledger</h1>
@@ -350,6 +364,15 @@ export function LedgerClient() {
         <p>Loading…</p>
       ) : data ? (
         <>
+          {data.items.length > 0 && (
+            <div className={styles.summaryStrip}>
+              <MetricCard label="Total sales value" value={money(totals.salesValue)} />
+              <MetricCard label="Total cost value" value={money(totals.costValue)} />
+              <MetricCard label="Total wastage value" value={money(totals.wastageValue)} />
+              <MetricCard label="Rows" value={String(data.items.length)} />
+            </div>
+          )}
+
           <section className={styles.section}>
             {data.items.length === 0 ? (
               <EmptyState
@@ -359,16 +382,30 @@ export function LedgerClient() {
               />
             ) : (
               <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
-                <table className={[catalogStyles.table, styles.ledgerTable].join(" ")}>
+                <table
+                  className={[
+                    catalogStyles.table,
+                    styles.ledgerTable,
+                    data.items.length <= 3 ? styles.ledgerTableSparse : "",
+                  ].join(" ")}
+                >
                   <thead>
                     <tr>
                       <th colSpan={5} className={[styles.groupHeader, styles.groupHeaderIdentity].join(" ")}>
                         Identity
                       </th>
-                      <th colSpan={6} className={styles.groupHeader}>
+                      <th
+                        colSpan={6}
+                        className={[styles.groupHeader, styles.groupHeaderMovement, styles.groupDividerStart].join(
+                          " "
+                        )}
+                      >
                         Stock movement
                       </th>
-                      <th colSpan={4} className={styles.groupHeader}>
+                      <th
+                        colSpan={4}
+                        className={[styles.groupHeader, styles.groupHeaderValue, styles.groupDividerStart].join(" ")}
+                      >
                         Inventory value
                       </th>
                     </tr>
@@ -378,13 +415,13 @@ export function LedgerClient() {
                       <th>Location</th>
                       <th>Staff on shift</th>
                       <th className={catalogStyles.numeric}>Opening</th>
-                      <th className={catalogStyles.numeric}>Added</th>
+                      <th className={[catalogStyles.numeric, styles.groupDividerStart].join(" ")}>Added</th>
                       <th className={catalogStyles.numeric}>Canteen (S/R)</th>
                       <th className={catalogStyles.numeric}>Sold (Hotel)</th>
                       <th className={catalogStyles.numeric}>Sold (total)</th>
                       <th className={catalogStyles.numeric}>Wastage</th>
                       <th className={catalogStyles.numeric}>Closing</th>
-                      <th className={catalogStyles.numeric}>Sales value</th>
+                      <th className={[catalogStyles.numeric, styles.groupDividerStart].join(" ")}>Sales value</th>
                       <th className={catalogStyles.numeric}>Cost value</th>
                       <th className={catalogStyles.numeric}>Closing stock value</th>
                       <th className={catalogStyles.numeric}>Wastage value</th>
@@ -396,7 +433,11 @@ export function LedgerClient() {
                       const canteenSignedQty =
                         row.location === "canteen" ? row.added_stock : -row.sent_out;
                       return (
-                        <tr key={`${row.entry_date}-${row.item_id}-${row.location}`}>
+                        <tr
+                          key={`${row.entry_date}-${row.item_id}-${row.location}`}
+                          className={styles.editableRow}
+                          onClick={() => openStockEntryEdit(row)}
+                        >
                           <td className={styles.stickyCol}>{row.entry_date}</td>
                           <td className={styles.stickyColItem}>{row.item_name}</td>
                           <td className={styles.locationCell}>
@@ -409,7 +450,9 @@ export function LedgerClient() {
                             />
                           </td>
                           <td className={catalogStyles.numeric}>{qty(row.opening_stock)}</td>
-                          <td className={catalogStyles.numeric}>{qty(row.added_stock)}</td>
+                          <td className={[catalogStyles.numeric, styles.groupDividerStart].join(" ")}>
+                            {qty(row.added_stock)}
+                          </td>
                           <td className={catalogStyles.numeric}>
                             <span
                               className={
@@ -438,15 +481,34 @@ export function LedgerClient() {
                               {qty(row.closing_stock)}
                             </span>
                           </td>
-                          <td className={catalogStyles.numeric}>{money(row.sales_value)}</td>
-                          <td className={catalogStyles.numeric}>{money(row.cost_value)}</td>
-                          <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
-                          <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>
+                          <td
+                            className={[catalogStyles.numeric, styles.numericStrong, styles.groupDividerStart].join(
+                              " "
+                            )}
+                          >
+                            <span className={row.sales_value > 0 ? styles.salesValuePositive : undefined}>
+                              {money(row.sales_value)}
+                            </span>
+                          </td>
+                          <td className={[catalogStyles.numeric, styles.numericStrong].join(" ")}>
+                            {money(row.cost_value)}
+                          </td>
+                          <td className={[catalogStyles.numeric, styles.numericStrong].join(" ")}>
+                            {money(row.closing_stock_value)}
+                          </td>
+                          <td className={[catalogStyles.numeric, styles.numericStrong].join(" ")}>
+                            <span className={row.wastage_value > 0 ? styles.wastageValueNotable : undefined}>
+                              {money(row.wastage_value)}
+                            </span>
+                          </td>
                           <td>
                             <button
                               type="button"
                               className={styles.editButton}
-                              onClick={() => openStockEntryEdit(row)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openStockEntryEdit(row);
+                              }}
                               aria-label={`Edit ${row.item_name} entry`}
                             >
                               <Icon name="edit" size={16} />
@@ -490,9 +552,10 @@ export function LedgerClient() {
                           </span>
                         </span>
                         <span className={catalogStyles.itemCardMetrics}>
+                          <span className={catalogStyles.itemCardPrice}>{money(row.sales_value)}</span>
                           <span
                             className={[
-                              catalogStyles.itemCardPrice,
+                              styles.itemCardClosingStock,
                               isLowStock(row.closing_stock, row.low_stock_threshold)
                                 ? styles.lowValue
                                 : "",

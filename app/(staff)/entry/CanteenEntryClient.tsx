@@ -19,12 +19,10 @@ type StockEntryRow = Database["public"]["Tables"]["stock_entries"]["Row"];
 interface LineState {
   tillQuantitySold: number;
   addedStock: number;
-  wastage: number;
-  wastageNote: string;
 }
 
 function emptyLine(): LineState {
-  return { tillQuantitySold: 0, addedStock: 0, wastage: 0, wastageNote: "" };
+  return { tillQuantitySold: 0, addedStock: 0 };
 }
 
 function todayISO(): string {
@@ -93,8 +91,6 @@ export function CanteenEntryClient() {
           ? {
               tillQuantitySold: entry.till_quantity_sold,
               addedStock: entry.added_stock,
-              wastage: entry.wastage,
-              wastageNote: entry.wastage_note ?? "",
             }
           : {
               ...emptyLine(),
@@ -139,7 +135,7 @@ export function CanteenEntryClient() {
     const line = lines[item.id] ?? emptyLine();
     const opening = openingStockFor(item.id);
     const addedStock = item.supply_type === "canteen_supplied" ? (suppliedTotals[item.id] ?? 0) : line.addedStock;
-    return opening + addedStock - line.tillQuantitySold - line.wastage;
+    return opening + addedStock - line.tillQuantitySold;
   }
 
   function updateLine(itemId: string, patch: Partial<LineState>) {
@@ -169,8 +165,6 @@ export function CanteenEntryClient() {
           item_id: item.id,
           till_quantity_sold: line.tillQuantitySold,
           added_stock: line.addedStock,
-          wastage: line.wastage,
-          wastage_note: line.wastageNote.trim() ? line.wastageNote.trim() : null,
         };
       }),
     };
@@ -282,7 +276,7 @@ export function CanteenEntryClient() {
               stepper: {
                 value: line.tillQuantitySold,
                 onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
-                max: opening + addedStock - line.wastage,
+                max: opening + addedStock,
                 limitMessage: `Only ${remaining} left`,
               },
             },
@@ -296,12 +290,6 @@ export function CanteenEntryClient() {
               openingLabel={`Opening: ${opening}`}
               openingTooltip="Last week's leftover stock. You don't type this in."
               fields={fields}
-              wastageValue={line.wastage}
-              onWastageChange={(next) => updateLine(item.id, { wastage: next })}
-              wastageTooltip="Stock spoiled, broken, or lost — not sold."
-              wastageMax={opening + addedStock - line.tillQuantitySold}
-              wastageNote={line.wastageNote}
-              onWastageNoteChange={(next) => updateLine(item.id, { wastageNote: next })}
             />
           );
         })}
