@@ -59,6 +59,10 @@ export function AdminShell({
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
+    // Deliberate post-mount read of a client-only preference (see the
+    // comment on `collapsed` above for why this can't be a lazy useState
+    // initializer).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
   }, []);
 
