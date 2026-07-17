@@ -36,6 +36,17 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
     };
   }
 
+  // Canteen-only equivalent of the case above, but the upstream actor is
+  // the restaurant's daily sends, not a same-screen store-manager field
+  // — see docs/01_DATA_MODEL.md §3.4's canteen autosave writer and
+  // 20260717140000_stock_entry_canteen_autosave.sql (errcode P0003).
+  if (error.code === "P0003" || error.message.includes("not_yet_supplied")) {
+    return {
+      message: "The restaurant hasn't sent this week's supply yet for this item.",
+      status: 409,
+    };
+  }
+
   if (error.message.includes("oversell")) {
     return { message: "That's more than the available stock available.", status: 409 };
   }

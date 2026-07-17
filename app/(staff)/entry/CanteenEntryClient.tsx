@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { TillStrip } from "@/components/TillStrip";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StatusStrip, type StatusStripState } from "@/components/StatusStrip";
 import { SearchBar } from "@/components/SearchBar";
 import { CategoryChips } from "@/components/CategoryChips";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
-import { ItemEntryCard, type ItemEntryField } from "@/components/ItemEntryCard";
+import { ItemEntryCard, type ItemEntryField, type ItemEntryFieldSaveState } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiNow, nairobiToday, weekStartMonday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
@@ -15,6 +15,10 @@ import styles from "./entry.module.css";
 
 type Item = Database["public"]["Tables"]["items"]["Row"];
 type StockEntryRow = Database["public"]["Tables"]["stock_entries"]["Row"];
+
+const AUTOSAVE_DEBOUNCE_MS = 700;
+
+type CanteenFieldKey = "quantitySold" | "addedStock";
 
 interface LineState {
   tillQuantitySold: number;
@@ -41,13 +45,19 @@ function formatWeekLabel(weekStart: string, weekEnd: string): string {
  * Canteen's weekly reconciliation screen — a genuinely different shape
  * from EntryClient (restaurant, daily), not a cadence variant of it: no
  * sent_out field, added_stock is read-only (pulled from
- * canteen_supplied_total()) for canteen_supplied items and a normal
- * editable stepper for canteen_independent items, and the header uses
+ * canteen_supplied_total()) for canteen_supplied items and a typed
+ * numeric input for canteen_independent items, and the header uses
  * the "Weekly reconciliation" pattern (docs/design/02_PATTERNS_AND_CHECKLIST.md
  * §5: sunken band, date-range label) instead of the daily screen's plain
- * header. See docs/phases/phase4_context.md's "Instructions for the next
- * phase" for why this is a separate component rather than a `cadence`
- * prop on EntryClient.
+ * header.
+ *
+ * Post-launch redesign (same session as the restaurant store-manager/
+ * cashier autosave rework): one person (Anne) owns both quantity_sold
+ * (every item) and added_stock (canteen_independent items only) on this
+ * single screen — not a role split like the restaurant's — so both
+ * fields autosave independently per item via PUT /api/stock-entries'
+ * canteen branch (putCanteenField()), replacing the batch Save button.
+ * See docs/01_DATA_MODEL.md §3.4's canteen autosave writer.
  */
 export function CanteenEntryClient() {
   const requestedDate = useMemo(() => todayISO(), []);
@@ -60,8 +70,18 @@ export function CanteenEntryClient() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "canteen_supplied" | "canteen_independent">("all");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
+
+  // Per-field autosave state: quantitySold (every item) and addedStock
+  // (canteen_independent items only) each autosave independently, both
+  // through the same PUT /api/stock-entries canteen branch — see
+  // app/api/stock-entries/route.ts's putCanteenField().
+  const [fieldStates, setFieldStates] = useState<
+    Record<string, Partial<Record<CanteenFieldKey, ItemEntryFieldSaveState>>>
+  >({});
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const [lastAutosaveError, setLastAutosaveError] = useState<string | null>(null);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -138,14 +158,75 @@ export function CanteenEntryClient() {
     return opening + addedStock - line.tillQuantitySold;
   }
 
-  function updateLine(itemId: string, patch: Partial<LineState>) {
-    setLines((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? emptyLine()), ...patch } }));
+  function setFieldState(itemId: string, field: CanteenFieldKey, state: ItemEntryFieldSaveState) {
+    setFieldStates((prev) => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], [field]: state },
+    }));
   }
 
-  const itemCount = useMemo(
-    () => Object.values(lines).reduce((sum, line) => sum + line.tillQuantitySold, 0),
-    [lines],
+  const saveCanteenField = useCallback(
+    async (itemId: string, field: CanteenFieldKey, line: LineState) => {
+      setFieldState(itemId, field, "saving");
+      setPendingSaves((n) => n + 1);
+
+      const payload: Record<string, unknown> = {
+        entry_date: weekStart,
+        item_id: itemId,
+      };
+      if (field === "quantitySold") {
+        payload.till_quantity_sold = line.tillQuantitySold;
+      } else {
+        payload.added_stock = line.addedStock;
+      }
+
+      try {
+        const res = await fetch("/api/stock-entries", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json();
+
+        if (!res.ok) {
+          setFieldState(itemId, field, "error");
+          setLastAutosaveError(body.error ?? "Couldn't save — please try again.");
+          return;
+        }
+
+        setSavedEntries((prev) => ({ ...prev, [itemId]: body.entry }));
+        setFieldState(itemId, field, "saved");
+        setLastAutosaveError(null);
+      } catch {
+        setFieldState(itemId, field, "error");
+        setLastAutosaveError("Couldn't reach the server — check your connection and try again.");
+      } finally {
+        setPendingSaves((n) => n - 1);
+      }
+    },
+    [weekStart],
   );
+
+  function updateField(itemId: string, field: CanteenFieldKey, value: number) {
+    const patch: Partial<LineState> = field === "quantitySold" ? { tillQuantitySold: value } : { addedStock: value };
+    const nextLine: LineState = { ...(lines[itemId] ?? emptyLine()), ...patch };
+    setLines((prev) => ({ ...prev, [itemId]: nextLine }));
+
+    const timerKey = `${itemId}:${field}`;
+    if (debounceTimers.current[timerKey]) {
+      clearTimeout(debounceTimers.current[timerKey]);
+    }
+    debounceTimers.current[timerKey] = setTimeout(() => {
+      saveCanteenField(itemId, field, nextLine);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  useEffect(() => {
+    const timers = debounceTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
 
   const totalValue = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -155,56 +236,23 @@ export function CanteenEntryClient() {
     }, 0);
   }, [items, lines]);
 
-  async function handleSave() {
-    setSaving(true);
-    const payload = {
-      entry_date: weekStart,
-      lines: items.map((item) => {
-        const line = lines[item.id] ?? emptyLine();
-        return {
-          item_id: item.id,
-          till_quantity_sold: line.tillQuantitySold,
-          added_stock: line.addedStock,
-        };
-      }),
-    };
-
-    try {
-      const res = await fetch("/api/stock-entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json();
-
-      if (!res.ok) {
-        setToast({ message: body.error ?? "Couldn't save this week's entries", status: "error" });
-        return;
-      }
-
-      const nextSaved: Record<string, StockEntryRow> = {};
-      for (const entry of body.entries as StockEntryRow[]) {
-        nextSaved[entry.item_id] = entry;
-      }
-      setSavedEntries(nextSaved);
-      setToast({ message: "This week's entries saved", status: "success" });
-    } catch {
-      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
-    } finally {
-      setSaving(false);
-    }
-  }
+  const autosaveStripState: StatusStripState = lastAutosaveError
+    ? "error"
+    : pendingSaves > 0
+      ? "saving"
+      : Object.keys(savedEntries).length > 0
+        ? "saved"
+        : "idle";
 
   useTillStripSlot(
-    !loading && items.length > 0 ? (
-      <TillStrip
-        itemCount={itemCount}
-        totalValueLabel={`KES ${totalValue.toFixed(2)}`}
-        onSave={handleSave}
-        saving={saving}
+    loading || items.length === 0 ? null : (
+      <StatusStrip
+        state={autosaveStripState}
+        totalValueLabel={`KES ${totalValue.toFixed(2)} sold this week`}
+        errorMessage={lastAutosaveError ?? undefined}
       />
-    ) : null,
-    `${loading}:${items.length}:${itemCount}:${totalValue}:${saving}`,
+    ),
+    `${loading}:${items.length}:${autosaveStripState}:${totalValue}`,
   );
 
   if (loading) {
@@ -256,8 +304,19 @@ export function CanteenEntryClient() {
           const isSupplied = item.supply_type === "canteen_supplied";
           const addedStock = isSupplied ? (suppliedTotals[item.id] ?? 0) : line.addedStock;
           const remaining = remainingStockFor(item);
+          const states = fieldStates[item.id] ?? {};
 
           const fields: ItemEntryField[] = [
+            {
+              key: "quantitySold",
+              label: "Quantity sold",
+              showLabel: true,
+              numericInput: {
+                value: line.tillQuantitySold,
+                onChange: (next) => updateField(item.id, "quantitySold", next),
+                saveState: states.quantitySold ?? "idle",
+              },
+            },
             isSupplied
               ? {
                   key: "addedStock",
@@ -268,18 +327,12 @@ export function CanteenEntryClient() {
               : {
                   key: "addedStock",
                   label: "Added stock",
-                  stepper: { value: line.addedStock, onChange: (next) => updateLine(item.id, { addedStock: next }) },
+                  numericInput: {
+                    value: line.addedStock,
+                    onChange: (next) => updateField(item.id, "addedStock", next),
+                    saveState: states.addedStock ?? "idle",
+                  },
                 },
-            {
-              key: "quantitySold",
-              label: "Quantity sold",
-              stepper: {
-                value: line.tillQuantitySold,
-                onChange: (next) => updateLine(item.id, { tillQuantitySold: next }),
-                max: opening + addedStock,
-                limitMessage: `Only ${remaining} left`,
-              },
-            },
           ];
 
           return (
@@ -289,6 +342,7 @@ export function CanteenEntryClient() {
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={`Opening: ${opening}`}
               openingTooltip="Last week's leftover stock. You don't type this in."
+              availableLabel={`Available: ${remaining}`}
               fields={fields}
             />
           );

@@ -148,15 +148,27 @@ async function main() {
     );
   }
 
-  console.log("\n=== TEST 6: Non-restaurant / unauthenticated staff forbidden from the route entirely ===");
+  console.log("\n=== TEST 6: Canteen staff on this route are dispatched to their own canteen branch, not the restaurant cashier's ===");
   {
+    // Post-launch: PUT /api/stock-entries now also serves canteen's own
+    // autosave branch (putCanteenField(), see docs/01_DATA_MODEL.md
+    // §3.4's canteen autosave writer and
+    // scripts/acceptance/post-launch-canteen-autosave.mjs), dispatched
+    // by user.location. A canteen staffer is no longer blanket-forbidden
+    // from this route — she's routed to her own branch instead, which
+    // rejects this specific fixture item (a restaurant-only item with no
+    // canteen-location row) as a genuine oversell, not a 403.
     const anne = await login("anne"); // canteen
-    const { status } = await api(anne, "PUT", "/api/stock-entries", {
+    const { status, body } = await api(anne, "PUT", "/api/stock-entries", {
       entry_date: TODAY,
       item_id: itemId,
       till_quantity_sold: 1,
     });
-    check("Canteen staff PUT rejected with 403", status === 403, { status });
+    check(
+      "Canteen staff routed to their own branch (rejected here as an oversell, not a 403)",
+      status === 409,
+      { status, body },
+    );
   }
 
   console.log("\n=== TEST 7 (MANDATORY): Concurrent first-writer cashier autosaves don't race ===");

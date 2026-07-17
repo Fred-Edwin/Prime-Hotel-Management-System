@@ -274,6 +274,33 @@ export const canteenStockEntriesSaveSchema = z.object({
 export type CanteenStockEntriesSaveInput = z.infer<typeof canteenStockEntriesSaveSchema>;
 
 /**
+ * Single-field autosave payload for the canteen branch of
+ * PUT /api/stock-entries (post-launch redesign) — Anne's weekly
+ * reconciliation screen autosaves "Quantity sold" (every item) and
+ * "Added stock" (canteen_independent items only) independently, each on
+ * its own debounce timer, unlike the restaurant's role-gated split.
+ * Exactly one of the two quantity fields is required per call — the
+ * route only ever autosaves whichever field the staffer just edited,
+ * passing the other as omitted (preserve semantics in
+ * save_stock_entry_canteen_field()). `entry_date` is whatever date the
+ * client has loaded; the route re-normalizes it to that week's Monday
+ * server-side, same as the GET/POST canteen paths (§3.1) — never
+ * trusted verbatim.
+ */
+export const canteenStockEntryFieldSaveSchema = z
+  .object({
+    entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+    item_id: z.string().uuid(),
+    till_quantity_sold: nonNegativeQuantity.optional(),
+    added_stock: nonNegativeQuantity.optional(),
+  })
+  .refine((data) => data.till_quantity_sold !== undefined || data.added_stock !== undefined, {
+    message: "Provide either till_quantity_sold or added_stock",
+  });
+
+export type CanteenStockEntryFieldSaveInput = z.infer<typeof canteenStockEntryFieldSaveSchema>;
+
+/**
  * Admin direct ledger-row edit (docs/backlog/04_admin_ledger_edit.md) —
  * PATCH /api/dashboard/ledger/entry. Quantities only: price snapshots are
  * permanently immutable through this feature (resolved design decision #2),

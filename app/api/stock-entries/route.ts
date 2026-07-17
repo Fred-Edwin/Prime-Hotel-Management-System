@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import {
   canteenStockEntriesSaveSchema,
+  canteenStockEntryFieldSaveSchema,
   stockEntriesSaveSchema,
   stockEntryCashierLineSaveSchema,
   stockEntryLineSaveSchema,
@@ -303,25 +304,32 @@ async function saveCanteenEntries(
 
 /**
  * PUT /api/stock-entries
- * Single-line autosave, dispatched by role — /entry's store-manager and
- * cashier views both autosave their own field per item (post-launch
- * redesign, docs/backlog/entry-store-manager-redesign-handover.md and
- * docs/backlog/entry-cashier-redesign-handover.md) instead of batching
- * behind the day's TillStrip Save button. The two branches below are
- * kept explicitly separate — different schema, different RPC, different
- * RBAC check — rather than merged into one undifferentiated handler:
- * store-manager owns added_stock/sent_out, cashier owns
- * till_quantity_sold, and neither role may write the other's field
- * through this route.
+ * Single-line autosave, dispatched by location/role — /entry's
+ * restaurant store-manager and cashier views autosave their own field
+ * per item (post-launch redesign, docs/backlog/
+ * entry-store-manager-redesign-handover.md and
+ * docs/backlog/entry-cashier-redesign-handover.md), and canteen's view
+ * autosaves both of its own fields (post-launch redesign, docs/backlog/
+ * entry-canteen-redesign-handover.md) — instead of batching behind a
+ * Save button. The three branches below are kept explicitly separate —
+ * different schema, different RPC, different RBAC/shape — rather than
+ * merged into one undifferentiated handler: restaurant's store-manager
+ * owns added_stock/sent_out, restaurant's cashier owns
+ * till_quantity_sold, and canteen (one person, no role split) owns both
+ * till_quantity_sold and added_stock through its own branch.
  */
 export async function PUT(request: Request) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || user.location !== "restaurant") {
+  if (!user || user.role !== "staff" || !user.location) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
   const supabase = await createServerSupabaseClient();
+
+  if (user.location === "canteen") {
+    return putCanteenField(body, supabase, user.id);
+  }
 
   if (user.is_store_manager) {
     return putStoreManagerField(body, supabase, user.id);
@@ -446,6 +454,71 @@ async function putCashierField(
     p_location: "restaurant",
     p_entry_date: entry_date,
     p_till_quantity_sold: till_quantity_sold,
+    p_selling_price_snapshot: item.selling_price,
+    p_buying_price_snapshot: item.buying_price,
+    p_created_by: userId,
+  });
+
+  if (error) {
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return NextResponse.json({ entry: data });
+}
+
+/**
+ * Canteen-only branch: one person (Anne) autosaves both her own fields —
+ * "Quantity sold" (every item) and "Added stock" (canteen_independent
+ * items only) — through this single branch, unlike the restaurant's
+ * role-gated split. Calls save_stock_entry_canteen_field() (see
+ * 20260717140000_stock_entry_canteen_autosave.sql), NOT
+ * save_canteen_stock_entry() directly — same "don't clobber a concurrent
+ * writer's field" rationale as the restaurant's two autosave functions:
+ * two independent debounce timers on two different inputs are still two
+ * independent writes that can interleave, even though both belong to the
+ * same staffer. Exactly one of till_quantity_sold/added_stock is present
+ * per call (canteenStockEntryFieldSaveSchema enforces this); the other
+ * is passed as null so the RPC preserves whatever the row already has.
+ *
+ * entry_date is re-normalized to that week's Monday server-side (§3.1),
+ * never trusted verbatim from the client — same as GET/POST's canteen
+ * paths.
+ */
+async function putCanteenField(
+  body: unknown,
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+) {
+  const parsed = canteenStockEntryFieldSaveSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+
+  const { item_id, till_quantity_sold, added_stock } = parsed.data;
+  const entry_date = weekStartMonday(new Date(parsed.data.entry_date));
+
+  const itemQuery = supabase
+    .from("items")
+    .select("id, selling_price, buying_price, supply_type")
+    .eq("id", item_id)
+    .single();
+  const { data: item, error: itemError }: Awaited<typeof itemQuery> = await itemQuery;
+
+  if (itemError || !item) {
+    return NextResponse.json({ error: "Unknown item in save request" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase.rpc("save_stock_entry_canteen_field", {
+    p_item_id: item_id,
+    p_entry_date: entry_date,
+    p_is_canteen_supplied: item.supply_type === "canteen_supplied",
+    ...(till_quantity_sold !== undefined ? { p_till_quantity_sold: till_quantity_sold } : {}),
+    ...(added_stock !== undefined ? { p_added_stock_input: added_stock } : {}),
     p_selling_price_snapshot: item.selling_price,
     p_buying_price_snapshot: item.buying_price,
     p_created_by: userId,
