@@ -261,6 +261,44 @@
   font-weight: 600;
 }
 
+.navItemButton {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ---- "More" overflow sheet content (rendered inside the shared Modal) ---- */
+
+.moreMenu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.moreMenuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.moreMenuItem:hover {
+  background: var(--color-surface-sunken);
+}
+
+.moreMenuItemActive {
+  background: var(--color-surface-sunken);
+  color: var(--color-brand-primary);
+}
+
 @media (min-width: 768px) {
   .staffName {
     display: inline;

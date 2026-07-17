@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/Wordmark";
 import { RoleLocationBadge } from "@/components/RoleLocationBadge";
 import { Icon, type IconName } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
 import { AdminTopBarSlotProvider } from "./AdminTopBarSlot";
 import styles from "./AdminShell.module.css";
 
@@ -33,6 +34,12 @@ const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard/audit-log", label: "Audit Log", icon: "history" },
 ];
 
+// Mobile/tablet bottom nav (<1024px) only — the desktop sidebar shows every
+// NAV_ITEMS entry directly and is unaffected. These are the daily-oversight
+// screens WaPrecious needs one tap away; the rest live behind "More".
+// Human-confirmed, 2026-07-17 (see docs/backlog/07_admin_ux_sweep.md Batch B).
+const PRIMARY_MOBILE_NAV_HREFS = ["/dashboard", "/dashboard/ledger", "/dashboard/orders", "/staff"];
+
 export function AdminShell({
   staffName,
   children,
@@ -57,6 +64,11 @@ export function AdminShell({
   // one extra render (a brief expanded-then-collapsed flash) instead of
   // a hydration error.
   const [collapsed, setCollapsed] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const primaryMobileNavItems = NAV_ITEMS.filter((item) => PRIMARY_MOBILE_NAV_HREFS.includes(item.href));
+  const secondaryMobileNavItems = NAV_ITEMS.filter((item) => !PRIMARY_MOBILE_NAV_HREFS.includes(item.href));
+  const moreActive = secondaryMobileNavItems.some((item) => isNavItemActive(pathname, item.href));
 
   useEffect(() => {
     // Deliberate post-mount read of a client-only preference (see the
@@ -195,7 +207,7 @@ export function AdminShell({
         </AdminTopBarSlotProvider>
 
         <nav className={styles.bottomNav} aria-label="Admin navigation">
-          {NAV_ITEMS.map((item) => {
+          {primaryMobileNavItems.map((item) => {
             const active = isNavItemActive(pathname, item.href);
             return (
               <Link
@@ -208,7 +220,36 @@ export function AdminShell({
               </Link>
             );
           })}
+          <button
+            type="button"
+            className={[styles.navItem, styles.navItemButton, moreActive ? styles.navItemActive : ""].join(" ")}
+            aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen(true)}
+          >
+            <Icon name="more" size={22} />
+            <span className={styles.navLabel}>More</span>
+          </button>
         </nav>
+
+        <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
+          <nav className={styles.moreMenu} aria-label="More admin navigation">
+            {secondaryMobileNavItems.map((item) => {
+              const active = isNavItemActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={[styles.moreMenuItem, active ? styles.moreMenuItemActive : ""].join(" ")}
+                  onClick={() => setMoreOpen(false)}
+                >
+                  <Icon name={item.icon} size={20} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </Modal>
       </div>
     </div>
   );
