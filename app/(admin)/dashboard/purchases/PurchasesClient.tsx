@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { EmptyState } from "@/components/EmptyState";
@@ -74,7 +73,7 @@ export function PurchasesClient() {
   const [data, setData] = useState<PurchasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [purchaseTarget, setPurchaseTarget] = useState<PurchaseModalIngredient | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -102,12 +101,14 @@ export function PurchasesClient() {
     };
   }, [load]);
 
-  const ingredientOptions: PurchaseModalIngredient[] = (data?.stockOnHand ?? []).map((row) => ({
-    id: row.ingredient_id,
-    name: row.name,
-    unit: row.unit,
-    buying_price: row.average_cost,
-  }));
+  function openPurchase(row: StockOnHandRow) {
+    setPurchaseTarget({
+      id: row.ingredient_id,
+      name: row.name,
+      unit: row.unit,
+      buying_price: row.average_cost,
+    });
+  }
 
   return (
     <div className={styles.page}>
@@ -120,10 +121,6 @@ export function PurchasesClient() {
         </div>
         <div className={styles.controls}>
           <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
-          <Button variant="primary" onClick={() => setPurchaseModalOpen(true)}>
-            <Icon name="add" size={16} />
-            Log purchase
-          </Button>
         </div>
       </div>
 
@@ -131,7 +128,14 @@ export function PurchasesClient() {
 
       {/* Stock on hand — current quantity + running weighted-average cost
           per ingredient, independent of the period toggle above (it's a
-          point-in-time snapshot, not a period-bounded log). */}
+          point-in-time snapshot, not a period-bounded log). Each row is
+          itself the "log a purchase for this ingredient" entry point —
+          click anywhere on the row, or the per-row icon button — rather
+          than a single global button opening a picker modal. Removes an
+          extra find-the-ingredient-again step, since the row the admin
+          is already looking at IS the ingredient they want to buy;
+          matches the Ledger's existing per-row edit pattern
+          (LedgerClient.tsx's editableRow/editButton). */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Stock on hand</h2>
@@ -141,7 +145,7 @@ export function PurchasesClient() {
           <EmptyState
             icon={<Icon name="ingredients" size={48} />}
             heading="No ingredients yet"
-            body="Add ingredients on the Ingredients screen before logging purchases."
+            body="Add ingredients on the Ingredients screen — they'll appear here to log a purchase against."
           />
         ) : (
           <>
@@ -153,17 +157,35 @@ export function PurchasesClient() {
                     <th className={catalogStyles.numeric}>On hand</th>
                     <th className={catalogStyles.numeric}>Avg. cost</th>
                     <th className={catalogStyles.numeric}>Value</th>
+                    <th aria-label="Log purchase" />
                   </tr>
                 </thead>
                 <tbody>
                   {(data?.stockOnHand ?? []).map((row) => (
-                    <tr key={row.ingredient_id}>
+                    <tr
+                      key={row.ingredient_id}
+                      className={styles.purchaseRow}
+                      onClick={() => openPurchase(row)}
+                    >
                       <td>{row.name}</td>
                       <td className={catalogStyles.numeric}>
                         {qty(row.quantity)} {row.unit}
                       </td>
                       <td className={catalogStyles.numeric}>{money(row.average_cost)}</td>
                       <td className={catalogStyles.numeric}>{money(row.value)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className={styles.purchaseButton}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPurchase(row);
+                          }}
+                          aria-label={`Log purchase — ${row.name}`}
+                        >
+                          <Icon name="add" size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -172,7 +194,11 @@ export function PurchasesClient() {
 
             <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
               {(data?.stockOnHand ?? []).map((row) => (
-                <li key={row.ingredient_id} className={catalogStyles.itemCard}>
+                <li
+                  key={row.ingredient_id}
+                  className={`${catalogStyles.itemCard} ${styles.purchaseCard}`}
+                  onClick={() => openPurchase(row)}
+                >
                   <div className={catalogStyles.itemCardRow}>
                     <span className={catalogStyles.itemCardIdentity}>
                       <span className={catalogStyles.itemCardName}>{row.name}</span>
@@ -267,9 +293,9 @@ export function PurchasesClient() {
       </section>
 
       <PurchaseModal
-        open={purchaseModalOpen}
-        onClose={() => setPurchaseModalOpen(false)}
-        ingredients={ingredientOptions}
+        open={purchaseTarget !== null}
+        onClose={() => setPurchaseTarget(null)}
+        fixedIngredient={purchaseTarget ?? undefined}
         onSaved={() => {
           setToast("Purchase logged");
           load();

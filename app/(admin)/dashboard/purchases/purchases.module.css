@@ -56,3 +56,36 @@
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
 }
+
+/* Stock-on-hand row is itself the "log a purchase for this ingredient"
+   affordance (per-row, not a global picker-based modal) — same pattern
+   as the Ledger's editableRow/editButton (ledger.module.css). */
+.purchaseRow {
+  cursor: pointer;
+}
+
+.purchaseRow:hover td {
+  background: var(--color-surface-sunken);
+}
+
+.purchaseButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.purchaseButton:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-brand-primary);
+}
+
+.purchaseCard {
+  cursor: pointer;
+}
