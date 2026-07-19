@@ -39,6 +39,7 @@ export async function GET(request: Request) {
     stockSummaryRes,
     ingredientSummaryRes,
     expensesSummaryRes,
+    staffMealSummaryRes,
     trendRes,
     lowStockItemsRes,
     lowStockIngredientsRes,
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
     supabase.rpc("dashboard_stock_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_ingredient_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_expenses_summary", { p_from: from, p_to: to }),
+    supabase.rpc("dashboard_staff_meal_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_daily_trend", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_low_stock_items"),
     supabase.rpc("dashboard_low_stock_ingredients"),
@@ -55,6 +57,7 @@ export async function GET(request: Request) {
     stockSummaryRes,
     ingredientSummaryRes,
     expensesSummaryRes,
+    staffMealSummaryRes,
     trendRes,
     lowStockItemsRes,
     lowStockIngredientsRes,
@@ -64,6 +67,7 @@ export async function GET(request: Request) {
 
   const stockByLocation = stockSummaryRes.data ?? [];
   const expensesByLocation = expensesSummaryRes.data ?? [];
+  const staffMealsByLocation = staffMealSummaryRes.data ?? [];
   const ingredientSummary = ingredientSummaryRes.data?.[0] ?? {
     wastage_value: 0,
     closing_stock_value: 0,
@@ -73,6 +77,8 @@ export async function GET(request: Request) {
   const canteenStock = stockByLocation.find((r) => r.location === "canteen");
   const restaurantExpenses = expensesByLocation.find((r) => r.location === "restaurant")?.total_amount ?? 0;
   const canteenExpenses = expensesByLocation.find((r) => r.location === "canteen")?.total_amount ?? 0;
+  const restaurantStaffMeals = staffMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
+  const canteenStaffMeals = staffMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
 
   const combined = {
     salesValue: (restaurantStock?.sales_value ?? 0) + (canteenStock?.sales_value ?? 0),
@@ -83,6 +89,13 @@ export async function GET(request: Request) {
       (restaurantStock?.wastage_value ?? 0) +
       (canteenStock?.wastage_value ?? 0) +
       ingredientSummary.wastage_value,
+    // Staff meals (§3.5) — a distinct figure from wastageValue, never
+    // folded into it. Restaurant-only in practice today (canteen items
+    // can't currently be claimed as a staff meal from canteen's own
+    // screen — canteen staff use the same /expenses tab, scoped to their
+    // own location like every other write path), but summed the same
+    // both-locations way as expenses/wastage for forward consistency.
+    staffMealValue: restaurantStaffMeals + canteenStaffMeals,
     closingStockValue:
       (restaurantStock?.closing_stock_value ?? 0) +
       (canteenStock?.closing_stock_value ?? 0) +
@@ -97,12 +110,14 @@ export async function GET(request: Request) {
       salesValue: restaurantStock?.sales_value ?? 0,
       costValue: restaurantStock?.cost_value ?? 0,
       wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
+      staffMealValue: restaurantStaffMeals,
       closingStockValue: (restaurantStock?.closing_stock_value ?? 0) + ingredientSummary.closing_stock_value,
       expenses: restaurantExpenses,
       netProfit: netProfit({
         salesValue: restaurantStock?.sales_value ?? 0,
         costValue: restaurantStock?.cost_value ?? 0,
         wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
+        staffMealValue: restaurantStaffMeals,
         expenses: restaurantExpenses,
       }),
     },
@@ -110,12 +125,14 @@ export async function GET(request: Request) {
       salesValue: canteenStock?.sales_value ?? 0,
       costValue: canteenStock?.cost_value ?? 0,
       wastageValue: canteenStock?.wastage_value ?? 0,
+      staffMealValue: canteenStaffMeals,
       closingStockValue: canteenStock?.closing_stock_value ?? 0,
       expenses: canteenExpenses,
       netProfit: netProfit({
         salesValue: canteenStock?.sales_value ?? 0,
         costValue: canteenStock?.cost_value ?? 0,
         wastageValue: canteenStock?.wastage_value ?? 0,
+        staffMealValue: canteenStaffMeals,
         expenses: canteenExpenses,
       }),
     },

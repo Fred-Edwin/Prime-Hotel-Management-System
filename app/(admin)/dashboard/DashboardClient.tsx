@@ -17,6 +17,7 @@ interface LocationFigures {
   salesValue: number;
   costValue: number;
   wastageValue: number;
+  staffMealValue: number;
   closingStockValue: number;
   expenses: number;
   netProfit: number;
@@ -68,8 +69,15 @@ const COMPARISON_ROWS = [
   { label: "Gross sales", key: "salesValue" },
   { label: "Cost of goods", key: "costValue" },
   { label: "Recorded wastage", key: "wastageValue" },
+  { label: "Staff meals", key: "staffMealValue" },
   { label: "Operating expenses", key: "expenses" },
 ] as const;
+
+// Both wastage and staff meals are deductions worth calling out in the
+// comparison table's negative-value styling — distinct rows, same visual
+// treatment, since both reduce profit without being a normal operating
+// expense (§3.5 — staff meals are never merged into wastageValue).
+const NEGATIVE_HIGHLIGHT_KEYS: ReadonlySet<string> = new Set(["wastageValue", "staffMealValue"]);
 
 function money(value: number): string {
   return `KES ${Math.round(value).toLocaleString("en-KE")}`;
@@ -151,6 +159,7 @@ export function DashboardClient() {
               <MetricCard label="Total sales" value={money(data.combined.salesValue)} onDark />
               <MetricCard label="Total cost" value={money(data.combined.costValue)} onDark />
               <MetricCard label="Wastage cost" value={money(data.combined.wastageValue)} onDark />
+              <MetricCard label="Staff meals" value={money(data.combined.staffMealValue)} onDark />
               <MetricCard label="Closing stock value" value={money(data.combined.closingStockValue)} onDark />
             </div>
           </>
@@ -216,7 +225,7 @@ export function DashboardClient() {
                       <td
                         className={[
                           styles.comparisonNumeric,
-                          row.key === "wastageValue" ? styles.comparisonNegative : "",
+                          NEGATIVE_HIGHLIGHT_KEYS.has(row.key) ? styles.comparisonNegative : "",
                         ].join(" ")}
                       >
                         {money(data.byLocation.restaurant[row.key])}
@@ -224,7 +233,7 @@ export function DashboardClient() {
                       <td
                         className={[
                           styles.comparisonNumeric,
-                          row.key === "wastageValue" ? styles.comparisonNegative : "",
+                          NEGATIVE_HIGHLIGHT_KEYS.has(row.key) ? styles.comparisonNegative : "",
                         ].join(" ")}
                       >
                         {money(data.byLocation.canteen[row.key])}

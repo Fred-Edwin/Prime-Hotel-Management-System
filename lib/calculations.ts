@@ -46,13 +46,22 @@ export function calculateStockEntryTotals(params: {
   sentOut: number;
   quantitySold: number;
   wastage: number;
+  staffMeals: number;
   sellingPriceSnapshot: number;
   buyingPriceSnapshot: number;
 }): StockEntryTotals {
-  const { openingStock, addedStock, sentOut, quantitySold, wastage, sellingPriceSnapshot, buyingPriceSnapshot } =
-    params;
+  const {
+    openingStock,
+    addedStock,
+    sentOut,
+    quantitySold,
+    wastage,
+    staffMeals,
+    sellingPriceSnapshot,
+    buyingPriceSnapshot,
+  } = params;
 
-  const closingStock = totalStock(openingStock, addedStock) - sentOut - quantitySold - wastage;
+  const closingStock = totalStock(openingStock, addedStock) - sentOut - quantitySold - wastage - staffMeals;
 
   return {
     closingStock,
@@ -65,8 +74,10 @@ export function calculateStockEntryTotals(params: {
 
 /**
  * §3 validation rule: reject a write where sent_out + quantity_sold +
- * wastage > total_stock. Must be checked against the COMBINED quantity_sold
- * (till + orders), not just one write-path's contribution — see §3.4.
+ * wastage + staff_meals > total_stock. Must be checked against the
+ * COMBINED quantity_sold (till + orders) and the combined staff_meals
+ * (sum of staff_meal_entries for that item/location/period), not just one
+ * write-path's contribution — see §3.4.
  */
 export function isStockEntryOversold(params: {
   openingStock: number;
@@ -74,9 +85,10 @@ export function isStockEntryOversold(params: {
   sentOut: number;
   quantitySold: number;
   wastage: number;
+  staffMeals: number;
 }): boolean {
-  const { openingStock, addedStock, sentOut, quantitySold, wastage } = params;
-  return sentOut + quantitySold + wastage > totalStock(openingStock, addedStock);
+  const { openingStock, addedStock, sentOut, quantitySold, wastage, staffMeals } = params;
+  return sentOut + quantitySold + wastage + staffMeals > totalStock(openingStock, addedStock);
 }
 
 export interface IngredientEntryTotals {
@@ -187,22 +199,29 @@ export function orderTotal(params: {
 
 /**
  * Admin dashboard net profit (04_PHASE_PLAN.md Phase 7, docs/01_DATA_MODEL.md
- * §3.3): sales_value - cost_value - expenses - wastage_value. All four
+ * §3.3, staff meals added per docs/backlog/02_staff_meals.md): sales_value -
+ * cost_value - expenses - wastage_value - staff_meal_value. All five
  * inputs are already period/location-aggregated in SQL (sum() over
- * stock_entries/ingredient_entries/expenses) before reaching this
- * function — this is a pure combining step, never a re-derivation of any
- * of its inputs. wastageValue must already include BOTH
- * stock_entries.wastage_value and ingredient_entries.wastage_value (§3.3)
- * — this function doesn't know or care which table each unit came from,
- * the caller sums both first.
+ * stock_entries/ingredient_entries/expenses/staff_meal_entries) before
+ * reaching this function — this is a pure combining step, never a
+ * re-derivation of any of its inputs. wastageValue must already include
+ * BOTH stock_entries.wastage_value and ingredient_entries.wastage_value
+ * (§3.3) — this function doesn't know or care which table each unit came
+ * from, the caller sums both first. staffMealValue is deliberately a
+ * separate parameter, never folded into wastageValue — staff meals are a
+ * distinct, third deduction bucket (consumed on purpose, not spoiled), not
+ * a wastage sub-type.
  */
 export function netProfit(params: {
   salesValue: number;
   costValue: number;
   expenses: number;
   wastageValue: number;
+  staffMealValue: number;
 }): number {
-  return params.salesValue - params.costValue - params.expenses - params.wastageValue;
+  return (
+    params.salesValue - params.costValue - params.expenses - params.wastageValue - params.staffMealValue
+  );
 }
 
 /**

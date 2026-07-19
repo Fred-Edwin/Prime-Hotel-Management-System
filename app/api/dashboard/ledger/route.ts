@@ -49,9 +49,10 @@ export async function GET(request: Request) {
 
   const supabase = await createServerSupabaseClient();
 
-  const [itemLedgerRes, ingredientLedgerRes] = await Promise.all([
+  const [itemLedgerRes, ingredientLedgerRes, staffMealLedgerRes] = await Promise.all([
     supabase.rpc("dashboard_item_ledger", { p_from: from, p_to: to, p_location: location }),
     supabase.rpc("dashboard_ingredient_ledger", { p_from: from, p_to: to }),
+    supabase.rpc("dashboard_staff_meal_ledger", { p_from: from, p_to: to, p_location: location }),
   ]);
 
   if (itemLedgerRes.error) {
@@ -60,6 +61,9 @@ export async function GET(request: Request) {
   if (ingredientLedgerRes.error) {
     return serverErrorResponse(ingredientLedgerRes.error, "dashboard/ledger");
   }
+  if (staffMealLedgerRes.error) {
+    return serverErrorResponse(staffMealLedgerRes.error, "dashboard/ledger");
+  }
 
   return NextResponse.json({
     period,
@@ -67,5 +71,6 @@ export async function GET(request: Request) {
     to,
     items: itemLedgerRes.data ?? [],
     ingredients: ingredientLedgerRes.data ?? [],
+    staffMeals: staffMealLedgerRes.data ?? [],
   });
 }

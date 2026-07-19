@@ -17,6 +17,8 @@ Real staff roster:
 - **Mercy Wanjohi** — restaurant, cashier & waiter
 - **Anne Gitonga** — university canteen staff
 
+**Local dev setup:** before assuming you need to set up Supabase, check if `.env.local` already exists and is populated — it may already point at a working dev project (local Docker stack or hosted free-tier, either is valid). See `docs/00_ARCHITECTURE.md` §7 for current state and how to (re)create it if needed. Dev-login PINs for the roster above live in `scripts/seed-staff.ts` (`pnpm seed:staff` to seed/refresh them).
+
 ---
 
 ## Project status: phased build is complete — this is now post-launch maintenance

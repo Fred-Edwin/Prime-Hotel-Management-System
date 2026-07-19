@@ -78,6 +78,98 @@
   font-family: var(--font-family-structural);
 }
 
+.noResults {
+  padding: var(--space-6) 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+}
+
+/* Item picker (StaffMealsClient) — search-and-tap-to-select, mirroring
+   Orders' item list, not a native <select> (see StaffMealsClient.tsx's
+   header comment for why: ~70 items at a real location makes a dropdown
+   unusable on mobile). */
+.pickerList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.pickerRow {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--color-surface-page);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+}
+
+.pickerRow:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+}
+
+.pickerRow:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pickerRowName {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-primary);
+}
+
+.pickerRowMeta {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.selectedItemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-surface-page);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.selectedItemName {
+  display: block;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.selectedItemMeta {
+  display: block;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.changeItemButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
 .expenseList {
   display: flex;
   flex-direction: column;

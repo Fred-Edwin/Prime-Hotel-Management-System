@@ -13,6 +13,7 @@ stock_entries       — daily (restaurant) / weekly (canteen) stock movement per
 ingredients         — raw material catalog (flour, sugar, etc.) — never sold directly, only consumed
 ingredient_entries   — daily central-store movement per ingredient (received, used in cooking)
 expenses            — operating costs, kept separate from stock/items
+staff_meal_entries  — self-service log of menu items staff consumed without paying, attributed per staff member (see §3.5)
 delivery_locations  — admin-managed catalog of delivery zones + fixed fees (see §6)
 orders              — customer delivery/pickup orders, replaces the client's WhatsApp-coordinated process (see §6)
 order_items         — line items per order (see §6)
@@ -415,11 +416,13 @@ These must live in a single shared function/module (see `CLAUDE.md`'s Project St
 ```
 total_stock          = opening_stock + added_stock
 quantity_sold        = till_quantity_sold + sum(order_items.quantity for this item/location/date)
-closing_stock        = total_stock - sent_out - quantity_sold - wastage
+staff_meals          = sum(staff_meal_entries.quantity for this item/location/date) -- see §3.5
+closing_stock        = total_stock - sent_out - quantity_sold - wastage - staff_meals
 sales_value          = quantity_sold * selling_price_snapshot
 cost_value           = quantity_sold * buying_price_snapshot
 closing_stock_value  = closing_stock * buying_price_snapshot
 wastage_value        = wastage * buying_price_snapshot
+staff_meal_value     = staff_meals * buying_price_snapshot -- see §3.5; a DISTINCT figure from wastage_value, never folded into it
 ```
 
 `quantity_sold` is never written directly by either write-path (till entry or orders) — it's always recomputed from `till_quantity_sold` plus the order total, atomically, by whichever of `save_stock_entry()`/`save_canteen_stock_entry()`/`apply_order_to_stock_entry()` the caller invokes (Phase 4-6; see §3.4's implementation note for why these replaced the originally-planned `recalculate_stock_entry()`), so the two flows can't race and overwrite each other. See §3.4 for the full rationale — this line only exists in this schema because delivery orders (§6) were added after the original design, and "one row, two writers" needed an explicit answer.
@@ -430,7 +433,7 @@ wastage_value        = wastage * buying_price_snapshot
 
 `closing_stock_value` is the cash value of unsold inventory — it mirrors the "Value of Closing Stock" column WaPrecious already tracks by hand, and is a first-class figure on the admin dashboard (capital currently tied up in stock), not just an internal intermediate.
 
-**Validation rule**: reject a write where `sent_out + quantity_sold + wastage > total_stock` (can't sell/send/waste more than you have). Surface this as a clear inline error, not a silent clamp. Same rule applies to `ingredient_entries`: reject `quantity_used + wastage > opening_stock + received`.
+**Validation rule**: reject a write where `sent_out + quantity_sold + wastage + staff_meals > total_stock` (can't sell/send/waste/eat more than you have). Surface this as a clear inline error, not a silent clamp. Same rule applies to `ingredient_entries`: reject `quantity_used + wastage > opening_stock + received` (staff meals are a `stock_entries`-only concept — ingredients are consumed in cooking, never eaten directly by staff, see §3.2).
 
 Because `quantity_sold` now has two contributors (§3.4), this check must run **after** `public.recalculate_stock_entry()` recomputes the combined total, inside the same transaction — not against just the field the current write-path is touching. A till save that would push the *combined* total over `total_stock` must be rejected even if `till_quantity_sold` alone looks fine, and the same for an order that would push it over given the existing `till_quantity_sold`. Either write-path can be the one that tips it over; the check has to see the whole picture, not just its own contribution.
 
@@ -600,6 +603,72 @@ Nothing in the table structure stops an order from being created with `location 
 
 ---
 
+## 3.5 Staff meals (docs/backlog/02_staff_meals.md)
+
+**Status:** design confirmed with the human 2026-07-19, implemented same session.
+
+### The problem
+
+Restaurant staff sometimes eat menu items from stock without it being a paying sale — the client explicitly frames this as a business expense, not something to hide inside wastage or leave unreconciled against a physical count.
+
+### Why this is a separate table, not a `stock_entries` column
+
+Unlike `wastage` (entered by whoever already fills in that day's stock sheet — regular staff, store manager, or admin), staff meals are **self-service**: each staff member logs their own claim, attributed to them (confirmed required — the admin sees who ate what, not just a total). That attribution requirement, plus the fact that multiple different staff members can claim against the same item on the same day, rules out a `stock_entries` column the same way `wastage`/`staff_consumption`-as-a-column would have (one row per item/location/date has no room for "which of several staff members"). `staff_meal_entries` is its own table instead — many rows per item/location/date, one per claim.
+
+### Shape: item + quantity, not a free-text cash amount
+
+Confirmed with the human: a staff member picks the actual menu item and a quantity, like a lightweight order — **not** a free-text description with a self-estimated shilling amount (the alternative considered and rejected). `value = quantity * buying_price_snapshot` is derived automatically, same costing rule as `wastage_value` (never `selling_price_snapshot` — no sale occurred, so there's no margin to value it at, only the cost of what was consumed). This also means a claim correctly reduces the item's `closing_stock` by a real, price-snapshotted quantity, keeping stock reconciliation against a physical count intact — the same reason wastage tracking became V1 scope in the first place.
+
+```sql
+create table public.staff_meal_entries (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references public.items(id),
+  location location_type not null,
+  meal_date date not null,
+  quantity numeric(10,2) not null check (quantity > 0),
+  buying_price_snapshot numeric(10,2) not null,
+  value numeric(10,2) not null,             -- quantity * buying_price_snapshot
+  note text,                                -- optional, e.g. "lunch"
+  staff_id uuid not null references public.users(id),   -- who ate it
+  created_by uuid not null references public.users(id), -- normally == staff_id
+  created_at timestamptz not null default now()
+);
+```
+
+See `20260719150000_staff_meal_entries.sql` for the full migration (table, RLS, `staff_meals_total()`, dashboard aggregation functions).
+
+### Location scoping
+
+Same as every other write path (`stock_entries`/`expenses`/`orders`) — a staff member can only log/read claims against their **own** location's items and stock, not "restaurant only regardless of staff location" (a plausible alternative reading of the client's phrasing, explicitly considered and rejected in favor of consistency with the rest of the schema).
+
+### How staff meals affect the numbers — a third contributor to `closing_stock`, alongside `wastage`
+
+`staff_meals` (the sum of `staff_meal_entries.quantity` for an item/location/period, via `public.staff_meals_total()` — the exact same "narrow, re-derived aggregate" pattern `canteen_supplied_total()` already established) becomes a third term in `closing_stock`'s formula and the oversell check, alongside `wastage` (see the updated formula in §3). **Critically, `staff_meal_value` is never folded into `wastage_value`** — wastage means spoiled/lost, staff meals means consumed on purpose for a legitimate business reason; conflating them would make the wastage dashboard figure lie about actual spoilage. They are two distinct, separately visible dashboard/ledger lines. `net_profit`'s formula (`lib/calculations.ts` `netProfit()`) gains a fifth term: `sales_value − cost_value − expenses − wastage_value − staff_meal_value`.
+
+### The six `stock_entries` writers all needed updating
+
+Because `staff_meals` participates in `closing_stock` and the oversell check, and because (per §3.4) there is no single shared SQL helper for that arithmetic — each of the six writer functions computes it inline — every one of them needed the same one-line addition (`v_staff_meals := public.staff_meals_total(...)`, folded into its existing oversell check and `closing_stock`/`closing_stock_value` arithmetic): `save_stock_entry()`, `save_canteen_stock_entry()`, `apply_order_to_stock_entry()`, `save_stock_entry_store_manager_fields()`, `save_stock_entry_cashier_field()`, `save_stock_entry_canteen_field()`. See `20260719151000_stock_entries_staff_meals.sql`. None of their parameter signatures changed shape (staff meals are never passed in as an argument — always re-derived from `staff_meal_entries` inside the function, same discipline `quantity_sold` already follows for `order_items`), so this was a `create or replace` in place, not a drop-and-recreate.
+
+`staff_meal_entries` writes themselves go through a dedicated write function, `create_staff_meal_entry()` (`20260719151000_stock_entries_staff_meals.sql`, note parameter made optional in `20260719152000_staff_meal_entry_note_optional.sql`) — not through any of the six `stock_entries` writer functions above, and not through `lock_stock_entry_row()` directly by the caller (the function itself takes that lock internally, on the resolved entry_date, so a claim landing concurrently with a till save/order on the same item/period is serialized exactly like every other writer pair in §3.4). Mirrors `create_order()`'s shape: insert the claim row, then force a `stock_entries` recompute for that item/location/period in the SAME transaction, so the oversell check re-runs against the combined total (till + orders + wastage + THIS claim) before anything commits — the same atomicity guarantee orders already get, not an "insert now, let some later unrelated write notice the oversell" gap.
+
+### Available-stock display (post-launch UX-audit fix, `staff_meal_available_stock()`)
+
+A real bug found live-testing this feature: the staff-facing picker's first version only showed "Available: X" when *today's* `stock_entries` row already existed — the common case is no row exists yet (nobody has logged a till sale or store-manager field for that item today), so the picker showed no availability signal at all and let staff submit a quantity the server then correctly rejected with a 409. The fix is `public.staff_meal_available_stock(p_location, p_as_of_date)` (`20260719160000_staff_meal_available_stock.sql`), a `security invoker` function returning each sellable item's current effective stock — reusing `create_staff_meal_entry()`'s own opening-stock-carry-forward logic (most recent `stock_entries` row's `closing_stock`, which is already net of every same-day claim) rather than re-deriving a second, incomplete version of that math client-side (CLAUDE.md's "no calculation logic duplicated" rule).
+
+**`available` is `NULL`, not `0`, when an item has no `stock_entries` row at all** (this or any prior period) — deliberately distinct from a real row showing a confirmed 0 remaining. A brand-new item, or one nobody has logged a till sale for yet today, has *unknown* stock, not *confirmed-empty* stock; collapsing the two into a bare 0 would make every such item permanently unclaimable in the picker until its first till sale of the day, which isn't how staff actually use this screen (a staff meal can legitimately be the first stock-touching action of the day for an item). The client (`StaffMealsClient.tsx`) treats `null` as "don't cap, don't show an Available label" — the same fallback `OrdersClient.tsx` already uses for its own "no row yet" case. The server's real oversell check in `create_staff_meal_entry()` remains the actual enforcement either way; this is a UX cap on top of it, not a replacement.
+
+### Screens
+
+- **Staff-facing**: a new "Staff meals" tab on the existing `/expenses` screen (not a new standalone route/nav item) — search-and-tap-to-select item picker (not a native `<select>` — a real restaurant location has ~70 sellable items, which makes a dropdown unusable on mobile), category filter chips, live cost + available-stock display per item, quantity stepper capped at available stock, optional note, submitted as the logged-in staff member (`staff_id = created_by = auth.uid()`).
+- **Admin-facing**: an itemized table (who, what item, quantity, value, date) on `/dashboard/ledger`, alongside the existing wastage breakdown — same reporting-lens pattern as the rest of that screen. A `staffMealValue` figure also appears on the main dashboard, distinct from `wastageValue`.
+
+### Explicitly not in scope
+
+- Any payroll/deduction logic tied to consumption value.
+- Formal meal-plan/allowance rules (e.g. "each staff gets X per day free").
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.
@@ -757,6 +826,24 @@ create policy "expenses_insert_scoped" on public.expenses
     and (public.is_admin() or location = public.my_location())
   );
 create policy "expenses_update_admin_only" on public.expenses
+  for update using (public.is_admin());
+
+-- STAFF_MEAL_ENTRIES: same location-scoped pattern as expenses, plus
+-- self-attribution (a staff member can only log a claim as themselves --
+-- see §3.5)
+alter table public.staff_meal_entries enable row level security;
+
+create policy "staff_meal_entries_select_scoped" on public.staff_meal_entries
+  for select using (
+    public.is_admin() or location = public.my_location()
+  );
+create policy "staff_meal_entries_insert_scoped" on public.staff_meal_entries
+  for insert with check (
+    created_by = auth.uid()
+    and staff_id = auth.uid()
+    and (public.is_admin() or location = public.my_location())
+  );
+create policy "staff_meal_entries_update_admin_only" on public.staff_meal_entries
   for update using (public.is_admin());
 
 -- DELIVERY_LOCATIONS: everyone (staff + admin) can read, same

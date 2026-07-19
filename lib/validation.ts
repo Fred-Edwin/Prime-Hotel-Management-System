@@ -387,3 +387,19 @@ export const expenseSchema = z.object({
 });
 
 export type ExpenseInput = z.infer<typeof expenseSchema>;
+
+/**
+ * Staff meal claim — see docs/01_DATA_MODEL.md §3.5,
+ * docs/backlog/02_staff_meals.md. Item + quantity, not a free-text cash
+ * amount (confirmed design) — value is always derived server-side from
+ * the item's buying_price, never accepted from the client. Submitted one
+ * at a time from the new "Staff meals" tab on /expenses, same cadence as
+ * expenseSchema.
+ */
+export const staffMealSchema = z.object({
+  item_id: z.string().uuid(),
+  quantity: z.number({ error: "Enter a valid quantity" }).positive("Quantity must be greater than 0"),
+  note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type StaffMealInput = z.infer<typeof staffMealSchema>;

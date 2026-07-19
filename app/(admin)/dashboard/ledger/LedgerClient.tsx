@@ -56,12 +56,25 @@ interface IngredientLedgerRow {
   low_stock_threshold: number;
 }
 
+interface StaffMealLedgerRow {
+  meal_date: string;
+  item_id: string;
+  item_name: string;
+  location: "restaurant" | "canteen";
+  quantity: number;
+  value: number;
+  note: string | null;
+  staff_id: string;
+  staff_name: string;
+}
+
 interface LedgerResponse {
   period: Period;
   from: string;
   to: string;
   items: ItemLedgerRow[];
   ingredients: IngredientLedgerRow[];
+  staffMeals: StaffMealLedgerRow[];
 }
 
 const PERIOD_OPTIONS = [
@@ -370,6 +383,11 @@ export function LedgerClient() {
     { salesValue: 0, costValue: 0, wastageValue: 0 }
   );
 
+  // Staff meal value is deliberately its own total, never merged into
+  // totals.wastageValue above — a distinct bucket (§3.5), same reasoning
+  // as the dashboard's separate wastage/staff-meal MetricCards.
+  const staffMealTotal = (data?.staffMeals ?? []).reduce((sum, row) => sum + row.value, 0);
+
   return (
     <div className={`${styles.page} ${styles.pageFullBleed}`}>
       <div className={styles.headerRow}>
@@ -444,6 +462,7 @@ export function LedgerClient() {
               <MetricCard label="Total sales value" value={money(totals.salesValue)} />
               <MetricCard label="Total cost value" value={money(totals.costValue)} />
               <MetricCard label="Total wastage value" value={money(totals.wastageValue)} />
+              <MetricCard label="Staff meals value" value={money(staffMealTotal)} />
               <MetricCard label="Rows" value={String(data.items.length)} />
             </div>
           )}
@@ -970,6 +989,123 @@ export function LedgerClient() {
               )}
             </section>
           )}
+
+          {/* Staff meals (docs/01_DATA_MODEL.md §3.5, docs/backlog/02_staff_meals.md)
+              — itemized who/what/how much/value, read-only here (claims
+              are logged by staff themselves on /expenses, not editable
+              from the admin ledger, per the confirmed design's scope).
+              Mirrors the Ingredients section's table/mobile-card shape,
+              minus any edit affordance. Not location-gated like
+              Ingredients (restaurant-only) — staff meals can happen at
+              either location. */}
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Staff meals</h2>
+            </div>
+            {data.staffMeals.length === 0 ? (
+              <EmptyState
+                icon={<Icon name="wastage" size={48} />}
+                heading="No staff meals this period"
+                body="Meals staff log on the Expenses screen's Staff meals tab will show up here, itemized by who and what."
+              />
+            ) : (
+              <>
+                <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+                  <table className={catalogStyles.table}>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Staff</th>
+                        <th>Item</th>
+                        <th>Location</th>
+                        <th className={catalogStyles.numeric}>Quantity</th>
+                        <th className={catalogStyles.numeric}>Value</th>
+                        <th>Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.staffMeals.map((row) => (
+                        <tr key={`${row.meal_date}-${row.item_id}-${row.staff_id}-${row.quantity}`}>
+                          <td>{row.meal_date}</td>
+                          <td>{row.staff_name}</td>
+                          <td>{row.item_name}</td>
+                          <td className={styles.locationCell}>
+                            {row.location === "restaurant" ? "Restaurant" : "Canteen"}
+                          </td>
+                          <td className={catalogStyles.numeric}>{qty(row.quantity)}</td>
+                          <td className={catalogStyles.numeric}>{money(row.value)}</td>
+                          <td>{row.note ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Card>
+
+                <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+                  {data.staffMeals.map((row) => {
+                    const key = `${row.meal_date}-${row.item_id}-${row.staff_id}-${row.quantity}`;
+                    const isOpen = expandedRows.has(key);
+                    return (
+                      <li key={key} className={catalogStyles.itemCard}>
+                        <button
+                          type="button"
+                          className={catalogStyles.itemCardRow}
+                          aria-expanded={isOpen}
+                          onClick={() => toggleExpanded(key)}
+                        >
+                          <span className={catalogStyles.itemCardIdentity}>
+                            <span className={catalogStyles.itemCardName}>{row.item_name}</span>
+                            <span className={catalogStyles.itemCardCategory}>
+                              {row.meal_date} · {row.staff_name}
+                            </span>
+                          </span>
+                          <span className={catalogStyles.itemCardMetrics}>
+                            <span className={catalogStyles.itemCardPrice}>{money(row.value)}</span>
+                          </span>
+                          <span
+                            className={[
+                              catalogStyles.itemCardChevron,
+                              isOpen ? catalogStyles.itemCardChevronOpen : "",
+                            ].join(" ")}
+                          >
+                            <Icon name="chevron-right" size={20} />
+                          </span>
+                        </button>
+
+                        <div
+                          className={[
+                            catalogStyles.itemCardDetails,
+                            isOpen ? catalogStyles.itemCardDetailsOpen : "",
+                          ].join(" ")}
+                        >
+                          <div className={catalogStyles.itemCardDetailsInner}>
+                            <div className={catalogStyles.itemCardDetailLine}>
+                              <span>Location</span>
+                              <strong>{row.location === "restaurant" ? "Restaurant" : "Canteen"}</strong>
+                            </div>
+                            <div className={catalogStyles.itemCardDetailLine}>
+                              <span>Quantity</span>
+                              <strong>{qty(row.quantity)}</strong>
+                            </div>
+                            <div className={catalogStyles.itemCardDetailLine}>
+                              <span>Value</span>
+                              <strong>{money(row.value)}</strong>
+                            </div>
+                            {row.note && (
+                              <div className={catalogStyles.itemCardDetailLine}>
+                                <span>Note</span>
+                                <strong>{row.note}</strong>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
         </>
       ) : null}
 

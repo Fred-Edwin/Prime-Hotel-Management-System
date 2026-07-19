@@ -51,6 +51,13 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
     return { message: "That's more than the available stock available.", status: 409 };
   }
 
+  // create_staff_meal_entry() — the referenced item is inactive or was
+  // deleted between the client loading the item picker and submitting
+  // the claim. See docs/01_DATA_MODEL.md §3.5 (errcode P0004).
+  if (error.code === "P0004" || error.message.includes("unknown_item")) {
+    return { message: "That item is no longer available — refresh and try again.", status: 400 };
+  }
+
   // Postgres RLS violation (42501 = insufficient_privilege) — most
   // commonly hit here when trying to save an entry for a date that
   // isn't today, which only an admin can edit (see

@@ -9,7 +9,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
+import { StaffMealsClient } from "./StaffMealsClient";
 import styles from "./expenses.module.css";
+
+type Tab = "expenses" | "staff_meals";
 
 type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"];
 type ExpenseCategory = Database["public"]["Enums"]["expense_category"];
@@ -34,6 +37,7 @@ function todayISO(): string {
  * till-strip batch-save pattern).
  */
 export function ExpensesClient() {
+  const [tab, setTab] = useState<Tab>("expenses");
   const today = todayISO();
   const [category, setCategory] = useState<ExpenseCategory>("electricity");
   const [amount, setAmount] = useState("");
@@ -112,11 +116,26 @@ export function ExpensesClient() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Expenses</h1>
+        <h1 className={styles.title}>{tab === "expenses" ? "Expenses" : "Staff meals"}</h1>
         <p className={styles.dateLabel}>{today}</p>
       </div>
 
-      <form className={styles.form} onSubmit={handleSubmit}>
+      <div className={styles.field}>
+        <CategoryChips
+          options={[
+            { value: "expenses", label: "Expenses" },
+            { value: "staff_meals", label: "Staff meals" },
+          ]}
+          value={tab}
+          onChange={(value) => setTab(value as Tab)}
+        />
+      </div>
+
+      {tab === "staff_meals" ? (
+        <StaffMealsClient />
+      ) : (
+        <>
+          <form className={styles.form} onSubmit={handleSubmit}>
         <div className={styles.field}>
           <span className={styles.fieldLabel}>Category</span>
           <CategoryChips
@@ -181,9 +200,11 @@ export function ExpensesClient() {
             ))}
           </ul>
         )}
-      </div>
+          </div>
 
-      {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
+          {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
+        </>
+      )}
     </div>
   );
 }

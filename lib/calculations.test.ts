@@ -29,11 +29,12 @@ describe("calculateStockEntryTotals", () => {
       sentOut: 5,
       quantitySold: 15,
       wastage: 2,
+      staffMeals: 0,
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
     });
 
-    // total_stock = 30, closing = 30 - 5 - 15 - 2 = 8
+    // total_stock = 30, closing = 30 - 5 - 15 - 2 - 0 = 8
     expect(result.closingStock).toBe(8);
     expect(result.salesValue).toBe(750); // 15 * 50
     expect(result.costValue).toBe(450); // 15 * 30
@@ -48,11 +49,30 @@ describe("calculateStockEntryTotals", () => {
       sentOut: 0,
       quantitySold: 0,
       wastage: 4,
+      staffMeals: 0,
       sellingPriceSnapshot: 100,
       buyingPriceSnapshot: 20,
     });
 
     expect(result.wastageValue).toBe(80); // 4 * 20, not 4 * 100
+  });
+
+  it("reduces closing stock by staff meals, distinct from wastage (docs/backlog/02_staff_meals.md)", () => {
+    const result = calculateStockEntryTotals({
+      openingStock: 20,
+      addedStock: 10,
+      sentOut: 0,
+      quantitySold: 10,
+      wastage: 2,
+      staffMeals: 3,
+      sellingPriceSnapshot: 50,
+      buyingPriceSnapshot: 30,
+    });
+
+    // total_stock = 30, closing = 30 - 0 - 10 - 2 - 3 = 15
+    expect(result.closingStock).toBe(15);
+    // wastageValue must NOT include staff meals — they're a separate bucket.
+    expect(result.wastageValue).toBe(60); // 2 * 30, not 5 * 30
   });
 });
 
@@ -65,6 +85,7 @@ describe("isStockEntryOversold", () => {
         sentOut: 0,
         quantitySold: 8,
         wastage: 3,
+        staffMeals: 0,
       }),
     ).toBe(true);
   });
@@ -77,8 +98,22 @@ describe("isStockEntryOversold", () => {
         sentOut: 0,
         quantitySold: 8,
         wastage: 2,
+        staffMeals: 0,
       }),
     ).toBe(false);
+  });
+
+  it("rejects when staff meals alone push the combined total over available stock", () => {
+    expect(
+      isStockEntryOversold({
+        openingStock: 10,
+        addedStock: 0,
+        sentOut: 0,
+        quantitySold: 8,
+        wastage: 0,
+        staffMeals: 3,
+      }),
+    ).toBe(true);
   });
 });
 
@@ -175,16 +210,16 @@ describe("orderTotal", () => {
 });
 
 describe("netProfit", () => {
-  it("subtracts cost, expenses, and combined wastage from sales (§3.3)", () => {
-    // sales 1000, cost 400, expenses 150, wastage (stock 30 + ingredient 20) = 50
+  it("subtracts cost, expenses, combined wastage, and staff meal value from sales (§3.3, docs/backlog/02_staff_meals.md)", () => {
+    // sales 1000, cost 400, expenses 150, wastage (stock 30 + ingredient 20) = 50, staff meals 25
     expect(
-      netProfit({ salesValue: 1000, costValue: 400, expenses: 150, wastageValue: 50 }),
-    ).toBe(400);
+      netProfit({ salesValue: 1000, costValue: 400, expenses: 150, wastageValue: 50, staffMealValue: 25 }),
+    ).toBe(375);
   });
 
   it("can go negative when costs exceed sales", () => {
     expect(
-      netProfit({ salesValue: 100, costValue: 200, expenses: 50, wastageValue: 10 }),
+      netProfit({ salesValue: 100, costValue: 200, expenses: 50, wastageValue: 10, staffMealValue: 0 }),
     ).toBe(-160);
   });
 });
