@@ -35,7 +35,8 @@ export type IconName =
   | "edit"
   | "expand"
   | "collapse"
-  | "add";
+  | "add"
+  | "refresh";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -220,6 +221,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
   add: (
     <>
       <path d="M12 5v14M5 12h14" />
+    </>
+  ),
+  // Refresh — a circular sweep arrow, the dashboard's manual-reload affordance
+  refresh: (
+    <>
+      <path d="M4.5 12a7.5 7.5 0 0 1 13-5.2M19.5 12a7.5 7.5 0 0 1-13 5.2" />
+      <path d="M17 4.5v3.5h-3.5" />
+      <path d="M7 19.5V16h3.5" />
     </>
   ),
 };

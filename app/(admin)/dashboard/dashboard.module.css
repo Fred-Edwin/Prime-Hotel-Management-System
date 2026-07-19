@@ -32,9 +32,17 @@
    Phase 10 reference design. Kept visible below --breakpoint-desktop,
    where there's no equivalent top bar. */
 @media (min-width: 1024px) {
-  .heroPeriodToggleMobileOnly {
+  .heroPeriodToggleMobileOnly,
+  .heroRefreshRowMobileOnly {
     display: none;
   }
+}
+
+.heroRefreshRowMobileOnly {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
 
 .heroLoading,
@@ -47,6 +55,88 @@
 .heroError {
   color: var(--color-status-error-on-dark);
   opacity: 1;
+}
+
+/* --- Manual refresh control (post-launch fix) ---
+   The dashboard fetches on mount/period-change only, no live polling, so
+   this is the explicit affordance for "pull the latest numbers now"
+   after a sale was just logged elsewhere. Two renderings: the desktop
+   top-bar slot (light surface, alongside PeriodToggle) and the mobile
+   hero band (dark surface) — same behavior, mirrored styling. */
+
+.topBarControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lastUpdated,
+.lastUpdatedOnDark {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+}
+
+.lastUpdated {
+  color: var(--color-text-secondary);
+}
+
+.lastUpdatedOnDark {
+  color: var(--color-text-on-brand);
+  opacity: 0.7;
+}
+
+.refreshButton,
+.refreshButtonOnDark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--space-touch);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: var(--border-width-default) solid transparent;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  background: transparent;
+  transition: background-color var(--motion-instant);
+}
+
+.refreshButton:disabled,
+.refreshButtonOnDark:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.refreshButton {
+  color: var(--color-brand-primary);
+}
+
+.refreshButton:hover:not(:disabled) {
+  background: var(--color-surface-sunken);
+}
+
+.refreshButtonOnDark {
+  color: var(--color-text-on-brand);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.refreshButtonOnDark:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.refreshIconSpinning {
+  animation: dashboardRefreshSpin 0.7s linear infinite;
+}
+
+@keyframes dashboardRefreshSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .heroGrid {

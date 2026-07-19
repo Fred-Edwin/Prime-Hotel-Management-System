@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { MetricCard } from "@/components/MetricCard";
 import { Card } from "@/components/Card";
@@ -83,34 +83,52 @@ function money(value: number): string {
   return `KES ${Math.round(value).toLocaleString("en-KE")}`;
 }
 
+function formatUpdatedAt(date: Date): string {
+  return date.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function DashboardClient() {
   const [period, setPeriod] = useState<Period>("today");
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const cancelledRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
+  const load = useCallback(async (opts: { isManualRefresh?: boolean } = {}) => {
+    if (opts.isManualRefresh) {
+      setRefreshing(true);
+    } else {
       setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/dashboard/summary?period=${period}`);
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json.error ?? "Failed to load dashboard");
-        if (!cancelled) setData(json as SummaryResponse);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load dashboard");
-      } finally {
-        if (!cancelled) setLoading(false);
+    }
+    setError(null);
+    try {
+      const res = await fetch(`/api/dashboard/summary?period=${period}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to load dashboard");
+      if (!cancelledRef.current) {
+        setData(json as SummaryResponse);
+        setLastUpdated(new Date());
+      }
+    } catch (err) {
+      if (!cancelledRef.current) setError(err instanceof Error ? err.message : "Failed to load dashboard");
+    } finally {
+      if (!cancelledRef.current) {
+        setLoading(false);
+        setRefreshing(false);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
 
+  useEffect(() => {
+    cancelledRef.current = false;
     load();
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
   const restaurantLowItems = data?.lowStockItems.filter((i) => i.location === "restaurant") ?? [];
@@ -120,11 +138,34 @@ export function DashboardClient() {
   const criticalCount =
     (data?.lowStockItems.length ?? 0) + (data?.lowStockIngredients.length ?? 0);
 
+  // Manual refresh (post-launch fix): the dashboard only fetches on mount
+  // and on period change, not continuously, so a staff sale logged while
+  // the dashboard is already open doesn't appear until something re-fetches.
+  // This is a deliberate no-polling design (no websocket/live layer in this
+  // app), so a visible manual control is the fix rather than backgrounding
+  // a poll interval.
+  const refreshButton = (
+    <button
+      type="button"
+      className={styles.refreshButton}
+      onClick={() => load({ isManualRefresh: true })}
+      disabled={loading || refreshing}
+      aria-label="Refresh dashboard data"
+    >
+      <Icon name="refresh" size={16} className={refreshing ? styles.refreshIconSpinning : undefined} />
+      <span>Refresh</span>
+    </button>
+  );
+
   // Mirrors the toggle into the desktop-only top bar (AdminShell) — see
   // its own comment for why the hero's copy below stays for mobile,
   // where there's no equivalent top bar to hold it.
   useAdminTopBarSlot(
-    <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
+    <div className={styles.topBarControls}>
+      {lastUpdated && <span className={styles.lastUpdated}>Updated {formatUpdatedAt(lastUpdated)}</span>}
+      {refreshButton}
+      <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
+    </div>
   );
 
   return (
@@ -132,13 +173,30 @@ export function DashboardClient() {
       <section className={styles.hero}>
         <div className={styles.heroTop}>
           <h1 className={styles.heroTitle}>Dashboard</h1>
-          <PeriodToggle
-            options={PERIOD_OPTIONS}
-            value={period}
-            onChange={(v) => setPeriod(v as Period)}
-            onDark
-            className={styles.heroPeriodToggleMobileOnly}
-          />
+          <div className={styles.heroPeriodToggleMobileOnly}>
+            <PeriodToggle
+              options={PERIOD_OPTIONS}
+              value={period}
+              onChange={(v) => setPeriod(v as Period)}
+              onDark
+            />
+          </div>
+        </div>
+
+        <div className={styles.heroRefreshRowMobileOnly}>
+          {lastUpdated && (
+            <span className={styles.lastUpdatedOnDark}>Updated {formatUpdatedAt(lastUpdated)}</span>
+          )}
+          <button
+            type="button"
+            className={styles.refreshButtonOnDark}
+            onClick={() => load({ isManualRefresh: true })}
+            disabled={loading || refreshing}
+            aria-label="Refresh dashboard data"
+          >
+            <Icon name="refresh" size={16} className={refreshing ? styles.refreshIconSpinning : undefined} />
+            <span>Refresh</span>
+          </button>
         </div>
 
         {loading && !data ? (
