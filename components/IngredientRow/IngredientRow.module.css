@@ -112,3 +112,38 @@
 .indicatorError {
   color: var(--color-status-error);
 }
+
+.receivedValue {
+  width: 100%;
+  min-height: var(--space-touch);
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-body-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.logPurchaseButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  background: none;
+  color: var(--color-brand-primary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.logPurchaseButton:hover {
+  text-decoration: underline;
+}

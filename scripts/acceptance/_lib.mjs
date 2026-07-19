@@ -54,26 +54,69 @@ export async function api(cookie, method, path, body) {
 }
 
 /**
- * Runs raw SQL against the local Supabase Postgres container via `docker
- * exec psql`. Used for: (a) direct RLS-impersonation checks that prove a
- * table policy itself blocks a query (not just that one route handler
- * happens to filter it), and (b) manufacturing/cleaning up backdated
- * fixture rows the app's own date-scoped write paths would reject (see
- * docs/phases/phase5_context.md's documented pattern for this). Assumes
- * the local Supabase Docker container name below; override via
- * ACCEPTANCE_DB_CONTAINER if your local stack uses a different project name.
+ * Runs raw SQL against Postgres. Used for: (a) direct RLS-impersonation
+ * checks that prove a table policy itself blocks a query (not just that
+ * one route handler happens to filter it), and (b) manufacturing/cleaning
+ * up backdated fixture rows the app's own date-scoped write paths would
+ * reject (see docs/phases/phase5_context.md's documented pattern for
+ * this).
+ *
+ * Two backends, selected by ACCEPTANCE_DB_MODE (default "docker"):
+ * - "docker" (original): `docker exec psql` against a local Supabase
+ *   Postgres container. Assumes the container name below; override via
+ *   ACCEPTANCE_DB_CONTAINER if your local stack uses a different project
+ *   name.
+ * - "linked": `supabase db query --linked`, for dev environments running
+ *   against a hosted Supabase project instead of local Docker (see
+ *   CLAUDE.md's "Local dev setup" note — a hosted free-tier project is a
+ *   valid dev setup, and Docker may not be available/running at all in
+ *   that case). Returns the query's own stdout table rendering rather
+ *   than `-t -A`'s bare-value format, so callers comparing exact strings
+ *   (e.g. `row === "4.00|6.00"`) need `psqlValue()`/`psqlRow()` below
+ *   instead of raw `psql()` when running in this mode.
  */
 import { execFileSync } from "node:child_process";
 
+const DB_MODE = process.env.ACCEPTANCE_DB_MODE ?? "docker";
 const DB_CONTAINER = process.env.ACCEPTANCE_DB_CONTAINER ?? "supabase_db_mqtlxuwbjzsjtywhjjtf_Reference_used_in_A";
 
 export function psql(sql) {
+  if (DB_MODE === "linked") {
+    const out = execFileSync("npx", ["supabase", "db", "query", "--linked", sql], {
+      encoding: "utf-8",
+    });
+    return out.trim();
+  }
   const out = execFileSync(
     "docker",
     ["exec", "-i", DB_CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-t", "-A", "-c", sql],
     { encoding: "utf-8" },
   );
   return out.trim();
+}
+
+/**
+ * Runs a single-row query and returns its values as a pipe-joined string
+ * in column order (e.g. "20.00|5.00|15.00"), matching the format
+ * ACCEPTANCE_DB_MODE=docker's psql() already returns in `-t -A` mode —
+ * so callers can write one assertion that works under either backend.
+ * Under "linked" mode this parses supabase db query's box-drawing table
+ * output; under "docker" mode psql() already returns exactly this shape,
+ * so this is a passthrough.
+ */
+export function psqlRow(sql) {
+  const raw = psql(sql);
+  if (DB_MODE !== "linked") return raw;
+
+  const lines = raw.split("\n").filter((l) => l.trim().startsWith("│") && !l.includes("─"));
+  if (lines.length < 2) return "";
+  // lines[0] is the header row, lines[1] is the (only) data row for a
+  // single-row query.
+  return lines[1]
+    .split("│")
+    .map((cell) => cell.trim())
+    .filter((cell, i, arr) => !(i === 0 || i === arr.length - 1) || cell !== "")
+    .join("|");
 }
 
 /**

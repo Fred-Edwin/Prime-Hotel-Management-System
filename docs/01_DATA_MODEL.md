@@ -12,6 +12,7 @@ items               — shared item master of SELLABLE menu items (one list, use
 stock_entries       — daily (restaurant) / weekly (canteen) stock movement per sellable item
 ingredients         — raw material catalog (flour, sugar, etc.) — never sold directly, only consumed
 ingredient_entries   — daily central-store movement per ingredient (received, used in cooking)
+ingredient_purchases — append-only log of buying events (quantity, actual unit cost, who, when) — see §3.2
 expenses            — operating costs, kept separate from stock/items
 staff_meal_entries  — self-service log of menu items staff consumed without paying, attributed per staff member (see §3.5)
 delivery_locations  — admin-managed catalog of delivery zones + fixed fees (see §6)
@@ -224,6 +225,32 @@ create index ingredient_entries_ingredient_idx on public.ingredient_entries (ing
 create trigger ingredient_entries_set_updated_at
   before update on public.ingredient_entries
   for each row execute function public.set_updated_at();
+
+-- ============================================================
+-- INGREDIENT_PURCHASES
+-- Append-only log of buying events -- see "Purchases: who buys,
+-- who receives, and how the cost is derived" below, and
+-- 00_ARCHITECTURE.md §13 for the architectural commitment.
+-- ============================================================
+
+create table public.ingredient_purchases (
+  id uuid primary key default gen_random_uuid(),
+  ingredient_id uuid not null references public.ingredients(id),
+  purchase_date date not null,
+  quantity numeric(10,2) not null check (quantity > 0),
+  unit_cost numeric(10,2) not null check (unit_cost >= 0),
+  total_cost numeric(10,2) not null,  -- quantity * unit_cost, stored not generated -- see CLAUDE.md
+  supplier_note text,                 -- optional free-text, mirrors expenses.note / wastage_note convention
+
+  created_by uuid not null references public.users(id),
+  created_at timestamptz not null default now()
+
+  -- No updated_at / update trigger: purchases are immutable once logged,
+  -- see "no update/delete policy" note below.
+);
+
+create index ingredient_purchases_date_idx on public.ingredient_purchases (purchase_date);
+create index ingredient_purchases_ingredient_idx on public.ingredient_purchases (ingredient_id);
 
 -- ============================================================
 -- STOCK_ENTRIES
@@ -494,6 +521,24 @@ Concretely, this means:
 - Ingredient entry is a **separate screen/route** (`app/(staff)/store/page.tsx` — see `CLAUDE.md`'s Project Structure section), distinct from the daily menu-item entry screen. It is a structurally different ledger (one inflow — `received` — and one consumption path — `quantity_used` — versus items' opening/added/sent/sold shape), so it gets its own screen rather than being squeezed into `/entry` as a sub-section. It's still reachable from the same bottom nav, visible only to the store-manager-flagged user. As of the Phase 10 redesign, `/store` autosaves each field independently (`PUT /api/ingredient-entries`, one ingredient/one field per call) instead of a single batched daily save — see `00_ARCHITECTURE.md` §12 for why wastage is no longer part of this screen's payload.
 - **`wastage`/`wastage_note` are NOT entered on `/store` as of the Phase 10 redesign** — see the correction in §3.3 below. `/store`'s per-field autosave (`PUT /api/ingredient-entries`) always writes `wastage: 0, wastage_note: null`. The older multi-line batch save (`POST /api/ingredient-entries` → `save_ingredient_entries_batch()`) still accepts `wastage` in its payload and remains available for any future admin-side wastage entry point, but nothing in the current UI calls it with a non-zero wastage value.
 
+### Purchases: who buys, who receives, and how the cost is derived
+
+Post-launch correction — see `00_ARCHITECTURE.md` §13 for the full architectural commitment; this subsection has the concrete mechanics. The original V1 model conflated "buying" with "receiving": `ingredient_entries.received` was a single typed-in quantity per day, priced from a static `ingredients.buying_price` catalog field nobody actually entered *at the moment of purchase*. The client's real process is different — **WaPrecious (admin) makes the purchase** (deals with the supplier, knows the actual price paid), while **the store manager physically receives the delivery** at the central store. Both roles need to be able to log a buying event, and the price genuinely varies purchase to purchase.
+
+- **`ingredient_purchases` is a new, append-only table** (schema above) — one immutable row per buying event: `quantity`, `unit_cost` (this specific delivery's actual price, typed by whoever logs it), optional `supplier_note`, `created_by`, `created_at`. No update/delete policy — a logged mistake is corrected operationally (e.g. a follow-up purchase), not edited in place, same convention as `orders`/`expenses`.
+- **Both admin and the store manager can insert a purchase** — a deliberate, confirmed permission symmetry (unlike `quantity_used`, which stays store-manager-only, per "Who logs ingredient entries" above). Admin logs purchases on `/dashboard/purchases`; the store manager logs them via a "Log purchase" action on `/store`, which replaces the old plain "received" quantity field. Both call the same `record_ingredient_purchase()` function.
+- **`record_ingredient_purchase(p_ingredient_id, p_purchase_date, p_quantity, p_unit_cost, p_created_by, p_supplier_note)`** is the single write path for both entry points:
+  1. Locks the ingredient/date row (`lock_ingredient_entry_row()`, same advisory lock `save_ingredient_entry()` already uses) so two purchases landing for the same ingredient on the same day can't race each other's average-cost recalculation.
+  2. Derives current quantity-on-hand: today's `opening_stock + received` if a row already exists for that date, otherwise the most recent prior day's `closing_stock`.
+  3. Inserts the `ingredient_purchases` row.
+  4. Recalculates `ingredients.buying_price` as a **weighted average**: `(qty_on_hand × old_avg + purchase_qty × purchase_unit_cost) ÷ (qty_on_hand + purchase_qty)`. This blends the new purchase's price into the existing average proportional to quantity — it does not simply replace the old price, which would misprice stock still on the shelf from an earlier, cheaper (or pricier) purchase. If there's no stock on hand yet, the new average is just this purchase's price. This is standard small-business inventory costing, not true per-batch FIFO — matching how WaPrecious already thinks about cost ("flour is about 120/kg right now"), not more precision than the business has ever tracked by hand.
+  5. Calls `save_ingredient_entry()` with `received` incremented **additively** by the purchase quantity (never overwritten) and the fresh average as `buying_price_snapshot`, so `quantity_used`/`wastage` on that day's row are preserved exactly as `save_ingredient_entry()`'s existing "preserve, don't zero" convention already does for wastage (`20260717093000_preserve_wastage_on_stock_entry_save.sql`).
+- **This also fixes a same-day data-loss bug in the old model**: `ingredient_entries` upserts one row per ingredient per day, so two purchases landing the same day (e.g. admin buys one delivery, the store manager receives a separate one later) would previously have had the second write silently clobber the first's `received` and `buying_price_snapshot`. Folding purchases in additively removes this failure mode entirely — every purchase is preserved as its own permanent `ingredient_purchases` row regardless of how many land on the same day.
+- **`ingredient_entries.buying_price_snapshot` keeps its existing immutability guarantee** (see §3.4's "Admin direct ledger-row edit" note) — a historical day's snapshot is still never rewritten after the fact by anything except the admin ledger-edit route. Only the *source* of the price being snapshotted changed: a real computed running average instead of a static, manually-typed catalog field.
+- **`ingredients.buying_price` remains manually editable by admin on `/ingredients` at any time** — a deliberate, confirmed override/correction path (e.g. fixing a fat-fingered unit cost), not removed by this change. It just now has a second, automatic writer (`record_ingredient_purchase()`) alongside the existing manual one.
+- **`ingredients`' UPDATE RLS policy had to be widened, not just `ingredient_entries`/`ingredient_purchases`'s.** `record_ingredient_purchase()` is `security invoker` (this project's standing write-function convention), so its `update ingredients set buying_price = ...` runs as whichever user called it — a real bug shipped initially and caught by direct testing: `ingredients_admin_update` was admin-only, so a store-manager-logged purchase silently failed to update the catalog price (RLS matched zero rows, no error thrown — the purchase and `ingredient_entries.buying_price_snapshot` still saved correctly, masking the failure). Fixed in `20260719163000_ingredients_update_restaurant_scoped.sql` by widening the UPDATE policy to admin-or-restaurant-location, same shape as `ingredient_entries`/`ingredient_purchases`.
+- **Stock-on-hand visibility** (quantity + current average cost + value, per ingredient) is a new read surfaced by `GET /api/ingredient-purchases`, powering `/dashboard/purchases` for admin — derived from each ingredient's latest `ingredient_entries.closing_stock` and current `buying_price`, not a new stored figure.
+
 ---
 
 ## 3.3 Wastage
@@ -678,6 +723,7 @@ alter table public.users enable row level security;
 alter table public.items enable row level security;
 alter table public.ingredients enable row level security;
 alter table public.ingredient_entries enable row level security;
+alter table public.ingredient_purchases enable row level security;
 alter table public.stock_entries enable row level security;
 alter table public.expenses enable row level security;
 
@@ -719,16 +765,29 @@ create policy "items_admin_update" on public.items
   for update using (public.is_admin());
 
 -- INGREDIENTS: restaurant staff + admin can read (canteen has no
--- reason to see ingredient catalog); only admin can write, same
--- pattern as items
+-- reason to see ingredient catalog); only admin can insert a new
+-- ingredient (catalog management stays admin-only, same pattern as
+-- items). UPDATE is wider than INSERT: admin's manual price edits on
+-- /ingredients need it, but so does record_ingredient_purchase()
+-- (20260719161000_ingredient_purchases.sql) recalculating buying_price
+-- as a weighted average -- that function is security invoker (this
+-- project's standing convention), so it runs as whichever user called
+-- it, and a store-manager-logged purchase needs its own UPDATE to
+-- actually take effect, not just admin's. See
+-- 20260719163000_ingredients_update_restaurant_scoped.sql -- this
+-- replaced an admin-only UPDATE policy that silently no-op'd (zero
+-- rows matched under RLS, no error) whenever the store manager logged
+-- a purchase, discovered by direct testing.
 create policy "ingredients_select_restaurant_or_admin" on public.ingredients
   for select using (
     public.is_admin() or public.my_location() = 'restaurant'
   );
 create policy "ingredients_admin_write" on public.ingredients
   for insert with check (public.is_admin());
-create policy "ingredients_admin_update" on public.ingredients
-  for update using (public.is_admin());
+create policy "ingredients_admin_or_restaurant_update" on public.ingredients
+  for update using (
+    public.is_admin() or public.my_location() = 'restaurant'
+  );
 
 -- INGREDIENT_ENTRIES: restaurant staff + admin can read; only the
 -- authenticated user themself can insert (app-level check further
@@ -753,8 +812,35 @@ create policy "ingredient_entries_insert_restaurant" on public.ingredient_entrie
     (created_by = auth.uid() or public.is_admin())
     and (public.is_admin() or public.my_location() = 'restaurant')
   );
-create policy "ingredient_entries_update_admin_only" on public.ingredient_entries
-  for update using (public.is_admin());
+-- Same-day update is admin-or-restaurant-location (not "only the
+-- original creator"), matching stock_update_location_scoped
+-- (20260717120000) -- so a purchase logged by one restaurant staffer
+-- doesn't lock a same-day row against a second, different restaurant
+-- staffer's write (e.g. admin's purchase creates today's row, the
+-- store manager's separate purchase the same day must still be able
+-- to update it). See 20260719162000_ingredient_entries_update_location_scoped.sql.
+create policy "ingredient_entries_update_admin_or_same_day_location" on public.ingredient_entries
+  for update using (
+    public.is_admin()
+    or (public.my_location() = 'restaurant' and entry_date = current_date)
+  );
+
+-- INGREDIENT_PURCHASES: same shape as ingredient_entries above --
+-- restaurant-location-scoped read/insert, admin sees/inserts
+-- everywhere. No update/delete policy at all: purchases are an
+-- append-only log, not an editable row -- a logging mistake is a
+-- business problem for admin to resolve operationally (e.g. a
+-- corrective follow-up purchase), not a UI edit path, matching how
+-- orders/expenses are never retroactively edited either.
+create policy "ingredient_purchases_select_restaurant_or_admin" on public.ingredient_purchases
+  for select using (
+    public.is_admin() or public.my_location() = 'restaurant'
+  );
+create policy "ingredient_purchases_insert_restaurant" on public.ingredient_purchases
+  for insert with check (
+    (created_by = auth.uid() or public.is_admin())
+    and (public.is_admin() or public.my_location() = 'restaurant')
+  );
 
 -- STOCK_ENTRIES: staff see/write only their own location's rows;
 -- admin sees/writes all; nobody can update a row they didn't create

@@ -34,7 +34,8 @@ export type IconName =
   | "history"
   | "edit"
   | "expand"
-  | "collapse";
+  | "collapse"
+  | "add";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // Entry — clipboard with a check, the daily till-entry sheet
@@ -212,6 +213,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
   collapse: (
     <>
       <path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" />
+    </>
+  ),
+  // Add — a plus sign, "Log purchase" affordances on /store and
+  // /dashboard/purchases
+  add: (
+    <>
+      <path d="M12 5v14M5 12h14" />
     </>
   ),
 };

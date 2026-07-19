@@ -7,6 +7,7 @@ import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { IngredientRow, type IngredientFieldSaveState } from "@/components/IngredientRow";
+import { PurchaseModal } from "@/components/PurchaseModal";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
@@ -21,7 +22,7 @@ interface LineState {
   quantityUsed: number;
 }
 
-type FieldKey = "received" | "quantityUsed";
+type FieldKey = "quantityUsed";
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
 
@@ -46,48 +47,49 @@ export function StoreClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingSaves, setPendingSaves] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [purchaseTarget, setPurchaseTarget] = useState<Ingredient | null>(null);
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch(`/api/ingredient-entries?date=${entryDate}`);
+    const body = await res.json();
 
-    async function load() {
-      setLoading(true);
-      const res = await fetch(`/api/ingredient-entries?date=${entryDate}`);
-      const body = await res.json();
-      if (cancelled) return;
-
-      if (!res.ok) {
-        setLoadError(body.error ?? "Couldn't load today's ingredients");
-        setLoading(false);
-        return;
-      }
-
-      const fetchedIngredients: Ingredient[] = body.ingredients ?? [];
-      const fetchedEntries: IngredientEntryRow[] = body.entries ?? [];
-      const entriesById: Record<string, IngredientEntryRow> = {};
-      const nextLines: Record<string, LineState> = {};
-
-      for (const ingredient of fetchedIngredients) {
-        const entry = fetchedEntries.find((e) => e.ingredient_id === ingredient.id);
-        if (entry) entriesById[ingredient.id] = entry;
-        nextLines[ingredient.id] = entry
-          ? { received: entry.received, quantityUsed: entry.quantity_used }
-          : emptyLine();
-      }
-
-      setIngredients(fetchedIngredients);
-      setSavedEntries(entriesById);
-      setLines(nextLines);
+    if (!res.ok) {
+      setLoadError(body.error ?? "Couldn't load today's ingredients");
       setLoading(false);
+      return;
     }
 
-    load();
+    const fetchedIngredients: Ingredient[] = body.ingredients ?? [];
+    const fetchedEntries: IngredientEntryRow[] = body.entries ?? [];
+    const entriesById: Record<string, IngredientEntryRow> = {};
+    const nextLines: Record<string, LineState> = {};
+
+    for (const ingredient of fetchedIngredients) {
+      const entry = fetchedEntries.find((e) => e.ingredient_id === ingredient.id);
+      if (entry) entriesById[ingredient.id] = entry;
+      nextLines[ingredient.id] = entry
+        ? { received: entry.received, quantityUsed: entry.quantity_used }
+        : emptyLine();
+    }
+
+    setIngredients(fetchedIngredients);
+    setSavedEntries(entriesById);
+    setLines(nextLines);
+    setLoading(false);
+  }, [entryDate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!cancelled) await load();
+    })();
     return () => {
       cancelled = true;
     };
-  }, [entryDate]);
+  }, [load]);
 
   function openingStockFor(ingredientId: string): number {
     return savedEntries[ingredientId]?.opening_stock ?? 0;
@@ -96,7 +98,7 @@ export function StoreClient() {
   function setFieldState(ingredientId: string, field: FieldKey, state: IngredientFieldSaveState) {
     setFieldStates((prev) => ({
       ...prev,
-      [ingredientId]: { ...(prev[ingredientId] ?? { received: "idle", quantityUsed: "idle" }), [field]: state },
+      [ingredientId]: { ...(prev[ingredientId] ?? { quantityUsed: "idle" }), [field]: state },
     }));
   }
 
@@ -106,13 +108,18 @@ export function StoreClient() {
       setPendingSaves((n) => n + 1);
 
       try {
+        // received is always resent as whatever the server last reported
+        // (savedEntries), never the client's own possibly-stale `line.received`
+        // — a purchase logged elsewhere (or by admin) can change it between
+        // loads, and this PUT must not clobber that back down.
+        const currentReceived = savedEntries[ingredientId]?.received ?? 0;
         const res = await fetch("/api/ingredient-entries", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             entry_date: entryDate,
             ingredient_id: ingredientId,
-            received: line.received,
+            received: currentReceived,
             quantity_used: line.quantityUsed,
           }),
         });
@@ -134,7 +141,7 @@ export function StoreClient() {
         setPendingSaves((n) => n - 1);
       }
     },
-    [entryDate],
+    [entryDate, savedEntries],
   );
 
   function updateField(ingredientId: string, field: FieldKey, value: number) {
@@ -221,7 +228,7 @@ export function StoreClient() {
         {visibleIngredients.map((ingredient) => {
           const line = lines[ingredient.id] ?? emptyLine();
           const opening = openingStockFor(ingredient.id);
-          const states = fieldStates[ingredient.id] ?? { received: "idle", quantityUsed: "idle" };
+          const states = fieldStates[ingredient.id] ?? { quantityUsed: "idle" };
 
           return (
             <IngredientRow
@@ -230,8 +237,7 @@ export function StoreClient() {
               unit={ingredient.unit}
               openingStock={opening}
               received={line.received}
-              onReceivedChange={(next) => updateField(ingredient.id, "received", next)}
-              receivedSaveState={states.received}
+              onLogPurchase={() => setPurchaseTarget(ingredient)}
               quantityUsed={line.quantityUsed}
               onQuantityUsedChange={(next) => updateField(ingredient.id, "quantityUsed", next)}
               quantityUsedSaveState={states.quantityUsed}
@@ -239,6 +245,22 @@ export function StoreClient() {
           );
         })}
       </ul>
+
+      <PurchaseModal
+        open={purchaseTarget !== null}
+        onClose={() => setPurchaseTarget(null)}
+        fixedIngredient={
+          purchaseTarget
+            ? {
+                id: purchaseTarget.id,
+                name: purchaseTarget.name,
+                unit: purchaseTarget.unit,
+                buying_price: purchaseTarget.buying_price,
+              }
+            : undefined
+        }
+        onSaved={load}
+      />
 
       {loadError && <Toast message={loadError} status="error" onDismiss={() => setLoadError(null)} />}
     </div>

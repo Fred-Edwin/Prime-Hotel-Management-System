@@ -248,6 +248,23 @@ export const ingredientEntryLineSaveSchema = z.object({
 export type IngredientEntryLineSaveInput = z.infer<typeof ingredientEntryLineSaveSchema>;
 
 /**
+ * POST /api/ingredient-purchases — logged by admin or the store manager
+ * (docs/01_DATA_MODEL.md §3.2's purchases section). quantity must be > 0
+ * (a purchase always adds stock, unlike received/quantity_used which can
+ * legitimately be 0 on a day with no activity) — matches the
+ * ingredient_purchases table's `check (quantity > 0)` constraint.
+ */
+export const ingredientPurchaseSchema = z.object({
+  ingredient_id: z.string().uuid(),
+  purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  quantity: z.number({ error: "Enter a valid number" }).positive("Must be greater than 0"),
+  unit_cost: nonNegativeAmount,
+  supplier_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type IngredientPurchaseInput = z.infer<typeof ingredientPurchaseSchema>;
+
+/**
  * One item's line on the canteen weekly reconciliation screen — see
  * docs/01_DATA_MODEL.md §3.1. No sent_out (canteen never forwards stock).
  * added_stock is only accepted from the client for canteen_independent
