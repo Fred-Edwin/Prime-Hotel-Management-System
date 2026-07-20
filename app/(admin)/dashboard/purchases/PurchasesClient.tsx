@@ -8,13 +8,15 @@ import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { PurchaseModal, type PurchaseModalIngredient } from "@/components/PurchaseModal";
+import { CanteenPurchaseModal, type CanteenPurchaseModalItem } from "@/components/CanteenPurchaseModal";
 import { Toast } from "@/components/Toast";
 import catalogStyles from "../../catalog.module.css";
 import styles from "./purchases.module.css";
 
 type Period = "today" | "week" | "month";
+type Source = "ingredients" | "canteen";
 
-interface PurchaseRow {
+interface IngredientPurchaseRow {
   id: string;
   ingredient_id: string;
   purchase_date: string;
@@ -27,7 +29,7 @@ interface PurchaseRow {
   users: { name: string } | null;
 }
 
-interface StockOnHandRow {
+interface IngredientStockOnHandRow {
   ingredient_id: string;
   name: string;
   unit: string;
@@ -36,18 +38,52 @@ interface StockOnHandRow {
   value: number;
 }
 
-interface PurchasesResponse {
+interface IngredientPurchasesResponse {
   period: Period;
   from: string;
   to: string;
-  purchases: PurchaseRow[];
-  stockOnHand: StockOnHandRow[];
+  purchases: IngredientPurchaseRow[];
+  stockOnHand: IngredientStockOnHandRow[];
+}
+
+interface CanteenPurchaseRow {
+  id: string;
+  item_id: string;
+  purchase_date: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  supplier_note: string | null;
+  created_at: string;
+  items: { name: string } | null;
+  users: { name: string } | null;
+}
+
+interface CanteenStockOnHandRow {
+  item_id: string;
+  name: string;
+  quantity: number;
+  average_cost: number;
+  value: number;
+}
+
+interface CanteenPurchasesResponse {
+  period: Period;
+  from: string;
+  to: string;
+  purchases: CanteenPurchaseRow[];
+  stockOnHand: CanteenStockOnHandRow[];
 }
 
 const PERIOD_OPTIONS = [
   { value: "today", label: "Today" },
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
+];
+
+const SOURCE_OPTIONS = [
+  { value: "ingredients", label: "Ingredients" },
+  { value: "canteen", label: "Canteen Stock" },
 ];
 
 function money(value: number): string {
@@ -59,37 +95,67 @@ function qty(value: number): string {
 }
 
 /**
- * Admin ingredient purchases screen — see docs/01_DATA_MODEL.md §3.2's
- * purchases section. Two sections: a purchase-history log (who bought
- * what, when, at what price — both admin's own entries here and the
- * store manager's from /store show up together) and a stock-on-hand
- * summary (current quantity + running weighted-average cost per
- * ingredient). Reporting/records-browsing lens, same as /dashboard/orders
- * (Phase 9) — these are individual transactional records to scan, not
- * aggregate metrics needing a chart.
+ * Admin purchases screen — one screen for both purchase logs, switched
+ * by a "Ingredients" / "Canteen Stock" source tab rather than two
+ * separate nav entries + routes. The two datasets are structurally
+ * identical (stock-on-hand + purchase-history + a "log a purchase"
+ * modal) but semantically disjoint — an ingredient purchase and a
+ * canteen_independent item purchase never need to appear in the same
+ * row, so a merged table would force awkward column reconciliation
+ * (ingredients have a `unit`, items don't) for no real benefit. The tab
+ * removes the "which purchases screen do I want" decision instead,
+ * consolidating to one sidebar entry ("Purchases").
+ *
+ * Ingredients: docs/01_DATA_MODEL.md §3.2's "Purchases: who buys, who
+ * receives, and how the cost is derived" — both admin and the store
+ * manager can log a purchase; folds into ingredient_entries.received.
+ * Canteen: §3.2's "Canteen's own stock purchases" subsection —
+ * admin-only (canteen has no store-manager-equivalent role), scoped to
+ * canteen_independent items only, folds into stock_entries.added_stock.
+ * Reporting/records-browsing lens, same as /dashboard/orders (Phase 9)
+ * — individual transactional records to scan, not aggregate metrics.
  */
 export function PurchasesClient() {
+  const [source, setSource] = useState<Source>("ingredients");
   const [period, setPeriod] = useState<Period>("today");
-  const [data, setData] = useState<PurchasesResponse | null>(null);
+
+  const [ingredientData, setIngredientData] = useState<IngredientPurchasesResponse | null>(null);
+  const [canteenData, setCanteenData] = useState<CanteenPurchasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [purchaseTarget, setPurchaseTarget] = useState<PurchaseModalIngredient | null>(null);
+
+  const [ingredientPurchaseTarget, setIngredientPurchaseTarget] = useState<PurchaseModalIngredient | null>(
+    null,
+  );
+  const [canteenPurchaseTarget, setCanteenPurchaseTarget] = useState<CanteenPurchaseModalItem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  const loadIngredients = useCallback(async () => {
+    const res = await fetch(`/api/ingredient-purchases?period=${period}`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error ?? "Failed to load purchases");
+    setIngredientData(json as IngredientPurchasesResponse);
+  }, [period]);
+
+  const loadCanteen = useCallback(async () => {
+    const res = await fetch(`/api/canteen-purchases?period=${period}`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error ?? "Failed to load purchases");
+    setCanteenData(json as CanteenPurchasesResponse);
+  }, [period]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/ingredient-purchases?period=${period}`);
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error ?? "Failed to load purchases");
-      setData(json as PurchasesResponse);
+      if (source === "ingredients") await loadIngredients();
+      else await loadCanteen();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load purchases");
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [source, loadIngredients, loadCanteen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,14 +167,30 @@ export function PurchasesClient() {
     };
   }, [load]);
 
-  function openPurchase(row: StockOnHandRow) {
-    setPurchaseTarget({
+  function openIngredientPurchase(row: IngredientStockOnHandRow) {
+    setIngredientPurchaseTarget({
       id: row.ingredient_id,
       name: row.name,
       unit: row.unit,
       buying_price: row.average_cost,
     });
   }
+
+  function openCanteenPurchase(row: CanteenStockOnHandRow) {
+    setCanteenPurchaseTarget({
+      id: row.item_id,
+      name: row.name,
+      buying_price: row.average_cost,
+    });
+  }
+
+  const isIngredients = source === "ingredients";
+  const stockOnHandEmpty = isIngredients
+    ? !loading && ingredientData && ingredientData.stockOnHand.length === 0
+    : !loading && canteenData && canteenData.stockOnHand.length === 0;
+  const purchasesEmpty = isIngredients
+    ? ingredientData && ingredientData.purchases.length === 0
+    : canteenData && canteenData.purchases.length === 0;
 
   return (
     <div className={styles.page}>
@@ -120,34 +202,41 @@ export function PurchasesClient() {
           </Link>
         </div>
         <div className={styles.controls}>
+          <PeriodToggle options={SOURCE_OPTIONS} value={source} onChange={(v) => setSource(v as Source)} />
           <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
         </div>
       </div>
 
       {error && <p className={catalogStyles.formError}>{error}</p>}
 
-      {/* Stock on hand — current quantity + running weighted-average cost
-          per ingredient, independent of the period toggle above (it's a
-          point-in-time snapshot, not a period-bounded log). Each row is
-          itself the "log a purchase for this ingredient" entry point —
-          click anywhere on the row, or the per-row icon button — rather
-          than a single global button opening a picker modal. Removes an
-          extra find-the-ingredient-again step, since the row the admin
-          is already looking at IS the ingredient they want to buy;
-          matches the Ledger's existing per-row edit pattern
-          (LedgerClient.tsx's editableRow/editButton). */}
+      {/* Stock on hand — current quantity + running weighted-average cost,
+          independent of the period toggle above (it's a point-in-time
+          snapshot, not a period-bounded log). Each row is itself the
+          "log a purchase for this ingredient/item" entry point — click
+          anywhere on the row, or the per-row icon button — rather than a
+          single global button opening a picker modal. Removes an extra
+          find-it-again step, since the row the admin is already looking
+          at IS the thing they want to buy; matches the Ledger's existing
+          per-row edit pattern (LedgerClient.tsx's editableRow/editButton). */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Stock on hand</h2>
-          <LowStockIndicator variant="pill" label="Restaurant only" />
-        </div>
-        {!loading && data && data.stockOnHand.length === 0 ? (
-          <EmptyState
-            icon={<Icon name="ingredients" size={48} />}
-            heading="No ingredients yet"
-            body="Add ingredients on the Ingredients screen — they'll appear here to log a purchase against."
+          <LowStockIndicator
+            variant="pill"
+            label={isIngredients ? "Restaurant only" : "Canteen-independent items only"}
           />
-        ) : (
+        </div>
+        {stockOnHandEmpty ? (
+          <EmptyState
+            icon={<Icon name={isIngredients ? "ingredients" : "store"} size={48} />}
+            heading={isIngredients ? "No ingredients yet" : "No canteen-independent items yet"}
+            body={
+              isIngredients
+                ? "Add ingredients on the Ingredients screen — they'll appear here to log a purchase against."
+                : "Mark an item as 'Canteen independent' on the Items screen — it'll appear here to log a purchase against."
+            }
+          />
+        ) : isIngredients ? (
           <>
             <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
               <table className={catalogStyles.table}>
@@ -161,12 +250,8 @@ export function PurchasesClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.stockOnHand ?? []).map((row) => (
-                    <tr
-                      key={row.ingredient_id}
-                      className={styles.purchaseRow}
-                      onClick={() => openPurchase(row)}
-                    >
+                  {(ingredientData?.stockOnHand ?? []).map((row) => (
+                    <tr key={row.ingredient_id} className={styles.purchaseRow} onClick={() => openIngredientPurchase(row)}>
                       <td>{row.name}</td>
                       <td className={catalogStyles.numeric}>
                         {qty(row.quantity)} {row.unit}
@@ -179,7 +264,7 @@ export function PurchasesClient() {
                           className={styles.purchaseButton}
                           onClick={(e) => {
                             e.stopPropagation();
-                            openPurchase(row);
+                            openIngredientPurchase(row);
                           }}
                           aria-label={`Log purchase — ${row.name}`}
                         >
@@ -193,24 +278,82 @@ export function PurchasesClient() {
             </Card>
 
             <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-              {(data?.stockOnHand ?? []).map((row) => (
+              {(ingredientData?.stockOnHand ?? []).map((row) => (
                 <li
                   key={row.ingredient_id}
                   className={`${catalogStyles.itemCard} ${styles.purchaseCard}`}
-                  onClick={() => openPurchase(row)}
+                  onClick={() => openIngredientPurchase(row)}
                 >
                   <div className={catalogStyles.itemCardRow}>
                     <span className={catalogStyles.itemCardIdentity}>
                       <span className={catalogStyles.itemCardName}>{row.name}</span>
-                      <span className={catalogStyles.itemCardCategory}>
-                        Avg. cost {money(row.average_cost)}
-                      </span>
+                      <span className={catalogStyles.itemCardCategory}>Avg. cost {money(row.average_cost)}</span>
                     </span>
                     <span className={catalogStyles.itemCardMetrics}>
                       <span className={catalogStyles.itemCardPrice}>{money(row.value)}</span>
                       <span className={styles.stockBadge}>
                         {qty(row.quantity)} {row.unit}
                       </span>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+              <table className={catalogStyles.table}>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th className={catalogStyles.numeric}>On hand</th>
+                    <th className={catalogStyles.numeric}>Avg. cost</th>
+                    <th className={catalogStyles.numeric}>Value</th>
+                    <th aria-label="Log purchase" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(canteenData?.stockOnHand ?? []).map((row) => (
+                    <tr key={row.item_id} className={styles.purchaseRow} onClick={() => openCanteenPurchase(row)}>
+                      <td>{row.name}</td>
+                      <td className={catalogStyles.numeric}>{qty(row.quantity)}</td>
+                      <td className={catalogStyles.numeric}>{money(row.average_cost)}</td>
+                      <td className={catalogStyles.numeric}>{money(row.value)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className={styles.purchaseButton}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCanteenPurchase(row);
+                          }}
+                          aria-label={`Log purchase — ${row.name}`}
+                        >
+                          <Icon name="add" size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+
+            <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+              {(canteenData?.stockOnHand ?? []).map((row) => (
+                <li
+                  key={row.item_id}
+                  className={`${catalogStyles.itemCard} ${styles.purchaseCard}`}
+                  onClick={() => openCanteenPurchase(row)}
+                >
+                  <div className={catalogStyles.itemCardRow}>
+                    <span className={catalogStyles.itemCardIdentity}>
+                      <span className={catalogStyles.itemCardName}>{row.name}</span>
+                      <span className={catalogStyles.itemCardCategory}>Avg. cost {money(row.average_cost)}</span>
+                    </span>
+                    <span className={catalogStyles.itemCardMetrics}>
+                      <span className={catalogStyles.itemCardPrice}>{money(row.value)}</span>
+                      <span className={styles.stockBadge}>{qty(row.quantity)}</span>
                     </span>
                   </div>
                 </li>
@@ -225,15 +368,19 @@ export function PurchasesClient() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Purchase history</h2>
         </div>
-        {loading && !data ? (
+        {loading && !ingredientData && !canteenData ? (
           <p>Loading…</p>
-        ) : data && data.purchases.length === 0 ? (
+        ) : purchasesEmpty ? (
           <EmptyState
-            icon={<Icon name="ingredients" size={48} />}
+            icon={<Icon name={isIngredients ? "ingredients" : "store"} size={48} />}
             heading="No purchases this period"
-            body="Purchases logged here or by the store manager on /store will show up in this list."
+            body={
+              isIngredients
+                ? "Purchases logged here or by the store manager on /store will show up in this list."
+                : "Purchases logged here will show up in this list."
+            }
           />
-        ) : (
+        ) : isIngredients ? (
           <>
             <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
               <table className={catalogStyles.table}>
@@ -249,7 +396,7 @@ export function PurchasesClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.purchases ?? []).map((purchase) => (
+                  {(ingredientData?.purchases ?? []).map((purchase) => (
                     <tr key={purchase.id}>
                       <td>{purchase.purchase_date}</td>
                       <td>{purchase.ingredients?.name ?? "Unknown ingredient"}</td>
@@ -267,7 +414,7 @@ export function PurchasesClient() {
             </Card>
 
             <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-              {(data?.purchases ?? []).map((purchase) => (
+              {(ingredientData?.purchases ?? []).map((purchase) => (
                 <li key={purchase.id} className={catalogStyles.itemCard}>
                   <div className={catalogStyles.itemCardRow}>
                     <span className={catalogStyles.itemCardIdentity}>
@@ -289,13 +436,73 @@ export function PurchasesClient() {
               ))}
             </ul>
           </>
+        ) : (
+          <>
+            <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
+              <table className={catalogStyles.table}>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th className={catalogStyles.numeric}>Quantity</th>
+                    <th className={catalogStyles.numeric}>Unit cost</th>
+                    <th className={catalogStyles.numeric}>Total</th>
+                    <th>Logged by</th>
+                    <th>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(canteenData?.purchases ?? []).map((purchase) => (
+                    <tr key={purchase.id}>
+                      <td>{purchase.purchase_date}</td>
+                      <td>{purchase.items?.name ?? "Unknown item"}</td>
+                      <td className={catalogStyles.numeric}>{qty(purchase.quantity)}</td>
+                      <td className={catalogStyles.numeric}>{money(purchase.unit_cost)}</td>
+                      <td className={catalogStyles.numeric}>{money(purchase.total_cost)}</td>
+                      <td>{purchase.users?.name ?? "Unknown"}</td>
+                      <td>{purchase.supplier_note ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+
+            <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
+              {(canteenData?.purchases ?? []).map((purchase) => (
+                <li key={purchase.id} className={catalogStyles.itemCard}>
+                  <div className={catalogStyles.itemCardRow}>
+                    <span className={catalogStyles.itemCardIdentity}>
+                      <span className={catalogStyles.itemCardName}>{purchase.items?.name ?? "Unknown item"}</span>
+                      <span className={catalogStyles.itemCardCategory}>
+                        {purchase.purchase_date} · {purchase.users?.name ?? "Unknown"}
+                      </span>
+                    </span>
+                    <span className={catalogStyles.itemCardMetrics}>
+                      <span className={catalogStyles.itemCardPrice}>{money(purchase.total_cost)}</span>
+                      <span className={styles.stockBadge}>{qty(purchase.quantity)}</span>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
 
       <PurchaseModal
-        open={purchaseTarget !== null}
-        onClose={() => setPurchaseTarget(null)}
-        fixedIngredient={purchaseTarget ?? undefined}
+        open={ingredientPurchaseTarget !== null}
+        onClose={() => setIngredientPurchaseTarget(null)}
+        fixedIngredient={ingredientPurchaseTarget ?? undefined}
+        onSaved={() => {
+          setToast("Purchase logged");
+          load();
+        }}
+      />
+
+      <CanteenPurchaseModal
+        open={canteenPurchaseTarget !== null}
+        onClose={() => setCanteenPurchaseTarget(null)}
+        fixedItem={canteenPurchaseTarget ?? undefined}
         onSaved={() => {
           setToast("Purchase logged");
           load();

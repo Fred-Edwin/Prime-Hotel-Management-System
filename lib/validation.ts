@@ -265,6 +265,22 @@ export const ingredientPurchaseSchema = z.object({
 export type IngredientPurchaseInput = z.infer<typeof ingredientPurchaseSchema>;
 
 /**
+ * Admin's canteen stock purchase log — mirrors ingredientPurchaseSchema
+ * exactly, for canteen_independent items only (enforced server-side by
+ * record_canteen_stock_purchase()'s own item.supply_type check, not
+ * re-validated here — this schema only shapes the input).
+ */
+export const canteenStockPurchaseSchema = z.object({
+  item_id: z.string().uuid(),
+  purchase_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  quantity: z.number({ error: "Enter a valid number" }).positive("Must be greater than 0"),
+  unit_cost: nonNegativeAmount,
+  supplier_note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type CanteenStockPurchaseInput = z.infer<typeof canteenStockPurchaseSchema>;
+
+/**
  * One item's line on the canteen weekly reconciliation screen — see
  * docs/01_DATA_MODEL.md §3.1. No sent_out (canteen never forwards stock).
  * added_stock is only accepted from the client for canteen_independent

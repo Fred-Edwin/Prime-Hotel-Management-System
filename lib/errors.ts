@@ -58,6 +58,17 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
     return { message: "That item is no longer available — refresh and try again.", status: 400 };
   }
 
+  // record_canteen_stock_purchase()'s item-type guard (errcode 23514,
+  // check_violation) — the item picker should already only offer
+  // canteen_independent items, so this is a defensive fallback, not the
+  // expected path. See 20260720110000_canteen_stock_purchases.sql.
+  if (error.code === "23514" || error.message.includes("canteen_independent item")) {
+    return {
+      message: "That item can't have a canteen purchase logged — it's not a canteen-independent item.",
+      status: 400,
+    };
+  }
+
   // Postgres RLS violation (42501 = insufficient_privilege) — most
   // commonly hit here when trying to save an entry for a date that
   // isn't today, which only an admin can edit (see
