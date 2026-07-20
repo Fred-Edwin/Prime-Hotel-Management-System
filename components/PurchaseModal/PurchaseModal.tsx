@@ -46,11 +46,14 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
 
   useEffect(() => {
     if (!open) return;
-    setIngredientId(fixedIngredient?.id ?? "");
-    setQuantity("");
-    setUnitCost(selected ? String(selected.buying_price) : "");
-    setSupplierNote("");
-    setError(null);
+    function resetForm() {
+      setIngredientId(fixedIngredient?.id ?? "");
+      setQuantity("");
+      setUnitCost(selected ? String(selected.buying_price) : "");
+      setSupplierNote("");
+      setError(null);
+    }
+    resetForm();
     // Only reset when the modal opens or the fixed ingredient changes —
     // not on every `selected` recompute, which would wipe an in-progress
     // unit cost edit whenever the picker's selection triggers a rerender.

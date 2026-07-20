@@ -124,7 +124,10 @@ export function DashboardClient() {
 
   useEffect(() => {
     cancelledRef.current = false;
-    load();
+    async function run() {
+      await load();
+    }
+    run();
     return () => {
       cancelledRef.current = true;
     };
