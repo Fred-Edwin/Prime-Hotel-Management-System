@@ -44,11 +44,14 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
 
   useEffect(() => {
     if (!open) return;
-    setItemId(fixedItem?.id ?? "");
-    setQuantity("");
-    setUnitCost(selected ? String(selected.buying_price) : "");
-    setSupplierNote("");
-    setError(null);
+    function resetForm() {
+      setItemId(fixedItem?.id ?? "");
+      setQuantity("");
+      setUnitCost(selected ? String(selected.buying_price) : "");
+      setSupplierNote("");
+      setError(null);
+    }
+    resetForm();
     // Only reset when the modal opens or the fixed item changes — not on
     // every `selected` recompute, which would wipe an in-progress unit
     // cost edit whenever the picker's selection triggers a rerender.
