@@ -1,6 +1,8 @@
 # Admin direct ledger-row edit (supersedes 04_admin_impersonation.md and 05_admin_historical_edit.md)
 
-**Status:** Shipped. `PATCH /api/dashboard/ledger/entry`, wired into the edit modal in `app/(admin)/dashboard/ledger/LedgerClient.tsx`. Quantities-only, rejects (409) if not the most-recent row, writes an `audit_log` entry per edit.
+**Status:** Shipped, then extended post-launch (2026-07-20) — see "Post-launch correction" at the end of this file. Resolved decision #1 below ("block, don't cascade") **no longer reflects the shipped behavior**; kept here unedited as the historical record of what was originally decided and why, per this repo's convention of not rewriting a backlog doc's decision log after the fact. `docs/01_DATA_MODEL.md`'s "Historical edit cascade" section is the current source of truth for how this actually works now.
+
+**Status (original, 2026-07-16):** Shipped. `PATCH /api/dashboard/ledger/entry`, wired into the edit modal in `app/(admin)/dashboard/ledger/LedgerClient.tsx`. Quantities-only, rejects (409) if not the most-recent row, writes an `audit_log` entry per edit.
 **Depends on:** [03 (audit log)](03_audit_log.md) — done. Every edit under this feature must write an audit entry with before/after values, same pattern as the Staff routes.
 **Phase-scale?** Yes — flag explicitly and confirm scope with the human before a large implementation session. Touches `stock_entries`/`ingredient_entries` write paths and the derived-quantity/opening-stock invariants those tables depend on.
 
@@ -46,3 +48,18 @@ The original backlog had two separate ideas: 04 ("admin acts as any staff role,"
 ## Agent-session prompt
 
 > You are a full-stack engineer working on the Prosper Hotel Management System, a Next.js 14 + Supabase app for a Kenyan restaurant/canteen business (see `CLAUDE.md` at the repo root for full context — read it first, especially the non-negotiable constraints on price snapshotting and the §3.4 concurrency/derived-quantity mechanism). Your task is to implement admin direct ledger-row editing as described in `docs/backlog/04_admin_ledger_edit.md` — this supersedes two earlier, separately-scoped backlog items (04_admin_impersonation.md, 05_admin_historical_edit.md), so read the "Why this replaced..." section first for context on what changed and why. The design's three hard questions are already resolved (read "Resolved design decisions" in full): edits are blocked on any row that has a dependent later row (no auto-cascade), price snapshots are permanently immutable through this feature, and `quantity_sold`/`closing_stock` must always flow through the existing `save_stock_entry()`/`save_canteen_stock_entry()`/`save_ingredient_entry()` functions, never a raw UPDATE. Build the edit entry point on the existing Ledger screen (`app/(admin)/dashboard/ledger/LedgerClient.tsx`), add the "most recent entry" server-side check, and make sure `created_by` stays the original staff member while the audit log (`lib/audit.ts`, see `docs/backlog/03_audit_log.md`) separately records which admin made the correction. Read `docs/phases/phase9_context.md` and `docs/01_DATA_MODEL.md` §3.4 first. Write a `scripts/acceptance/*.mjs` script covering the most-recent-row rejection, correct re-derivation, and price-snapshot immutability. Flag explicitly to the human whether this warrants a phase-style plan before starting, per its phase-scale flag.
+
+---
+
+## Post-launch correction (2026-07-20): "block, don't cascade" replaced with a recompute cascade
+
+Resolved decision #1 above ("Cascade handling: block, don't cascade") was reversed after real post-launch use: blocking any edit but the single most-recent row meant a genuine data-entry mistake found even a few days later couldn't be corrected at its source at all — the exact problem this feature exists to solve. The human asked directly for historical edits to be allowed; "block forever" wasn't revisited as a limitation found in practice so much as replaced outright once asked for.
+
+**What changed:** `PATCH /api/dashboard/ledger/entry` no longer rejects editing a non-latest row. Instead, after the edited row's own save succeeds, it calls a new recompute cascade (`recompute_stock_entry_cascade()` / `recompute_ingredient_entry_chain()`, `supabase/migrations/20260720100000_historical_ledger_edit_cascade.sql`) that walks forward through every later row for that item/location (or ingredient), re-deriving `opening_stock`/`closing_stock`/value fields from each row's own already-stored inputs and price snapshots — never touching a price. For a `canteen_supplied` item whose restaurant `sent_out` changed, the cascade also re-derives the linked canteen week(s).
+
+**New resolved decisions made when this was reversed:**
+- Unrestricted historical range (no "current month only" cutoff).
+- A downstream oversell revealed by the recompute rejects the *entire* cascade atomically (same transaction) rather than allowing negative/impossible closing stock to land — the admin must resolve the conflicting downstream row first.
+- The confirmation UI (a new `GET /api/dashboard/ledger/entry/impact` read-only pre-check, called when the edit modal opens) shows count + date range only ("This will also recalculate N later entries, through `<date>`"), not a full per-row before/after preview.
+
+**Full detail, current source of truth:** `docs/01_DATA_MODEL.md`'s "Historical edit cascade" subsection (under §3.4's "Admin direct ledger-row edit"). Decisions #2 and #3 above (price immutability, `created_by` preservation) were **not** revisited and still hold exactly as originally decided.

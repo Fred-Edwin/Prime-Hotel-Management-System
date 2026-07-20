@@ -564,6 +564,18 @@ thead .stickyColItem {
   margin-bottom: var(--space-1);
 }
 
+/* Empty-state row — tables now always render (headers included) even with
+   zero rows for the current period/filter, so the "no entries" message
+   lives inside a full-width <tbody> cell instead of replacing the whole
+   table. white-space/height reset undoes .ledgerTable td's dense 28px/
+   nowrap rules, which would otherwise clip EmptyState's icon+heading+body
+   stack. */
+.emptyRow {
+  height: auto;
+  white-space: normal;
+  padding: var(--space-6) var(--space-3) !important;
+}
+
 /* Whole row opens the edit modal, not just the pencil icon — a click
    anywhere on the row (not the row's own edit button, which stops
    propagation) starts the edit, cutting the precision needed to fix a
@@ -630,6 +642,24 @@ thead .stickyColItem {
   font-family: var(--font-family-structural);
   font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
+}
+
+/* Historical-edit cascade confirmation banner — warns the admin, before
+   they commit, that editing this row will also recalculate later entries
+   (see LedgerClient's cascadeImpact state / PATCH /api/dashboard/ledger/
+   entry's recompute_stock_entry_cascade call). Uses the same warning
+   token as .wastageValueNotable/.lowValue elsewhere on this screen for a
+   consistent "pay attention" visual language, on a tinted background
+   (not just colored text) since this sits inside a form, not a dense
+   table cell, and needs to read as a distinct callout. */
+.cascadeWarning {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-status-warning) 12%, var(--color-surface-raised));
+  border: 1px solid color-mix(in srgb, var(--color-status-warning) 35%, transparent);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-primary);
 }
 
 /* Below tablet width the two sticky data columns eat too much of a

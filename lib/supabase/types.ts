@@ -77,6 +77,57 @@ export type Database = {
           },
         ]
       }
+      canteen_stock_purchases: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          item_id: string
+          purchase_date: string
+          quantity: number
+          supplier_note: string | null
+          total_cost: number
+          unit_cost: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          item_id: string
+          purchase_date: string
+          quantity: number
+          supplier_note?: string | null
+          total_cost: number
+          unit_cost: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          item_id?: string
+          purchase_date?: string
+          quantity?: number
+          supplier_note?: string | null
+          total_cost?: number
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canteen_stock_purchases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canteen_stock_purchases_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_locations: {
         Row: {
           active: boolean
@@ -873,6 +924,131 @@ export type Database = {
       my_location: {
         Args: never
         Returns: Database["public"]["Enums"]["location_type"]
+      }
+      recompute_ingredient_entry_chain: {
+        Args: { p_from_date: string; p_ingredient_id: string }
+        Returns: {
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          ingredient_id: string
+          opening_stock: number
+          quantity_used: number
+          received: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ingredient_entries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      recompute_stock_entry_cascade: {
+        Args: {
+          p_edited_from_date: string
+          p_edited_location: Database["public"]["Enums"]["location_type"]
+          p_item_id: string
+        }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      recompute_stock_entry_chain: {
+        Args: {
+          p_from_date: string
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: {
+          added_stock: number
+          buying_price_snapshot: number
+          closing_stock: number
+          closing_stock_value: number
+          cost_value: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
+          sales_value: number
+          selling_price_snapshot: number
+          sent_out: number
+          till_quantity_sold: number
+          updated_at: string
+          wastage: number
+          wastage_note: string | null
+          wastage_value: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "stock_entries"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      record_canteen_stock_purchase: {
+        Args: {
+          p_created_by: string
+          p_item_id: string
+          p_purchase_date: string
+          p_quantity: number
+          p_supplier_note?: string
+          p_unit_cost: number
+        }
+        Returns: {
+          created_at: string
+          created_by: string
+          id: string
+          item_id: string
+          purchase_date: string
+          quantity: number
+          supplier_note: string | null
+          total_cost: number
+          unit_cost: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "canteen_stock_purchases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       record_ingredient_purchase: {
         Args: {

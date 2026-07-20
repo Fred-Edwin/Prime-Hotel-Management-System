@@ -156,6 +156,16 @@ export function LedgerClient() {
   const [reloadKey, setReloadKey] = useState(0);
   const [isTableMaximized, setIsTableMaximized] = useState(false);
   const [ingredientCatalog, setIngredientCatalog] = useState<IngredientCatalogRow[]>([]);
+  // Historical-edit cascade preview (docs/00_ARCHITECTURE.md's admin
+  // ledger-edit cascade) — null while loading/not yet fetched, { count: 0 }
+  // once confirmed this is already the latest row (no cascade, no
+  // confirmation step needed). cascadeConfirmed gates the actual submit:
+  // when count > 0, the first "Save" click shows the impact instead of
+  // submitting; a second click (with cascadeConfirmed true) proceeds.
+  const [cascadeImpact, setCascadeImpact] = useState<{ count: number; through: string | null } | null>(
+    null
+  );
+  const [cascadeConfirmed, setCascadeConfirmed] = useState(false);
 
   function openStockEntryEdit(row: ItemLedgerRow) {
     setEditError(null);
@@ -224,12 +234,80 @@ export function LedgerClient() {
   function closeEdit() {
     setEditTarget(null);
     setEditError(null);
+    setCascadeImpact(null);
+    setCascadeConfirmed(false);
   }
+
+  // Historical-edit cascade preview — fetches how many later entries (and
+  // through what date) editing this row would recompute, so the confirm
+  // step below can show "This will also recalculate N later entries..."
+  // before the admin commits. Skipped for a brand-new ingredient entry
+  // (mode: "create") — there's nothing later than a row that doesn't
+  // exist yet. Re-fetches whenever a different row is opened; does not
+  // re-fetch on every keystroke inside the form, since which rows exist
+  // later doesn't depend on the quantities being typed.
+  const isCreateMode = editTarget?.kind === "ingredient_entries" && editTarget.mode === "create";
+
+  useEffect(() => {
+    if (!editTarget || isCreateMode) return;
+    let cancelled = false;
+
+    async function loadImpact() {
+      setCascadeImpact(null);
+      setCascadeConfirmed(false);
+      const params =
+        editTarget!.kind === "stock_entries"
+          ? new URLSearchParams({
+              table: "stock_entries",
+              item_id: editTarget!.item_id,
+              location: (editTarget as StockEntryEditTarget).location,
+              entry_date: editTarget!.entry_date,
+            })
+          : new URLSearchParams({
+              table: "ingredient_entries",
+              ingredient_id: (editTarget as IngredientEntryEditTarget).ingredient_id,
+              entry_date: editTarget!.entry_date,
+            });
+      try {
+        const res = await fetch(`/api/dashboard/ledger/entry/impact?${params.toString()}`);
+        const json = await res.json().catch(() => ({}));
+        if (!cancelled) setCascadeImpact(res.ok ? { count: json.count ?? 0, through: json.through ?? null } : { count: 0, through: null });
+      } catch {
+        if (!cancelled) setCascadeImpact({ count: 0, through: null });
+      }
+    }
+
+    loadImpact();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fetch keyed on which row is open (identity fields), not on every editForm keystroke
+  }, [
+    editTarget?.kind,
+    editTarget?.entry_date,
+    isCreateMode,
+    editTarget?.kind === "stock_entries" ? editTarget.item_id : undefined,
+    editTarget?.kind === "stock_entries" ? editTarget.location : undefined,
+    editTarget?.kind === "ingredient_entries" ? editTarget.ingredient_id : undefined,
+  ]);
+
+  // Create mode never has a cascade (nothing can be later than a row that
+  // doesn't exist yet) — treated as a resolved { count: 0 } without ever
+  // going through the async fetch/effect above, so the Save button isn't
+  // disabled waiting on a request this case never needs to make.
+  const resolvedCascadeImpact = isCreateMode ? { count: 0, through: null } : cascadeImpact;
 
   async function submitEdit() {
     if (!editTarget) return;
     if (editTarget.kind === "ingredient_entries" && editTarget.mode === "create" && !editTarget.ingredient_id) {
       setEditError("Select an ingredient first.");
+      return;
+    }
+    // First click on a historical row (cascade impact > 0) just reveals
+    // the confirmation copy in the modal instead of submitting — the
+    // second click (cascadeConfirmed already true) proceeds for real.
+    if (resolvedCascadeImpact && resolvedCascadeImpact.count > 0 && !cascadeConfirmed) {
+      setCascadeConfirmed(true);
       return;
     }
     setEditSubmitting(true);
@@ -269,6 +347,8 @@ export function LedgerClient() {
       }
       const wasCreate = editTarget.kind === "ingredient_entries" && editTarget.mode === "create";
       setEditTarget(null);
+      setCascadeImpact(null);
+      setCascadeConfirmed(false);
       setToast(wasCreate ? "Entry logged" : "Entry updated");
       setReloadKey((key) => key + 1);
     } catch {
@@ -457,25 +537,16 @@ export function LedgerClient() {
         <p>Loading…</p>
       ) : data ? (
         <>
-          {data.items.length > 0 && (
-            <div className={styles.summaryStrip}>
-              <MetricCard label="Total sales value" value={money(totals.salesValue)} />
-              <MetricCard label="Total cost value" value={money(totals.costValue)} />
-              <MetricCard label="Total wastage value" value={money(totals.wastageValue)} />
-              <MetricCard label="Staff meals value" value={money(staffMealTotal)} />
-              <MetricCard label="Rows" value={String(data.items.length)} />
-            </div>
-          )}
+          <div className={styles.summaryStrip}>
+            <MetricCard label="Total sales value" value={money(totals.salesValue)} />
+            <MetricCard label="Total cost value" value={money(totals.costValue)} />
+            <MetricCard label="Total wastage value" value={money(totals.wastageValue)} />
+            <MetricCard label="Staff meals value" value={money(staffMealTotal)} />
+            <MetricCard label="Rows" value={String(data.items.length)} />
+          </div>
 
           <section className={styles.section}>
-            {data.items.length === 0 ? (
-              <EmptyState
-                icon={<Icon name="summary" size={48} />}
-                heading="No item entries this period"
-                body="Once staff save till or canteen entries, they'll show up here row by row."
-              />
-            ) : (
-              <>
+            <>
                 {isTableMaximized && (
                   <div className={styles.maximizeBackdrop} onClick={() => setIsTableMaximized(false)} />
                 )}
@@ -556,6 +627,17 @@ export function LedgerClient() {
                     </tr>
                   </thead>
                   <tbody>
+                    {data.items.length === 0 && (
+                      <tr>
+                        <td colSpan={16} className={styles.emptyRow}>
+                          <EmptyState
+                            icon={<Icon name="summary" size={48} />}
+                            heading="No item entries this period"
+                            body="Once staff save till or canteen entries, they'll show up here row by row."
+                          />
+                        </td>
+                      </tr>
+                    )}
                     {data.items.map((row) => {
                       const canteenSignedQty =
                         row.location === "canteen" ? row.added_stock : -row.sent_out;
@@ -663,7 +745,6 @@ export function LedgerClient() {
                 </table>
                 </Card>
               </>
-            )}
 
             {/* Mobile collapsible-card treatment (<600px), matching the
                 pattern already used on Items/Ingredients/Delivery
@@ -798,29 +879,14 @@ export function LedgerClient() {
                   New entry
                 </Button>
               </div>
-              {data.ingredients.length === 0 ? (
-                <EmptyState
-                  icon={<Icon name="summary" size={48} />}
-                  heading="No ingredient entries this period"
-                  body="Once the store manager saves ingredient receiving/usage, they'll show up here. Or log one yourself with New entry above."
+              <div className={styles.toolbarRow}>
+                <FilterBar
+                  searchValue={ingredientSearch}
+                  onSearchChange={setIngredientSearch}
+                  searchPlaceholder="Search ingredients…"
                 />
-              ) : (
-                <>
-                  <div className={styles.toolbarRow}>
-                    <FilterBar
-                      searchValue={ingredientSearch}
-                      onSearchChange={setIngredientSearch}
-                      searchPlaceholder="Search ingredients…"
-                    />
-                  </div>
-                  {filteredIngredients.length === 0 ? (
-                    <EmptyState
-                      icon={<Icon name="summary" size={48} />}
-                      heading="No matching ingredients"
-                      body="Try a different search term."
-                    />
-                  ) : (
-                    <>
+              </div>
+              <>
                       <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
                         <table className={catalogStyles.table}>
                           <thead>
@@ -838,6 +904,25 @@ export function LedgerClient() {
                             </tr>
                           </thead>
                           <tbody>
+                            {filteredIngredients.length === 0 && (
+                              <tr>
+                                <td colSpan={10} className={styles.emptyRow}>
+                                  <EmptyState
+                                    icon={<Icon name="summary" size={48} />}
+                                    heading={
+                                      data.ingredients.length === 0
+                                        ? "No ingredient entries this period"
+                                        : "No matching ingredients"
+                                    }
+                                    body={
+                                      data.ingredients.length === 0
+                                        ? "Once the store manager saves ingredient receiving/usage, they'll show up here. Or log one yourself with New entry above."
+                                        : "Try a different search term."
+                                    }
+                                  />
+                                </td>
+                              </tr>
+                            )}
                             {filteredIngredients.map((row) => (
                               <tr
                                 key={`${row.entry_date}-${row.ingredient_id}`}
@@ -983,10 +1068,7 @@ export function LedgerClient() {
                           );
                         })}
                       </ul>
-                    </>
-                  )}
-                </>
-              )}
+              </>
             </section>
           )}
 
@@ -1002,14 +1084,7 @@ export function LedgerClient() {
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Staff meals</h2>
             </div>
-            {data.staffMeals.length === 0 ? (
-              <EmptyState
-                icon={<Icon name="wastage" size={48} />}
-                heading="No staff meals this period"
-                body="Meals staff log on the Expenses screen's Staff meals tab will show up here, itemized by who and what."
-              />
-            ) : (
-              <>
+            <>
                 <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
                   <table className={catalogStyles.table}>
                     <thead>
@@ -1024,6 +1099,17 @@ export function LedgerClient() {
                       </tr>
                     </thead>
                     <tbody>
+                      {data.staffMeals.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className={styles.emptyRow}>
+                            <EmptyState
+                              icon={<Icon name="wastage" size={48} />}
+                              heading="No staff meals this period"
+                              body="Meals staff log on the Expenses screen's Staff meals tab will show up here, itemized by who and what."
+                            />
+                          </td>
+                        </tr>
+                      )}
                       {data.staffMeals.map((row) => (
                         <tr key={`${row.meal_date}-${row.item_id}-${row.staff_id}-${row.quantity}`}>
                           <td>{row.meal_date}</td>
@@ -1104,7 +1190,6 @@ export function LedgerClient() {
                   })}
                 </ul>
               </>
-            )}
           </section>
         </>
       ) : null}
@@ -1126,8 +1211,16 @@ export function LedgerClient() {
             <Button variant="tertiary" onClick={closeEdit} disabled={editSubmitting}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={submitEdit} disabled={editSubmitting}>
-              {editSubmitting ? "Saving…" : "Save"}
+            <Button
+              variant="primary"
+              onClick={submitEdit}
+              disabled={editSubmitting || resolvedCascadeImpact === null}
+            >
+              {editSubmitting
+                ? "Saving…"
+                : resolvedCascadeImpact && resolvedCascadeImpact.count > 0 && !cascadeConfirmed
+                  ? "Continue"
+                  : "Save"}
             </Button>
           </>
         }
@@ -1136,11 +1229,25 @@ export function LedgerClient() {
           <div className={styles.editForm}>
             <p className={styles.editFormMeta}>
               {editTarget.kind === "ingredient_entries" && editTarget.mode === "create"
-                ? "Logs a new receiving/usage entry the same way the store manager would from /store. Buying price is taken from the current ingredient catalog. If an entry already exists for this ingredient and date, saving will update it instead — and is still blocked if it isn't the most recent entry."
-                : "Only quantities are editable here — prices stay locked to what was recorded at the time. If this isn't the most recent entry for this " +
-                  (editTarget.kind === "stock_entries" ? "item" : "ingredient") +
-                  ", saving will be rejected."}
+                ? "Logs a new receiving/usage entry the same way the store manager would from /store. Buying price is taken from the current ingredient catalog. If an entry already exists for this ingredient and date, saving will update it instead."
+                : "Only quantities are editable here — prices stay locked to what was recorded at the time."}
             </p>
+            {/* Historical-edit cascade warning — shown once the impact
+                check (useEffect above) confirms this isn't the latest
+                row. Resolved design decision: count + date range only,
+                not a full before/after preview — enough for a sanity
+                check without a bigger UI lift. The Save button reads
+                "Continue" until this has been seen once (cascadeConfirmed),
+                so the admin can't blow past it by habit-clicking Save. */}
+            {resolvedCascadeImpact && resolvedCascadeImpact.count > 0 && (
+              <p className={styles.cascadeWarning}>
+                This will also recalculate {resolvedCascadeImpact.count}{" "}
+                {resolvedCascadeImpact.count === 1 ? "later entry" : "later entries"} for this{" "}
+                {editTarget.kind === "stock_entries" ? "item" : "ingredient"}, through{" "}
+                {resolvedCascadeImpact.through}.
+                {!cascadeConfirmed && " Click Continue to review, then Save to confirm."}
+              </p>
+            )}
             {editError && <p className={catalogStyles.formError}>{editError}</p>}
 
             {editTarget.kind === "ingredient_entries" && editTarget.mode === "create" && (

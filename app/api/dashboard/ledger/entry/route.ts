@@ -10,19 +10,33 @@ import { writeAuditLog } from "@/lib/audit";
  *
  * Admin direct ledger-row edit (docs/backlog/04_admin_ledger_edit.md), the
  * entry point built into the Ledger screen. Covers both stock_entries and
- * ingredient_entries. Three resolved design decisions this route enforces:
+ * ingredient_entries. Resolved design decisions this route enforces:
  *
- * 1. Block, don't cascade: only the most-recent row per item(+location)/
- *    ingredient is editable — rejected if a later entry_date row already
- *    exists, since that later row's opening_stock was derived from this
- *    one's closing_stock.
+ * 1. Historical edits cascade, they don't block: editing any row — not
+ *    just the most recent — is allowed. After the edited row itself saves
+ *    (via the normal save_stock_entry()/save_canteen_stock_entry()/
+ *    save_ingredient_entry() path), this route calls
+ *    recompute_stock_entry_cascade() / recompute_ingredient_entry_chain()
+ *    (supabase/migrations/20260720100000_historical_ledger_edit_cascade.sql)
+ *    to walk every later row for that item/location (or ingredient)
+ *    forward, re-deriving opening_stock/closing_stock/sales_value/
+ *    cost_value/closing_stock_value/wastage_value from the edited row on.
+ *    For a canteen_supplied item whose restaurant sent_out changed, this
+ *    also re-derives the linked canteen week(s) and cascades those too
+ *    (§3.1's added_stock-from-restaurant-sent_out link). If recomputing
+ *    would make any downstream row's demand exceed its available stock
+ *    (a historical correction revealing a would-be oversell), the whole
+ *    cascade rolls back atomically and this route surfaces which
+ *    item/date conflicted — the admin resolves the downstream row first
+ *    rather than the system landing an impossible negative closing stock.
  * 2. Price snapshots are permanently immutable — this route never accepts
  *    or writes selling_price_snapshot/buying_price_snapshot; the existing
  *    row's stored snapshot is fetched and passed straight back into the
- *    save function unchanged.
+ *    save function unchanged. The cascade recompute reuses each row's own
+ *    already-stored snapshot too — never touches prices.
  * 3. quantity_sold/closing_stock are never directly writable — always via
- *    save_stock_entry()/save_canteen_stock_entry()/save_ingredient_entry(),
- *    so the derivation and oversell re-check stay correct.
+ *    the save_ and recompute_ functions, so the derivation and oversell
+ *    re-check stay correct.
  *
  * created_by is preserved as the row's original author when editing an
  * existing row (fetched first, passed back in as p_created_by) — these
@@ -30,7 +44,8 @@ import { writeAuditLog } from "@/lib/audit";
  * back unchanged on an update is a no-op for an existing row. A brand-new
  * "today" row (no existing entry — this is also how admin logs today's
  * entry herself) legitimately gets created_by = the admin's own id.
- * The audit log separately records which admin made the edit.
+ * The audit log separately records which admin made the edit, including
+ * the full cascade of rows the edit recomputed.
  */
 export async function PATCH(request: Request) {
   const admin = await requireAdmin();
@@ -59,25 +74,6 @@ async function editStockEntry(
   adminId: string,
 ) {
   const { item_id, location, entry_date } = input;
-
-  const laterRowQuery = supabase
-    .from("stock_entries")
-    .select("id", { count: "exact", head: true })
-    .eq("item_id", item_id)
-    .eq("location", location)
-    .gt("entry_date", entry_date);
-  const { count: laterCount, error: laterError } = await laterRowQuery;
-  if (laterError) return serverErrorResponse(laterError, "dashboard/ledger/entry");
-
-  if ((laterCount ?? 0) > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "This isn't the latest entry for this item — edit forward from the most recent one instead.",
-      },
-      { status: 409 },
-    );
-  }
 
   const existingQuery = supabase
     .from("stock_entries")
@@ -152,6 +148,35 @@ async function editStockEntry(
     return NextResponse.json({ error: message }, { status });
   }
 
+  // Historical edit cascade — recomputes opening_stock/closing_stock/
+  // value fields for every later row this item/location chain (and, for
+  // a canteen_supplied item, the linked canteen week) depends on. A no-op
+  // when this was already the latest row (the cascade's own forward scan
+  // finds nothing past entry_date). Runs after the edited row's own save
+  // succeeds — if the cascade itself hits a downstream oversell, the
+  // database rolls back the whole cascade automatically (same
+  // transaction), but the already-committed edit above is not part of
+  // that transaction, so on cascade failure we report the conflict
+  // without pretending the edit itself didn't happen — see the response
+  // below.
+  const { data: cascadeRows, error: cascadeError } = await supabase.rpc(
+    "recompute_stock_entry_cascade",
+    {
+      p_item_id: item_id,
+      p_edited_location: location,
+      p_edited_from_date: entry_date,
+    },
+  );
+  if (cascadeError) {
+    const { message } = describeSaveError(cascadeError);
+    return NextResponse.json(
+      {
+        error: `Entry saved, but recalculating later entries failed: ${message} Fix the conflicting entry, then edit this one again to retry the recalculation.`,
+      },
+      { status: 409 },
+    );
+  }
+
   await writeAuditLog(supabase, {
     actorId: adminId,
     action: "stock_entry.admin_edit",
@@ -166,6 +191,13 @@ async function editStockEntry(
         wastage: input.wastage,
         wastage_note: input.wastage_note ?? null,
       },
+      cascade_recomputed: (cascadeRows ?? []).map((row) => ({
+        item_id: row.item_id,
+        location: row.location,
+        entry_date: row.entry_date,
+        opening_stock: row.opening_stock,
+        closing_stock: row.closing_stock,
+      })),
     },
   });
 
@@ -178,24 +210,6 @@ async function editIngredientEntry(
   adminId: string,
 ) {
   const { ingredient_id, entry_date } = input;
-
-  const laterRowQuery = supabase
-    .from("ingredient_entries")
-    .select("id", { count: "exact", head: true })
-    .eq("ingredient_id", ingredient_id)
-    .gt("entry_date", entry_date);
-  const { count: laterCount, error: laterError } = await laterRowQuery;
-  if (laterError) return serverErrorResponse(laterError, "dashboard/ledger/entry");
-
-  if ((laterCount ?? 0) > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "This isn't the latest entry for this ingredient — edit forward from the most recent one instead.",
-      },
-      { status: 409 },
-    );
-  }
 
   const existingQuery = supabase
     .from("ingredient_entries")
@@ -242,6 +256,25 @@ async function editIngredientEntry(
     return NextResponse.json({ error: message }, { status });
   }
 
+  // Same historical-edit cascade as editStockEntry above, ingredient-only
+  // shape (no cross-location step — ingredients have no canteen link).
+  const { data: cascadeRows, error: cascadeError } = await supabase.rpc(
+    "recompute_ingredient_entry_chain",
+    {
+      p_ingredient_id: ingredient_id,
+      p_from_date: entry_date,
+    },
+  );
+  if (cascadeError) {
+    const { message } = describeSaveError(cascadeError);
+    return NextResponse.json(
+      {
+        error: `Entry saved, but recalculating later entries failed: ${message} Fix the conflicting entry, then edit this one again to retry the recalculation.`,
+      },
+      { status: 409 },
+    );
+  }
+
   await writeAuditLog(supabase, {
     actorId: adminId,
     action: "ingredient_entry.admin_edit",
@@ -255,6 +288,12 @@ async function editIngredientEntry(
         wastage: input.wastage,
         wastage_note: input.wastage_note ?? null,
       },
+      cascade_recomputed: (cascadeRows ?? []).map((row) => ({
+        ingredient_id: row.ingredient_id,
+        entry_date: row.entry_date,
+        opening_stock: row.opening_stock,
+        closing_stock: row.closing_stock,
+      })),
     },
   });
 
