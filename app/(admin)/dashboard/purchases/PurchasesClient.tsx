@@ -133,13 +133,13 @@ export function PurchasesClient() {
     null,
   );
   const [canteenPurchaseTarget, setCanteenPurchaseTarget] = useState<CanteenPurchaseModalItem | null>(null);
-  // Distinct from the two targets above: opens the modal with its
-  // picker visible (no fixedIngredient/fixedItem) rather than jumping
-  // straight to a specific row's purchase form — the only way to reach
-  // the picker's "+ Add new ingredient/item…" option, since every
-  // stock-on-hand row already opens directly into fixed mode.
-  const [ingredientPickerOpen, setIngredientPickerOpen] = useState(false);
-  const [canteenPickerOpen, setCanteenPickerOpen] = useState(false);
+  // Distinct from the two targets above: opens the modal straight into
+  // its "brand new ingredient/item" form (forceNew), skipping past any
+  // picker — logging a purchase for something that already exists
+  // already has its own entry point (every stock-on-hand row), so this
+  // button's only job is the "I'm adding something new" case.
+  const [addingNewIngredient, setAddingNewIngredient] = useState(false);
+  const [addingNewCanteenItem, setAddingNewCanteenItem] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<
@@ -272,13 +272,20 @@ export function PurchasesClient() {
           snapshot, not a period-bounded log). Each row is itself a
           "log a purchase for this ingredient/item" entry point — click
           anywhere on the row, or the per-row icon button — which opens
-          the modal already knowing which ingredient/item it's for. The
-          "Log new purchase" button above the table is the one entry
-          point that opens the modal in picker mode instead (no
-          ingredient/item chosen yet) — added post-launch, 2026-07-21,
-          specifically so the picker's "+ Add new ingredient/item…"
-          option (docs/01_DATA_MODEL.md §3.2) is reachable at all; every
-          row-based entry point bypasses the picker by design. */}
+          the modal already knowing which ingredient/item it's for.
+          "Add new ingredient/item" above the table is a separate,
+          distinct action: it skips straight to a blank name/unit(-or-
+          selling-price)/quantity/cost form (PurchaseModal/
+          CanteenPurchaseModal's forceNew) for something not in this
+          list yet — added post-launch, 2026-07-21. Originally this was
+          a single "Log new purchase" button that opened a picker with
+          an "+ Add new…" option at the bottom of every existing
+          ingredient/item; real client feedback (a screenshot of the
+          live picker) was that scrolling past the whole catalog made no
+          sense when the goal was specifically to add something new, and
+          logging a purchase for something that already exists already
+          has its own entry point (every row). See
+          docs/01_DATA_MODEL.md §3.2. */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <div className={styles.sectionHeaderLeft}>
@@ -290,9 +297,9 @@ export function PurchasesClient() {
           </div>
           <Button
             variant="secondary"
-            onClick={() => (isIngredients ? setIngredientPickerOpen(true) : setCanteenPickerOpen(true))}
+            onClick={() => (isIngredients ? setAddingNewIngredient(true) : setAddingNewCanteenItem(true))}
           >
-            <Icon name="add" size={16} /> Log new purchase
+            <Icon name="add" size={16} /> {isIngredients ? "Add new ingredient" : "Add new item"}
           </Button>
         </div>
         {stockOnHandEmpty ? (
@@ -605,22 +612,13 @@ export function PurchasesClient() {
       </section>
 
       <PurchaseModal
-        open={ingredientPurchaseTarget !== null || ingredientPickerOpen}
+        open={ingredientPurchaseTarget !== null || addingNewIngredient}
         onClose={() => {
           setIngredientPurchaseTarget(null);
-          setIngredientPickerOpen(false);
+          setAddingNewIngredient(false);
         }}
         fixedIngredient={ingredientPurchaseTarget ?? undefined}
-        ingredients={
-          ingredientPickerOpen
-            ? (ingredientData?.stockOnHand ?? []).map((row) => ({
-                id: row.ingredient_id,
-                name: row.name,
-                unit: row.unit,
-                buying_price: row.average_cost,
-              }))
-            : undefined
-        }
+        forceNew={addingNewIngredient}
         onSaved={() => {
           setToast("Purchase logged");
           load();
@@ -628,21 +626,13 @@ export function PurchasesClient() {
       />
 
       <CanteenPurchaseModal
-        open={canteenPurchaseTarget !== null || canteenPickerOpen}
+        open={canteenPurchaseTarget !== null || addingNewCanteenItem}
         onClose={() => {
           setCanteenPurchaseTarget(null);
-          setCanteenPickerOpen(false);
+          setAddingNewCanteenItem(false);
         }}
         fixedItem={canteenPurchaseTarget ?? undefined}
-        items={
-          canteenPickerOpen
-            ? (canteenData?.stockOnHand ?? []).map((row) => ({
-                id: row.item_id,
-                name: row.name,
-                buying_price: row.average_cost,
-              }))
-            : undefined
-        }
+        forceNew={addingNewCanteenItem}
         onSaved={() => {
           setToast("Purchase logged");
           load();

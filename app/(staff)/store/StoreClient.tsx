@@ -49,11 +49,10 @@ export function StoreClient() {
   const [pendingSaves, setPendingSaves] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [purchaseTarget, setPurchaseTarget] = useState<Ingredient | null>(null);
-  // Opens PurchaseModal in picker mode (no fixedIngredient) — the only
-  // way to reach the "+ Add new ingredient…" option (post-launch,
-  // 2026-07-21), since every row's own "Log purchase" action opens
-  // straight into fixed mode for that specific ingredient.
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // Opens PurchaseModal straight into its "brand new ingredient" form
+  // (forceNew) — distinct from purchaseTarget above, which opens it for
+  // a specific existing ingredient's row. Post-launch, 2026-07-21.
+  const [addingNew, setAddingNew] = useState(false);
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -223,8 +222,8 @@ export function StoreClient() {
         <h1 className={styles.title}>Store — Ingredients</h1>
         <div className={storeStyles.headerRight}>
           <p className={styles.dateLabel}>{entryDate}</p>
-          <Button variant="secondary" onClick={() => setPickerOpen(true)}>
-            <Icon name="add" size={16} /> Log new purchase
+          <Button variant="secondary" onClick={() => setAddingNew(true)}>
+            <Icon name="add" size={16} /> Add new ingredient
           </Button>
         </div>
       </div>
@@ -258,10 +257,10 @@ export function StoreClient() {
       </ul>
 
       <PurchaseModal
-        open={purchaseTarget !== null || pickerOpen}
+        open={purchaseTarget !== null || addingNew}
         onClose={() => {
           setPurchaseTarget(null);
-          setPickerOpen(false);
+          setAddingNew(false);
         }}
         fixedIngredient={
           purchaseTarget
@@ -273,16 +272,7 @@ export function StoreClient() {
               }
             : undefined
         }
-        ingredients={
-          pickerOpen
-            ? ingredients.map((ingredient) => ({
-                id: ingredient.id,
-                name: ingredient.name,
-                unit: ingredient.unit,
-                buying_price: ingredient.buying_price,
-              }))
-            : undefined
-        }
+        forceNew={addingNew}
         onSaved={load}
       />
 

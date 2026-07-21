@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Modal } from "@/components/Modal";
-import { Select, type SelectOption } from "@/components/Select";
 import { nairobiToday } from "@/lib/calculations";
 
 export interface PurchaseModalIngredient {
@@ -18,34 +17,37 @@ export interface PurchaseModalIngredient {
 export interface PurchaseModalProps {
   open: boolean;
   onClose: () => void;
-  /** Omit when the ingredient is fixed (e.g. opened from a specific /store row) — shows a read-only identity line instead of a picker. */
-  ingredients?: PurchaseModalIngredient[];
+  /** Set when opened from a specific ingredient's row (e.g. /store, or a /dashboard/purchases stock-on-hand row) — shows a read-only identity line, quantity/unit cost/note only. */
   fixedIngredient?: PurchaseModalIngredient;
+  /** Set when opened via a page-level "Add new ingredient" action — no picker, straight to name + unit + quantity + cost. Mutually exclusive with fixedIngredient. */
+  forceNew?: boolean;
   onSaved: () => void;
 }
 
 /**
  * Shared "Log purchase" form — used by both the store manager's /store
- * screen (fixedIngredient set, opened from a specific row) and admin's
- * /dashboard/purchases screen (ingredients set, admin picks from a list).
- * Both call the same POST /api/ingredient-purchases, which folds the
- * quantity into today's ingredient_entries.received and recalculates
- * ingredients.buying_price as a fresh weighted-average cost — see
- * docs/01_DATA_MODEL.md §3.2's purchases section and
- * 20260719160000_ingredient_purchases.sql.
+ * screen and admin's /dashboard/purchases screen, always opened already
+ * knowing which ingredient it's for (fixedIngredient, from a specific
+ * row) or that it's for a brand-new one (forceNew). Calls
+ * POST /api/ingredient-purchases, which folds the quantity into today's
+ * ingredient_entries.received and recalculates ingredients.buying_price
+ * as a fresh weighted-average cost — see docs/01_DATA_MODEL.md §3.2's
+ * purchases section and 20260719160000_ingredient_purchases.sql.
  *
- * Post-launch (2026-07-21, client request): the picker's last option is
- * "+ Add new ingredient…", which reveals name + unit fields inline.
- * Submitting first calls POST /api/ingredients to create the catalog
- * row (now allowed for the store manager too, not just admin — see that
- * route's canCreateIngredient()), then logs the purchase against the
- * new id — so a genuinely new ingredient no longer requires a detour to
- * /ingredients first.
+ * Post-launch (2026-07-21, client request): forceNew reveals name + unit
+ * fields instead of an ingredient picker. Submitting first calls
+ * POST /api/ingredients to create the catalog row (allowed for the store
+ * manager too, not just admin — see that route's canCreateIngredient()),
+ * then logs the purchase against the new id. Originally this was a
+ * picker with a "+ Add new ingredient…" option buried at the end of a
+ * long dropdown of every existing ingredient — real client feedback
+ * (2026-07-21, screenshot of the live picker) was that this made no
+ * sense for the "I'm adding something new" case, since logging a
+ * purchase for an *existing* ingredient already has its own entry point
+ * (every stock-on-hand/store row). Simplified to two clean paths instead
+ * of one picker trying to serve both.
  */
-const NEW_INGREDIENT_VALUE = "__new__";
-
-export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onSaved }: PurchaseModalProps) {
-  const [ingredientId, setIngredientId] = useState(fixedIngredient?.id ?? "");
+export function PurchaseModal({ open, onClose, fixedIngredient, forceNew, onSaved }: PurchaseModalProps) {
   const [quantity, setQuantity] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [supplierNote, setSupplierNote] = useState("");
@@ -54,47 +56,25 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isNew = ingredientId === NEW_INGREDIENT_VALUE;
-  const selected = fixedIngredient ?? ingredients?.find((i) => i.id === ingredientId);
-
   useEffect(() => {
     if (!open) return;
     function resetForm() {
-      setIngredientId(fixedIngredient?.id ?? "");
       setQuantity("");
-      setUnitCost(selected ? String(selected.buying_price) : "");
+      setUnitCost(fixedIngredient ? String(fixedIngredient.buying_price) : "");
       setSupplierNote("");
       setNewName("");
       setNewUnit("");
       setError(null);
     }
     resetForm();
-    // Only reset when the modal opens or the fixed ingredient changes —
-    // not on every `selected` recompute, which would wipe an in-progress
-    // unit cost edit whenever the picker's selection triggers a rerender.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, fixedIngredient?.id]);
-
-  function selectIngredient(id: string) {
-    setIngredientId(id);
-    if (id === NEW_INGREDIENT_VALUE) {
-      setUnitCost("");
-      return;
-    }
-    const next = ingredients?.find((i) => i.id === id);
-    if (next) setUnitCost(String(next.buying_price));
-  }
+  }, [open, fixedIngredient]);
 
   async function submit() {
-    if (!ingredientId) {
-      setError("Select an ingredient first.");
-      return;
-    }
-    if (isNew && !newName.trim()) {
+    if (forceNew && !newName.trim()) {
       setError("Enter the new ingredient's name.");
       return;
     }
-    if (isNew && !newUnit.trim()) {
+    if (forceNew && !newUnit.trim()) {
       setError("Enter the new ingredient's unit (e.g. kg, litre, piece).");
       return;
     }
@@ -112,9 +92,9 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
     setSubmitting(true);
     setError(null);
     try {
-      let targetIngredientId = ingredientId;
+      let targetIngredientId = fixedIngredient?.id;
 
-      if (isNew) {
+      if (forceNew) {
         const createRes = await fetch("/api/ingredients", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -159,19 +139,11 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
     }
   }
 
-  const ingredientOptions: SelectOption[] = [
-    ...(ingredients ?? []).map((i) => ({
-      value: i.id,
-      label: `${i.name} (${i.unit})`,
-    })),
-    { value: NEW_INGREDIENT_VALUE, label: "+ Add new ingredient…" },
-  ];
-
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={fixedIngredient ? `Log purchase — ${fixedIngredient.name}` : "Log purchase"}
+      title={fixedIngredient ? `Log purchase — ${fixedIngredient.name}` : "Add new ingredient"}
       footer={
         <>
           <Button variant="tertiary" onClick={onClose} disabled={submitting}>
@@ -185,17 +157,7 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
     >
       {error && <p role="alert">{error}</p>}
 
-      {!fixedIngredient && (
-        <Select
-          label="Ingredient"
-          placeholder="Select an ingredient"
-          value={ingredientId}
-          options={ingredientOptions}
-          onChange={(e) => selectIngredient(e.target.value)}
-        />
-      )}
-
-      {isNew && (
+      {forceNew && (
         <>
           <Input
             label="New ingredient name"
@@ -215,7 +177,7 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
       )}
 
       <Input
-        label={`Quantity${selected ? ` (${selected.unit})` : isNew && newUnit.trim() ? ` (${newUnit.trim()})` : ""}`}
+        label={`Quantity${fixedIngredient ? ` (${fixedIngredient.unit})` : forceNew && newUnit.trim() ? ` (${newUnit.trim()})` : ""}`}
         type="number"
         inputMode="decimal"
         min={0}
