@@ -133,6 +133,13 @@ export function PurchasesClient() {
     null,
   );
   const [canteenPurchaseTarget, setCanteenPurchaseTarget] = useState<CanteenPurchaseModalItem | null>(null);
+  // Distinct from the two targets above: opens the modal with its
+  // picker visible (no fixedIngredient/fixedItem) rather than jumping
+  // straight to a specific row's purchase form — the only way to reach
+  // the picker's "+ Add new ingredient/item…" option, since every
+  // stock-on-hand row already opens directly into fixed mode.
+  const [ingredientPickerOpen, setIngredientPickerOpen] = useState(false);
+  const [canteenPickerOpen, setCanteenPickerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<
@@ -262,20 +269,31 @@ export function PurchasesClient() {
 
       {/* Stock on hand — current quantity + running weighted-average cost,
           independent of the period toggle above (it's a point-in-time
-          snapshot, not a period-bounded log). Each row is itself the
+          snapshot, not a period-bounded log). Each row is itself a
           "log a purchase for this ingredient/item" entry point — click
-          anywhere on the row, or the per-row icon button — rather than a
-          single global button opening a picker modal. Removes an extra
-          find-it-again step, since the row the admin is already looking
-          at IS the thing they want to buy; matches the Ledger's existing
-          per-row edit pattern (LedgerClient.tsx's editableRow/editButton). */}
+          anywhere on the row, or the per-row icon button — which opens
+          the modal already knowing which ingredient/item it's for. The
+          "Log new purchase" button above the table is the one entry
+          point that opens the modal in picker mode instead (no
+          ingredient/item chosen yet) — added post-launch, 2026-07-21,
+          specifically so the picker's "+ Add new ingredient/item…"
+          option (docs/01_DATA_MODEL.md §3.2) is reachable at all; every
+          row-based entry point bypasses the picker by design. */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle}>Stock on hand</h2>
-          <LowStockIndicator
-            variant="pill"
-            label={isIngredients ? "Restaurant only" : "Canteen-independent items only"}
-          />
+          <div className={styles.sectionHeaderLeft}>
+            <h2 className={styles.sectionTitle}>Stock on hand</h2>
+            <LowStockIndicator
+              variant="pill"
+              label={isIngredients ? "Restaurant only" : "Canteen-independent items only"}
+            />
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => (isIngredients ? setIngredientPickerOpen(true) : setCanteenPickerOpen(true))}
+          >
+            <Icon name="add" size={16} /> Log new purchase
+          </Button>
         </div>
         {stockOnHandEmpty ? (
           <EmptyState
@@ -587,9 +605,22 @@ export function PurchasesClient() {
       </section>
 
       <PurchaseModal
-        open={ingredientPurchaseTarget !== null}
-        onClose={() => setIngredientPurchaseTarget(null)}
+        open={ingredientPurchaseTarget !== null || ingredientPickerOpen}
+        onClose={() => {
+          setIngredientPurchaseTarget(null);
+          setIngredientPickerOpen(false);
+        }}
         fixedIngredient={ingredientPurchaseTarget ?? undefined}
+        ingredients={
+          ingredientPickerOpen
+            ? (ingredientData?.stockOnHand ?? []).map((row) => ({
+                id: row.ingredient_id,
+                name: row.name,
+                unit: row.unit,
+                buying_price: row.average_cost,
+              }))
+            : undefined
+        }
         onSaved={() => {
           setToast("Purchase logged");
           load();
@@ -597,9 +628,21 @@ export function PurchasesClient() {
       />
 
       <CanteenPurchaseModal
-        open={canteenPurchaseTarget !== null}
-        onClose={() => setCanteenPurchaseTarget(null)}
+        open={canteenPurchaseTarget !== null || canteenPickerOpen}
+        onClose={() => {
+          setCanteenPurchaseTarget(null);
+          setCanteenPickerOpen(false);
+        }}
         fixedItem={canteenPurchaseTarget ?? undefined}
+        items={
+          canteenPickerOpen
+            ? (canteenData?.stockOnHand ?? []).map((row) => ({
+                id: row.item_id,
+                name: row.name,
+                buying_price: row.average_cost,
+              }))
+            : undefined
+        }
         onSaved={() => {
           setToast("Purchase logged");
           load();

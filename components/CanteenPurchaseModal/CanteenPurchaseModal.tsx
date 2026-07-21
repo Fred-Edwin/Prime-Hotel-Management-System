@@ -31,15 +31,27 @@ export interface CanteenPurchaseModalProps {
  * folds the quantity into this week's stock_entries.added_stock and
  * recalculates items.buying_price as a fresh weighted-average cost —
  * see docs/01_DATA_MODEL.md §3.1/§13 and 20260720110000_canteen_stock_purchases.sql.
+ *
+ * Post-launch (2026-07-21, client request): the picker's last option is
+ * "+ Add new item…", which reveals name + selling price fields inline.
+ * Submitting first calls POST /api/items (category defaults to "others",
+ * supply_type forced to "canteen_independent") to create the catalog
+ * row, then logs the purchase against the new id — admin-only end to
+ * end, same as the rest of this modal.
  */
+const NEW_ITEM_VALUE = "__new__";
+
 export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved }: CanteenPurchaseModalProps) {
   const [itemId, setItemId] = useState(fixedItem?.id ?? "");
   const [quantity, setQuantity] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [supplierNote, setSupplierNote] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newSellingPrice, setNewSellingPrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isNew = itemId === NEW_ITEM_VALUE;
   const selected = fixedItem ?? items?.find((i) => i.id === itemId);
 
   useEffect(() => {
@@ -49,6 +61,8 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
       setQuantity("");
       setUnitCost(selected ? String(selected.buying_price) : "");
       setSupplierNote("");
+      setNewName("");
+      setNewSellingPrice("");
       setError(null);
     }
     resetForm();
@@ -60,6 +74,10 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
 
   function selectItem(id: string) {
     setItemId(id);
+    if (id === NEW_ITEM_VALUE) {
+      setUnitCost("");
+      return;
+    }
     const next = items?.find((i) => i.id === id);
     if (next) setUnitCost(String(next.buying_price));
   }
@@ -67,6 +85,15 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
   async function submit() {
     if (!itemId) {
       setError("Select an item first.");
+      return;
+    }
+    if (isNew && !newName.trim()) {
+      setError("Enter the new item's name.");
+      return;
+    }
+    const parsedSellingPrice = Number(newSellingPrice);
+    if (isNew && (newSellingPrice === "" || !(parsedSellingPrice >= 0))) {
+      setError("Enter the new item's selling price.");
       return;
     }
     const parsedQuantity = Number(quantity);
@@ -83,11 +110,35 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
     setSubmitting(true);
     setError(null);
     try {
+      let targetItemId = itemId;
+
+      if (isNew) {
+        const createRes = await fetch("/api/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newName.trim(),
+            category: "others",
+            supply_type: "canteen_independent",
+            buying_price: parsedUnitCost,
+            selling_price: parsedSellingPrice,
+            low_stock_threshold: 5,
+            active: true,
+          }),
+        });
+        const createBody = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          setError(createBody.error ?? "Couldn't create the new item — please try again.");
+          return;
+        }
+        targetItemId = createBody.item.id;
+      }
+
       const res = await fetch("/api/canteen-purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          item_id: itemId,
+          item_id: targetItemId,
           purchase_date: nairobiToday(),
           quantity: parsedQuantity,
           unit_cost: parsedUnitCost,
@@ -108,10 +159,13 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
     }
   }
 
-  const itemOptions: SelectOption[] = (items ?? []).map((i) => ({
-    value: i.id,
-    label: i.name,
-  }));
+  const itemOptions: SelectOption[] = [
+    ...(items ?? []).map((i) => ({
+      value: i.id,
+      label: i.name,
+    })),
+    { value: NEW_ITEM_VALUE, label: "+ Add new item…" },
+  ];
 
   return (
     <Modal
@@ -139,6 +193,29 @@ export function CanteenPurchaseModal({ open, onClose, items, fixedItem, onSaved 
           options={itemOptions}
           onChange={(e) => selectItem(e.target.value)}
         />
+      )}
+
+      {isNew && (
+        <>
+          <Input
+            label="New item name"
+            type="text"
+            value={newName}
+            placeholder="e.g. Printing paper"
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <Input
+            label="Selling price (KES)"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            numeric
+            value={newSellingPrice}
+            placeholder="0"
+            onChange={(e) => setNewSellingPrice(e.target.value)}
+          />
+        </>
       )}
 
       <Input

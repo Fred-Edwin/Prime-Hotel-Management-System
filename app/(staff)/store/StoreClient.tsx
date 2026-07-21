@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
+import { Button } from "@/components/Button";
 import { IngredientRow, type IngredientFieldSaveState } from "@/components/IngredientRow";
 import { PurchaseModal } from "@/components/PurchaseModal";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
@@ -48,6 +49,11 @@ export function StoreClient() {
   const [pendingSaves, setPendingSaves] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [purchaseTarget, setPurchaseTarget] = useState<Ingredient | null>(null);
+  // Opens PurchaseModal in picker mode (no fixedIngredient) — the only
+  // way to reach the "+ Add new ingredient…" option (post-launch,
+  // 2026-07-21), since every row's own "Log purchase" action opens
+  // straight into fixed mode for that specific ingredient.
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -215,7 +221,12 @@ export function StoreClient() {
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Store — Ingredients</h1>
-        <p className={styles.dateLabel}>{entryDate}</p>
+        <div className={storeStyles.headerRight}>
+          <p className={styles.dateLabel}>{entryDate}</p>
+          <Button variant="secondary" onClick={() => setPickerOpen(true)}>
+            <Icon name="add" size={16} /> Log new purchase
+          </Button>
+        </div>
       </div>
 
       <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search ingredients…" />
@@ -247,8 +258,11 @@ export function StoreClient() {
       </ul>
 
       <PurchaseModal
-        open={purchaseTarget !== null}
-        onClose={() => setPurchaseTarget(null)}
+        open={purchaseTarget !== null || pickerOpen}
+        onClose={() => {
+          setPurchaseTarget(null);
+          setPickerOpen(false);
+        }}
         fixedIngredient={
           purchaseTarget
             ? {
@@ -257,6 +271,16 @@ export function StoreClient() {
                 unit: purchaseTarget.unit,
                 buying_price: purchaseTarget.buying_price,
               }
+            : undefined
+        }
+        ingredients={
+          pickerOpen
+            ? ingredients.map((ingredient) => ({
+                id: ingredient.id,
+                name: ingredient.name,
+                unit: ingredient.unit,
+                buying_price: ingredient.buying_price,
+              }))
             : undefined
         }
         onSaved={load}

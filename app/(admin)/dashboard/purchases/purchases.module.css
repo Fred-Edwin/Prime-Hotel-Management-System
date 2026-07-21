@@ -38,6 +38,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.sectionHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .sectionTitle {

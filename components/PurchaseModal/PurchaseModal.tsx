@@ -33,15 +33,28 @@ export interface PurchaseModalProps {
  * ingredients.buying_price as a fresh weighted-average cost — see
  * docs/01_DATA_MODEL.md §3.2's purchases section and
  * 20260719160000_ingredient_purchases.sql.
+ *
+ * Post-launch (2026-07-21, client request): the picker's last option is
+ * "+ Add new ingredient…", which reveals name + unit fields inline.
+ * Submitting first calls POST /api/ingredients to create the catalog
+ * row (now allowed for the store manager too, not just admin — see that
+ * route's canCreateIngredient()), then logs the purchase against the
+ * new id — so a genuinely new ingredient no longer requires a detour to
+ * /ingredients first.
  */
+const NEW_INGREDIENT_VALUE = "__new__";
+
 export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onSaved }: PurchaseModalProps) {
   const [ingredientId, setIngredientId] = useState(fixedIngredient?.id ?? "");
   const [quantity, setQuantity] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [supplierNote, setSupplierNote] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newUnit, setNewUnit] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isNew = ingredientId === NEW_INGREDIENT_VALUE;
   const selected = fixedIngredient ?? ingredients?.find((i) => i.id === ingredientId);
 
   useEffect(() => {
@@ -51,6 +64,8 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
       setQuantity("");
       setUnitCost(selected ? String(selected.buying_price) : "");
       setSupplierNote("");
+      setNewName("");
+      setNewUnit("");
       setError(null);
     }
     resetForm();
@@ -62,6 +77,10 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
 
   function selectIngredient(id: string) {
     setIngredientId(id);
+    if (id === NEW_INGREDIENT_VALUE) {
+      setUnitCost("");
+      return;
+    }
     const next = ingredients?.find((i) => i.id === id);
     if (next) setUnitCost(String(next.buying_price));
   }
@@ -69,6 +88,14 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
   async function submit() {
     if (!ingredientId) {
       setError("Select an ingredient first.");
+      return;
+    }
+    if (isNew && !newName.trim()) {
+      setError("Enter the new ingredient's name.");
+      return;
+    }
+    if (isNew && !newUnit.trim()) {
+      setError("Enter the new ingredient's unit (e.g. kg, litre, piece).");
       return;
     }
     const parsedQuantity = Number(quantity);
@@ -85,11 +112,33 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
     setSubmitting(true);
     setError(null);
     try {
+      let targetIngredientId = ingredientId;
+
+      if (isNew) {
+        const createRes = await fetch("/api/ingredients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newName.trim(),
+            unit: newUnit.trim(),
+            buying_price: parsedUnitCost,
+            low_stock_threshold: 5,
+            active: true,
+          }),
+        });
+        const createBody = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          setError(createBody.error ?? "Couldn't create the new ingredient — please try again.");
+          return;
+        }
+        targetIngredientId = createBody.ingredient.id;
+      }
+
       const res = await fetch("/api/ingredient-purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ingredient_id: ingredientId,
+          ingredient_id: targetIngredientId,
           purchase_date: nairobiToday(),
           quantity: parsedQuantity,
           unit_cost: parsedUnitCost,
@@ -110,10 +159,13 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
     }
   }
 
-  const ingredientOptions: SelectOption[] = (ingredients ?? []).map((i) => ({
-    value: i.id,
-    label: `${i.name} (${i.unit})`,
-  }));
+  const ingredientOptions: SelectOption[] = [
+    ...(ingredients ?? []).map((i) => ({
+      value: i.id,
+      label: `${i.name} (${i.unit})`,
+    })),
+    { value: NEW_INGREDIENT_VALUE, label: "+ Add new ingredient…" },
+  ];
 
   return (
     <Modal
@@ -143,8 +195,27 @@ export function PurchaseModal({ open, onClose, ingredients, fixedIngredient, onS
         />
       )}
 
+      {isNew && (
+        <>
+          <Input
+            label="New ingredient name"
+            type="text"
+            value={newName}
+            placeholder="e.g. Cooking oil"
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <Input
+            label="Unit"
+            type="text"
+            value={newUnit}
+            placeholder="e.g. kg, litre, piece"
+            onChange={(e) => setNewUnit(e.target.value)}
+          />
+        </>
+      )}
+
       <Input
-        label={`Quantity${selected ? ` (${selected.unit})` : ""}`}
+        label={`Quantity${selected ? ` (${selected.unit})` : isNew && newUnit.trim() ? ` (${newUnit.trim()})` : ""}`}
         type="number"
         inputMode="decimal"
         min={0}

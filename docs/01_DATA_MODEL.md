@@ -662,6 +662,17 @@ Client request (WaPrecious, via `/dashboard/purchases`): she needed to remove a 
 - **Canteen sibling: `DELETE /api/canteen-purchases/[id]` / `delete_canteen_stock_purchase()`** — identical shape, `stock_entries.added_stock` (location = `canteen`) instead of `ingredient_entries.received`, `recompute_stock_entry_chain()` instead of the ingredient chain function, `rebuild_canteen_item_buying_price()` instead of the ingredient version. Also admin-only, matching that logging a canteen purchase is already admin-only (no store-manager-equivalent role at canteen).
 - **Deliberately narrow, not a general "undo."** These two functions exist for exactly this one correction; they are not exposed as a reusable delete-any-row primitive, and no other append-only table (`orders`, `expenses`) gained a delete path from this change.
 
+### Inline "add new" from the purchase form (post-launch addition, 2026-07-21)
+
+Client request (WaPrecious): logging a purchase for something not yet in the catalog required leaving `/dashboard/purchases`, creating it on `/ingredients` or `/items` first, then coming back — an unnecessary detour for what's usually a one-off "I'm buying this for the first time" moment.
+
+- **No new table or write path.** Both `PurchaseModal` (ingredients) and `CanteenPurchaseModal` (canteen-independent items) add a `"+ Add new…"` option as the last entry in their existing ingredient/item picker. Selecting it reveals inline fields — **name + unit** for a new ingredient, **name + selling price** for a new canteen item (buying price/unit cost is already being typed as part of the purchase itself, so it isn't asked twice). Category for a new item defaults to `others` and `supply_type` is forced to `canteen_independent` (the only kind this modal ever purchases against); `low_stock_threshold` defaults to `5`, same as every other catalog-creation path.
+- **The picker itself was previously unreachable from every screen that uses these modals** — a real gap caught only by looking at the running app, not by reading the component code: `/dashboard/purchases`' stock-on-hand rows and `/store`'s ingredient rows both always open the modal with a `fixedIngredient`/`fixedItem` already set (the row you clicked), so the "+ Add new…" option never had anywhere to render. Fixed by adding a **"Log new purchase" button** (new, above the Stock on hand table on `/dashboard/purchases` for both tabs; above the ingredient list on `/store`) that opens the same modal with no fixed target, passing the full current list as picker options. This is a new, deliberate entry point alongside the existing row-based ones — those still bypass the picker on purpose, per `PurchasesClient.tsx`'s original design comment (every stock-on-hand row already IS the thing you want to buy).
+- **Submit order: create the catalog row first, then log the purchase against its new id** — a plain client-side two-step (`POST /api/ingredients` or `POST /api/items`, then the existing `POST /api/ingredient-purchases`/`POST /api/canteen-purchases`), not a new combined RPC. If the catalog-creation call fails, the purchase is never attempted — no risk of a purchase pointing at a row that doesn't exist.
+- **`POST /api/ingredients` permission widened to match who can already log an ingredient purchase.** It was `requireAdmin()`-only; the store manager can log purchases (`canLogPurchases()` in `app/api/ingredient-purchases/route.ts`) but couldn't have used the inline "add new" path without this, since `PurchaseModal` is shared between admin's `/dashboard/purchases` and the store manager's `/store` screen. New `canCreateIngredient()` gate in `app/api/ingredients/route.ts` mirrors `canLogPurchases()` exactly (admin, or restaurant staff with `is_store_manager`). Editing/deactivating an ingredient on `/ingredients` itself stays admin-only, untouched.
+- **`POST /api/items` unchanged (still `requireAdmin()`-only)** — `CanteenPurchaseModal` is admin-only end to end already (no store-manager-equivalent role at canteen), so there is no symmetry gap to fix there.
+- **`ingredients`' INSERT RLS policy also had to be widened, not just the route handler.** Same class of bug as the UPDATE-policy fix already documented above (`20260719163000_ingredients_update_restaurant_scoped.sql`) — `ingredients_admin_write` was `for insert with check (is_admin())`, so a store-manager insert was rejected outright even after the route's own `canCreateIngredient()` check was widened. Caught by direct `curl` testing (login as Janiffer, `POST /api/ingredients`, got a 500), not assumed. Fixed the same way, in `20260721110000_ingredients_insert_restaurant_scoped.sql`: replaced `ingredients_admin_write` with `ingredients_admin_or_restaurant_insert` (`is_admin() or my_location() = 'restaurant'`).
+
 ### Canteen's own stock purchases (post-launch addition) — the same fix, for canteen_independent items
 
 Direct client input: admin wanted the same "log a real purchase, get a real weighted-average cost" capability for canteen's own stock (`items.supply_type = 'canteen_independent'` — cyber, retail lines canteen buys and sells with no restaurant-side counterpart) that ingredients already got above. Before this, `canteen_independent` items' `added_stock` was just a plain number Anne typed on `/entry` each week (§3.1), with `items.buying_price` a static, admin-typed catalog field never actually tied to a real buying event — the exact problem `ingredient_purchases` fixed for ingredients, now recurring on the canteen side.
@@ -952,8 +963,15 @@ create policy "ingredients_select_restaurant_or_admin" on public.ingredients
   for select using (
     public.is_admin() or public.my_location() = 'restaurant'
   );
-create policy "ingredients_admin_write" on public.ingredients
-  for insert with check (public.is_admin());
+-- Added 20260721110000_ingredients_insert_restaurant_scoped.sql: widened
+-- from admin-only to admin-or-restaurant, same shape as the UPDATE
+-- policy below -- needed so the store manager can use PurchaseModal's
+-- inline "+ Add new ingredient" flow (see §3.2's "Inline 'add new'"
+-- section), not just admin creating on /ingredients directly.
+create policy "ingredients_admin_or_restaurant_insert" on public.ingredients
+  for insert with check (
+    public.is_admin() or public.my_location() = 'restaurant'
+  );
 create policy "ingredients_admin_or_restaurant_update" on public.ingredients
   for update using (
     public.is_admin() or public.my_location() = 'restaurant'
