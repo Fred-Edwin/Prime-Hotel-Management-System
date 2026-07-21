@@ -271,6 +271,7 @@
 .itemCardFooter {
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-2);
   padding: var(--space-2) 0 var(--space-3);
 }
 
@@ -285,6 +286,10 @@
   padding: var(--space-2) var(--space-3);
   min-height: var(--space-touch);
   cursor: pointer;
+}
+
+.itemCardDeleteBtn {
+  color: var(--color-status-error);
 }
 
 /* :is() boosts specificity above .table th/td's own element+class rules
@@ -444,4 +449,24 @@
   font-family: var(--font-family-data);
   font-size: var(--font-size-body-sm);
   color: var(--color-status-error);
+}
+
+.deleteWarning {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.deleteImpactList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  list-style: none;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-primary);
 }

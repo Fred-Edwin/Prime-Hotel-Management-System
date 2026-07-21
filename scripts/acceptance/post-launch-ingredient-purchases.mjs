@@ -194,12 +194,15 @@ async function main() {
     check("Both purchases persisted as separate rows (2, not 1 clobbered)", purchaseCount === "2", purchaseCount);
   }
 
-  console.log("\n=== TEST 7: Purchase rows are immutable (no update/delete RLS policy) ===");
+  console.log("\n=== TEST 7: Purchase rows can't be directly UPDATEd (no update RLS policy) ===");
   {
-    // No PATCH/DELETE route exists at all for ingredient_purchases —
-    // confirm this is a deliberate application-level absence backed by
-    // the database itself refusing an update (RLS has no update policy
-    // for this table at all), not just a missing route.
+    // No PATCH route exists at all for ingredient_purchases — confirm
+    // this is a deliberate application-level absence backed by the
+    // database itself refusing an update (RLS has no update policy for
+    // this table at all), not just a missing route. Delete is now
+    // possible, but only through the admin-only DELETE policy +
+    // delete_ingredient_purchase() added post-launch — see
+    // post-launch-purchase-delete.mjs, not re-tested here.
     const anyPurchase = psqlRow(
       `select id from ingredient_purchases where ingredient_id = '${ingredientId}' limit 1;`,
     );

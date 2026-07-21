@@ -13,6 +13,7 @@ stock_entries       — daily stock movement per sellable item, both locations
 ingredients         — raw material catalog (flour, sugar, etc.) — never sold directly, only consumed
 ingredient_entries   — daily central-store movement per ingredient (received, used in cooking)
 ingredient_purchases — append-only log of buying events (quantity, actual unit cost, who, when) — see §3.2
+expense_categories  — admin-managed catalog of expense category names (rent, electricity, ...) — see §2's EXPENSE_CATEGORIES section
 expenses            — operating costs, kept separate from stock/items
 staff_meal_entries  — self-service log of menu items staff consumed without paying, attributed per staff member (see §3.5)
 delivery_locations  — admin-managed catalog of delivery zones + fixed fees (see §6)
@@ -128,6 +129,15 @@ create table public.users (
 -- ============================================================
 -- ITEMS
 -- Single shared item master. No per-location duplication.
+--
+-- Unlike ingredients/delivery_locations (§5's soft-deactivate-only
+-- rule), items also support a real, permanent DELETE as of 2026-07-21
+-- (post-launch client request) -- see "Item hard delete" below the
+-- schema block, and delete_item()/item_delete_impact() in
+-- supabase/migrations/20260721080000_item_hard_delete.sql. Deactivate
+-- (the `active` flag below) remains available and is the safer default
+-- for most cases; delete is for when the admin genuinely wants the item
+-- and its history gone.
 -- ============================================================
 
 create table public.items (
@@ -156,6 +166,62 @@ create index items_supply_type_idx on public.items (supply_type);
 create trigger items_set_updated_at
   before update on public.items
   for each row execute function public.set_updated_at();
+
+-- ============================================================
+-- ITEM HARD DELETE (post-launch, 2026-07-21)
+--
+-- A deliberate, explicit exception to §5's "no hard delete" rule for
+-- items only -- ingredients/delivery_locations are unchanged and stay
+-- deactivate-only. Confirmed directly and twice with the client before
+-- being built: deleting an item with real history also permanently
+-- deletes every stock_entries/order_items (and any order left with no
+-- items)/canteen_stock_purchases/staff_meal_entries row that references
+-- it, which changes already-closed days' Ledger/dashboard/profit
+-- figures retroactively -- the opposite of every other "never rewrite
+-- history" guarantee in this schema (price snapshots, no soft-delete on
+-- stock_entries/expenses, immutable purchases). This is NOT a pattern to
+-- extend to another table without the same explicit confirmation.
+--
+-- DELETE RLS policies (admin-only, no equivalent for staff) added on:
+-- items, stock_entries, canteen_stock_purchases, staff_meal_entries,
+-- order_items, orders. None of these tables had any delete policy
+-- before this -- all were previously either update-only (admin
+-- corrections) or fully append-only.
+--
+-- item_delete_impact(p_item_id) -- read-only, security invoker. Counts
+-- and total value of everything a delete would remove: stock_entries
+-- rows + their summed sales_value, orders touched (and how many of
+-- those would be deleted outright vs. just recalculated),
+-- canteen_stock_purchases rows + total_cost, staff_meal_entries count.
+-- GET /api/items/[id]/delete-impact surfaces this to the confirm modal
+-- BEFORE the admin commits to deleting -- resolved design decision:
+-- show real numbers, not a generic "this can't be undone" warning, so
+-- the retroactive effect isn't a surprise after the fact.
+--
+-- delete_item(p_item_id) -- security invoker, so the DELETE policies
+-- above are the real enforcement. In order:
+--   1. Deletes staff_meal_entries, canteen_stock_purchases, and
+--      stock_entries for the item -- no further correction needed for
+--      any of these three, they're independent per-item ledgers.
+--   2. For every order that has an order_items line for this item:
+--      deletes that line, then either deletes the whole order (if it
+--      had no other lines -- an orphaned receipt with a stale
+--      total_amount is worse than no receipt) or recomputes
+--      orders.total_amount from its remaining lines
+--      (sum(quantity * selling_price_snapshot) + delivery_fee_snapshot,
+--      the same formula lib/calculations.ts's orderTotal() applies at
+--      write time, reapplied here as a direct correction).
+--   3. Deletes the items row itself.
+-- All in one transaction (one function call) -- a partial cascade
+-- (e.g. stock_entries gone but the item row still present) can never be
+-- observed.
+--
+-- DELETE /api/items/[id] calls delete_item() and writes an item.delete
+-- audit_log entry recording the deleted item's full row plus the
+-- impact-preview numbers, since after the delete the row itself is
+-- gone and can't be inspected later -- the audit log is the only
+-- remaining record of what was deleted and why it mattered.
+-- ============================================================
 
 -- ============================================================
 -- INGREDIENTS
@@ -320,17 +386,59 @@ create trigger stock_entries_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- ============================================================
+-- EXPENSE_CATEGORIES
+-- Admin-managed category catalog (post-launch addition, 2026-07-21, see
+-- 20260721090000_expense_categories_catalog.sql) -- replaces the fixed
+-- expense_category enum (electricity/gas/charcoal/other). WaPrecious
+-- can add/rename/retire her own categories (rent, salaries, water, ...)
+-- through the UI, same deactivate-only catalog pattern as
+-- ingredients/delivery_locations -- no delete route, `active` boolean
+-- instead. One shared catalog: both staff's /expenses and admin's
+-- /dashboard/expenses category pickers read the same table, so a
+-- category WaPrecious adds shows up for staff too.
+-- ============================================================
+
+create table public.expense_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index expense_categories_active_idx on public.expense_categories (active);
+
+-- ============================================================
 -- EXPENSES
 -- Kept separate from items/stock -- these are operating costs,
 -- not inventory. This is the direct fix for the client's
 -- original "can't calculate true profit per plate" pain point.
+--
+-- location is nullable (post-launch addition, 2026-07-21, see
+-- 20260721070000_admin_business_wide_expenses.sql): null = a
+-- business-wide expense (rent, salaries, etc.) that isn't attributable
+-- to either location -- only admin can write a null-location row, same
+-- "null = admin/all locations" convention already used on
+-- public.users.location. Staff-authored rows are always non-null,
+-- server-derived from the staff member's own session.
+--
+-- category_id is a live FK into expense_categories (post-launch
+-- addition, 2026-07-21, replacing the old `category` enum column) --
+-- same "live reference, not a snapshot" choice as stock_entries.item_id:
+-- a category's *name* isn't snapshotted onto each expense row, so
+-- renaming "Charcoal" to "Fuel" relabels every past entry consistently,
+-- the same way renaming an item still shows its new name on old
+-- stock_entries rows. (Contrast with prices, which ARE snapshotted --
+-- see items/stock_entries -- because a price change must NOT silently
+-- change a past day's recorded profit; a category rename carries no
+-- such risk, it's just a label.)
 -- ============================================================
 
 create table public.expenses (
   id uuid primary key default gen_random_uuid(),
-  location location_type not null,
+  location location_type,  -- null = business-wide, admin-only
   expense_date date not null,
-  category expense_category not null,
+  category_id uuid not null references public.expense_categories(id),
   amount numeric(10,2) not null check (amount >= 0),
   note text,
   created_by uuid not null references public.users(id),
@@ -338,6 +446,7 @@ create table public.expenses (
 );
 
 create index expenses_location_date_idx on public.expenses (location, expense_date);
+create index expenses_category_id_idx on public.expenses (category_id);
 
 -- ============================================================
 -- DELIVERY_LOCATIONS
@@ -526,7 +635,7 @@ Concretely, this means:
 
 Post-launch correction — see `00_ARCHITECTURE.md` §13 for the full architectural commitment; this subsection has the concrete mechanics. The original V1 model conflated "buying" with "receiving": `ingredient_entries.received` was a single typed-in quantity per day, priced from a static `ingredients.buying_price` catalog field nobody actually entered *at the moment of purchase*. The client's real process is different — **WaPrecious (admin) makes the purchase** (deals with the supplier, knows the actual price paid), while **the store manager physically receives the delivery** at the central store. Both roles need to be able to log a buying event, and the price genuinely varies purchase to purchase.
 
-- **`ingredient_purchases` is a new, append-only table** (schema above) — one immutable row per buying event: `quantity`, `unit_cost` (this specific delivery's actual price, typed by whoever logs it), optional `supplier_note`, `created_by`, `created_at`. No update/delete policy — a logged mistake is corrected operationally (e.g. a follow-up purchase), not edited in place, same convention as `orders`/`expenses`.
+- **`ingredient_purchases` is append-only for everyone except admin correcting a genuine mistake** (schema above) — one row per buying event: `quantity`, `unit_cost` (this specific delivery's actual price, typed by whoever logs it), optional `supplier_note`, `created_by`, `created_at`. Still no *update* policy at all — a wrong price/quantity is corrected via a follow-up purchase, not edited in place. **Delete is admin-only** (post-launch addition, 2026-07-21, client request — see "Deleting a purchase" below) for the case where the row shouldn't have existed at all (wrong ingredient, duplicate entry), as distinct from a correction to an otherwise-legitimate purchase.
 - **Both admin and the store manager can insert a purchase** — a deliberate, confirmed permission symmetry (unlike `quantity_used`, which stays store-manager-only, per "Who logs ingredient entries" above). Admin logs purchases on `/dashboard/purchases`; the store manager logs them via a "Log purchase" action on `/store`, which replaces the old plain "received" quantity field. Both call the same `record_ingredient_purchase()` function.
 - **`record_ingredient_purchase(p_ingredient_id, p_purchase_date, p_quantity, p_unit_cost, p_created_by, p_supplier_note)`** is the single write path for both entry points:
   1. Locks the ingredient/date row (`lock_ingredient_entry_row()`, same advisory lock `save_ingredient_entry()` already uses) so two purchases landing for the same ingredient on the same day can't race each other's average-cost recalculation.
@@ -540,11 +649,24 @@ Post-launch correction — see `00_ARCHITECTURE.md` §13 for the full architectu
 - **`ingredients`' UPDATE RLS policy had to be widened, not just `ingredient_entries`/`ingredient_purchases`'s.** `record_ingredient_purchase()` is `security invoker` (this project's standing write-function convention), so its `update ingredients set buying_price = ...` runs as whichever user called it — a real bug shipped initially and caught by direct testing: `ingredients_admin_update` was admin-only, so a store-manager-logged purchase silently failed to update the catalog price (RLS matched zero rows, no error thrown — the purchase and `ingredient_entries.buying_price_snapshot` still saved correctly, masking the failure). Fixed in `20260719163000_ingredients_update_restaurant_scoped.sql` by widening the UPDATE policy to admin-or-restaurant-location, same shape as `ingredient_entries`/`ingredient_purchases`.
 - **Stock-on-hand visibility** (quantity + current average cost + value, per ingredient) is a new read surfaced by `GET /api/ingredient-purchases`, powering `/dashboard/purchases` for admin — derived from each ingredient's latest `ingredient_entries.closing_stock` and current `buying_price`, not a new stored figure.
 
+### Deleting a purchase (post-launch addition, 2026-07-21)
+
+Client request (WaPrecious, via `/dashboard/purchases`): she needed to remove a purchase logged in error, not just correct its price going forward. A plain `DELETE` would leave two things silently wrong — `ingredients.buying_price` (a running weighted average the purchase already blended into) and that period's `ingredient_entries.received` (which the purchase's quantity was already folded into) — so this is a purpose-built reversal, not a generic delete. See `supabase/migrations/20260721060000_purchase_delete.sql`.
+
+- **`DELETE /api/ingredient-purchases/[id]`, admin-only** — unlike logging a purchase (admin or store manager), removing one is an admin-only correction, matching the ledger admin-edit route's scope. Enforced at both the route (`requireAdmin()`) and RLS (`ingredient_purchases_delete_admin`, `for delete using (is_admin())`) — the new DELETE policy, no equivalent for staff/store-manager at all.
+- **`delete_ingredient_purchase(p_purchase_id)`** — `security invoker`, so the DELETE RLS policy above is the real enforcement, not this function's own logic:
+  1. Locks the ingredient/date row (`lock_ingredient_entry_row()`, same lock every other write to this row already takes).
+  2. Deletes the `ingredient_purchases` row.
+  3. Subtracts the purchase's `quantity` back out of that date's `ingredient_entries.received` (floored at 0), then calls `recompute_ingredient_entry_chain()` (§3.4's historical-edit-cascade machinery, unchanged, reused as-is) to re-derive `opening_stock`/`closing_stock`/values forward from that date. If this reveals a downstream oversell (e.g. more was already `quantity_used` than remains once the purchase's quantity is removed), the whole delete rolls back atomically — same guarantee an admin ledger edit gives.
+  4. Calls `rebuild_ingredient_buying_price()`, which recomputes `ingredients.buying_price` from scratch by replaying every *remaining* `ingredient_purchases` row for that ingredient in chronological order through the same weighted-average formula `record_ingredient_purchase()` applies incrementally. This is a full replay, not an algebraic inverse of the single deleted purchase — inverting one step is only correct if no later purchase for the same ingredient already blended into the average, which can't be assumed in general (an admin might delete an older purchase, not just the most recent one). Purchase volume per ingredient is small for a single-business app, so a full replay is cheap.
+- **Canteen sibling: `DELETE /api/canteen-purchases/[id]` / `delete_canteen_stock_purchase()`** — identical shape, `stock_entries.added_stock` (location = `canteen`) instead of `ingredient_entries.received`, `recompute_stock_entry_chain()` instead of the ingredient chain function, `rebuild_canteen_item_buying_price()` instead of the ingredient version. Also admin-only, matching that logging a canteen purchase is already admin-only (no store-manager-equivalent role at canteen).
+- **Deliberately narrow, not a general "undo."** These two functions exist for exactly this one correction; they are not exposed as a reusable delete-any-row primitive, and no other append-only table (`orders`, `expenses`) gained a delete path from this change.
+
 ### Canteen's own stock purchases (post-launch addition) — the same fix, for canteen_independent items
 
 Direct client input: admin wanted the same "log a real purchase, get a real weighted-average cost" capability for canteen's own stock (`items.supply_type = 'canteen_independent'` — cyber, retail lines canteen buys and sells with no restaurant-side counterpart) that ingredients already got above. Before this, `canteen_independent` items' `added_stock` was just a plain number Anne typed on `/entry` each week (§3.1), with `items.buying_price` a static, admin-typed catalog field never actually tied to a real buying event — the exact problem `ingredient_purchases` fixed for ingredients, now recurring on the canteen side.
 
-- **`canteen_stock_purchases` is a new, append-only table**, same shape as `ingredient_purchases`: one immutable row per buying event (`item_id`, `quantity`, `unit_cost`, `total_cost`, optional `supplier_note`, `created_by`, `created_at`). No update/delete policy, same "correct operationally, not in place" convention as `ingredient_purchases`/`orders`/`expenses`.
+- **`canteen_stock_purchases` is a new, append-only table**, same shape as `ingredient_purchases`: one row per buying event (`item_id`, `quantity`, `unit_cost`, `total_cost`, optional `supplier_note`, `created_by`, `created_at`). No update policy — corrected operationally (a follow-up purchase), not edited in place, same convention as `orders`/`expenses`. Delete is admin-only, same post-launch addition as `ingredient_purchases` — see "Deleting a purchase" above.
 - **Scoped to `canteen_independent` items only, enforced by a database trigger** (`check_canteen_stock_purchase_item()`), not just application-layer validation — a check-constraint-style rejection (errcode `23514`) fires if `item_id` doesn't reference a `canteen_independent` item. This is deliberate and load-bearing: `canteen_supplied` items' `added_stock` must only ever come from the restaurant's `sent_out`, aggregated via `canteen_supplied_total()` (§3.1) — letting admin also inject stock there via a purchase would double-count against that aggregation and break the single-source-of-truth guarantee the restaurant→canteen link depends on.
 - **Admin-only**, both insert and select — unlike ingredient purchases, there is no store-manager-equivalent role at canteen who physically receives deliveries. WaPrecious is the only person who buys canteen's own stock, so this doesn't need ingredient purchases' admin-or-store-manager symmetry.
 - **`record_canteen_stock_purchase(p_item_id, p_purchase_date, p_quantity, p_unit_cost, p_created_by, p_supplier_note)`** is the single write path, called from `/dashboard/canteen-purchases`:
@@ -937,7 +1059,24 @@ create policy "stock_update_admin_or_current_period_location" on public.stock_en
 -- Regression-checked by scripts/acceptance/post-launch-stock-entry-
 -- multi-writer-rls.mjs.
 
--- EXPENSES: same pattern as stock_entries
+-- EXPENSE_CATEGORIES: same triad as items/ingredients -- everyone
+-- (staff + admin) can read (staff need this for their own /expenses
+-- category picker), only admin can write. No delete policy --
+-- deactivate-only, never a hard delete (see 20260721090000_expense_categories_catalog.sql;
+-- items' one-off hard-delete exception, 20260721080000_item_hard_delete.sql,
+-- is explicitly NOT a pattern to extend to another table).
+create policy "expense_categories_select_all" on public.expense_categories
+  for select using (true);
+create policy "expense_categories_admin_write" on public.expense_categories
+  for insert with check (public.is_admin());
+create policy "expense_categories_admin_update" on public.expense_categories
+  for update using (public.is_admin());
+
+-- EXPENSES: same pattern as stock_entries. The is_admin() branch on
+-- insert doesn't reference location at all, so it already permits admin
+-- to insert any location value including null (business-wide) -- no
+-- policy change was needed when location became nullable, see
+-- 20260721070000_admin_business_wide_expenses.sql.
 create policy "expenses_select_scoped" on public.expenses
   for select using (
     public.is_admin() or location = public.my_location()
@@ -949,6 +1088,15 @@ create policy "expenses_insert_scoped" on public.expenses
   );
 create policy "expenses_update_admin_only" on public.expenses
   for update using (public.is_admin());
+-- Admin-only delete (post-launch addition, 2026-07-21) -- a mistaken/
+-- duplicate entry can be removed outright, not just corrected via
+-- update. Unlike ingredient_purchases/canteen_stock_purchases, an
+-- expense has no derived value (weighted-average cost, stock quantity)
+-- to unwind on delete -- only summed at read time by
+-- dashboard_expenses_summary() -- so this is a plain RLS-gated delete,
+-- no companion cleanup RPC needed.
+create policy "expenses_delete_admin_only" on public.expenses
+  for delete using (public.is_admin());
 
 -- STAFF_MEAL_ENTRIES: same location-scoped pattern as expenses, plus
 -- self-attribution (a staff member can only log a claim as themselves --
@@ -1102,7 +1250,8 @@ RLS policies alone are not sufficient — Postgres requires baseline `GRANT` pri
 - **No `locations` table.** Only two locations will ever exist for this business (per discovery); a `location_type` enum is simpler and sufficient. If a third location is ever added, that's a deliberate future migration, not an oversight.
 - **No debtor/credit ledger table.** Explicitly Phase 2 per the scope document. Don't add it speculatively.
 - **Wastage is V1, not Phase 2 — this reverses an earlier decision.** It was originally deferred, but client input made clear it's needed now: without it, closing stock silently doesn't reconcile with a physical count after spoilage. See §3.3 for the full column-level treatment on both `stock_entries` and `ingredient_entries`. No separate wastage table — it's columns on the existing entry tables, not its own ledger, since a wastage event is always tied to a specific item/ingredient's entry for that period.
-- **No soft-delete on `stock_entries`/`expenses`.** Historical entries are never deleted, only correctable by admin via update (with the update itself still logged via `updated_at`, and — for `stock_entries`/`ingredient_entries` specifically — via `audit_log` too, see §3.4's "Admin direct ledger-row edit" note). If an audit trail of *changes* (not just current state) becomes a requirement for `expenses` as well, that's a new decision to make explicitly, not something to bolt on silently.
+- **No soft-delete/delete on `stock_entries`.** Historical entries are never deleted, only correctable by admin via update (with the update itself logged via both `updated_at` and `audit_log`, see §3.4's "Admin direct ledger-row edit" note). **`expenses` is an explicit, narrower exception** (post-launch addition, 2026-07-21): admin can both edit (`expenses_update_admin_only`) and outright delete (`expenses_delete_admin_only`) an expense row, logged to `audit_log` either way — see the EXPENSES RLS section above. This diverges from `stock_entries` because an expense carries no derived value elsewhere (no weighted-average cost, no stock quantity) for a delete to leave inconsistent; don't infer from this that `stock_entries`/`ingredient_purchases`-style tables should also gain a general delete without the same reasoning applying.
+- **`items` is the one exception to the deactivate-only catalog pattern** (post-launch, 2026-07-21, direct client confirmation — see the "ITEM HARD DELETE" block above the `items` schema). `ingredients`/`delivery_locations` are unaffected and remain deactivate-only for exactly the reason stated below (past rows reference them, hard-delete would either FK-violate or orphan history) — don't extend items' hard-delete precedent to either of those tables without the same explicit client confirmation this required.
 - **`items.supply_type` is deliberate, not speculative.** It exists specifically because the restaurant's central store supplies only a subset of items to canteen daily, while canteen also stocks unrelated items (cyber, some retail) entirely on its own — see §3.1. Don't remove or simplify this enum thinking it's over-engineering; it's load-bearing for the canteen `added_stock` aggregation.
 - **No formal recipe / bill-of-materials linking `ingredients` to `items`.** The client only has a rough, informal sense of ingredient-to-dish conversion, not precise recipes — see §3.2. `ingredient_entries.quantity_used` and `stock_entries.added_stock` are independent numbers with no enforced relationship. Don't build automatic yield calculation speculatively; it's a real Phase 2 candidate if the client asks, not a V1 gap to quietly fill in.
 
@@ -1123,7 +1272,7 @@ An order is a **single customer transaction** — closer to a receipt than to a 
 
 ### `delivery_locations` — admin-managed zone catalog
 
-Prosper Hotel's admin (WaPrecious) sets up named delivery zones, each with a fixed fee (e.g., "Estate A — KES 100"). Staff logging an order pick a zone from this catalog rather than typing a fee themselves — same "don't make staff re-derive a number the system already knows" principle as opening-stock carry-forward (§3.1). `delivery_locations` follows the same admin-CRUD, soft-deactivate pattern as `items`/`ingredients` (§2, §5's no-hard-delete rule applies here too, since past orders reference a zone).
+Prosper Hotel's admin (WaPrecious) sets up named delivery zones, each with a fixed fee (e.g., "Estate A — KES 100"). Staff logging an order pick a zone from this catalog rather than typing a fee themselves — same "don't make staff re-derive a number the system already knows" principle as opening-stock carry-forward (§3.1). `delivery_locations` follows the same admin-CRUD, soft-deactivate pattern `ingredients` still uses (§2, §5's no-hard-delete rule applies here too, since past orders reference a zone) — unlike `items`, which gained a real hard delete post-launch (see §5's "the one exception" note); `delivery_locations` was not included in that exception and stays deactivate-only.
 
 - `fee` is **snapshotted onto the order** at write time (`orders.delivery_fee_snapshot`), same rationale as every other price snapshot in this schema (§3) — a later fee change at a zone must not silently alter a past order's recorded total.
 - Pickup orders have no delivery zone (`delivery_location_id` is null, `delivery_fee_snapshot` is `0`).

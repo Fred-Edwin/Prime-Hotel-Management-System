@@ -89,3 +89,35 @@
 .purchaseCard {
   cursor: pointer;
 }
+
+.noResults {
+  padding: var(--space-6) 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+}
+
+.deleteWarning {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Mobile card footer — plain inline button rather than catalog.module.css's
+   ActionMenu popover, same reasoning as Staff's itemCardActionRow
+   (staff.module.css): the popover is position:absolute and gets clipped
+   by a collapsible card's overflow:hidden wrapper. Purchase cards aren't
+   collapsible, but kept consistent with the established mobile-actions
+   convention rather than introducing a second pattern. */
+.itemCardActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 0;
+}
+
+.itemCardDeleteBtn {
+  color: var(--color-status-error);
+}

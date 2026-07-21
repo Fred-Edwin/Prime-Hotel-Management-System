@@ -10,9 +10,21 @@ import { FilterBar } from "@/components/FilterBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
+import { ActionMenu } from "@/components/ActionMenu";
+import { Modal } from "@/components/Modal";
 import { itemSchema, type ItemInput } from "@/lib/validation";
 import type { Database } from "@/lib/supabase/types";
 import styles from "../catalog.module.css";
+
+interface DeleteImpact {
+  stock_entries_count: number;
+  stock_entries_sales_value: number;
+  orders_affected_count: number;
+  orders_to_delete_count: number;
+  canteen_purchases_count: number;
+  canteen_purchases_value: number;
+  staff_meal_entries_count: number;
+}
 
 type Item = Database["public"]["Tables"]["items"]["Row"];
 type ItemCategory = Database["public"]["Enums"]["item_category"];
@@ -86,6 +98,46 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpact | null>(null);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function openDeleteModal(item: Item) {
+    setDeleteTarget(item);
+    setDeleteConfirmText("");
+    setDeleteError(null);
+    setDeleteImpact(null);
+    setDeleteImpactLoading(true);
+    try {
+      const res = await fetch(`/api/items/${item.id}/delete-impact`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setDeleteImpact(data.impact ?? null);
+    } finally {
+      setDeleteImpactLoading(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/items/${deleteTarget.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete item");
+      setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setToast(`${deleteTarget.name} deleted`);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete item");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -277,13 +329,17 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                         </span>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className={styles.editLink}
-                          onClick={() => openEditDrawer(item)}
-                        >
-                          Edit
-                        </button>
+                        <ActionMenu
+                          aria-label={`Actions for ${item.name}`}
+                          items={[
+                            { label: "Edit", onClick: () => openEditDrawer(item) },
+                            {
+                              label: "Delete",
+                              destructive: true,
+                              onClick: () => openDeleteModal(item),
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -363,6 +419,13 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                           onClick={() => openEditDrawer(item)}
                         >
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.itemCardEditBtn} ${styles.itemCardDeleteBtn}`}
+                          onClick={() => openDeleteModal(item)}
+                        >
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -483,6 +546,95 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
           </label>
         </FormSection>
       </Drawer>
+
+      {/* Delete — permanent, unlike ingredients/delivery_locations which stay
+          deactivate-only. Also deletes every stock_entries/order_items (and
+          orphaned orders)/canteen_stock_purchases/staff_meal_entries row
+          referencing this item, retroactively changing past Ledger/dashboard
+          figures — confirmed directly with the client before this was built.
+          The impact preview below shows the real numbers so this isn't a
+          surprise after the fact. See supabase/migrations/20260721070000_item_hard_delete.sql. */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete item"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText !== deleteTarget?.name || deleting || deleteImpactLoading}
+              onClick={confirmDelete}
+            >
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.form}>
+          <p className={styles.deleteWarning}>
+            This permanently removes the item and cannot be undone.
+          </p>
+
+          {deleteImpactLoading && <p>Checking what this will affect…</p>}
+
+          {deleteImpact && (
+            <ul className={styles.deleteImpactList}>
+              {deleteImpact.stock_entries_count > 0 && (
+                <li>
+                  <strong>{deleteImpact.stock_entries_count}</strong> stock entr
+                  {deleteImpact.stock_entries_count === 1 ? "y" : "ies"} totaling{" "}
+                  <strong>KES {deleteImpact.stock_entries_sales_value.toFixed(2)}</strong> in past sales —
+                  this will change already-closed days&rsquo; Ledger and dashboard totals.
+                </li>
+              )}
+              {deleteImpact.orders_affected_count > 0 && (
+                <li>
+                  <strong>{deleteImpact.orders_affected_count}</strong> order
+                  {deleteImpact.orders_affected_count === 1 ? "" : "s"} include this item
+                  {deleteImpact.orders_to_delete_count > 0 && (
+                    <>
+                      {" "}
+                      (<strong>{deleteImpact.orders_to_delete_count}</strong> of those had only this item
+                      and will be deleted entirely; the rest will have their total recalculated)
+                    </>
+                  )}
+                  .
+                </li>
+              )}
+              {deleteImpact.canteen_purchases_count > 0 && (
+                <li>
+                  <strong>{deleteImpact.canteen_purchases_count}</strong> canteen stock purchase
+                  {deleteImpact.canteen_purchases_count === 1 ? "" : "s"} totaling{" "}
+                  <strong>KES {deleteImpact.canteen_purchases_value.toFixed(2)}</strong>.
+                </li>
+              )}
+              {deleteImpact.staff_meal_entries_count > 0 && (
+                <li>
+                  <strong>{deleteImpact.staff_meal_entries_count}</strong> staff meal claim
+                  {deleteImpact.staff_meal_entries_count === 1 ? "" : "s"}.
+                </li>
+              )}
+              {deleteImpact.stock_entries_count === 0 &&
+                deleteImpact.orders_affected_count === 0 &&
+                deleteImpact.canteen_purchases_count === 0 &&
+                deleteImpact.staff_meal_entries_count === 0 && (
+                  <li>No history found for this item — nothing else will be affected.</li>
+                )}
+            </ul>
+          )}
+
+          {deleteError && <p className={styles.formError}>{deleteError}</p>}
+
+          <Input
+            label="Confirm name"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+          />
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>

@@ -100,22 +100,34 @@ export function psql(sql) {
  * in column order (e.g. "20.00|5.00|15.00"), matching the format
  * ACCEPTANCE_DB_MODE=docker's psql() already returns in `-t -A` mode —
  * so callers can write one assertion that works under either backend.
- * Under "linked" mode this parses supabase db query's box-drawing table
- * output; under "docker" mode psql() already returns exactly this shape,
- * so this is a passthrough.
+ * Under "docker" mode psql() already returns exactly this shape, so this
+ * is a passthrough.
+ *
+ * Under "linked" mode, `supabase db query --linked` returns structured
+ * JSON (`{ boundary, rows: [{col: value, ...}], warning }`), not the
+ * box-drawing table text this function originally parsed — a CLI output
+ * format change discovered 2026-07-21 while verifying
+ * post-launch-purchase-delete.mjs (every check making a real HTTP call
+ * passed; every check going through psqlRow() came back empty, which is
+ * what surfaced this). Numeric/decimal columns come back as JS numbers,
+ * not strings — re-stringified here so callers comparing against a
+ * fixed-precision literal (e.g. `"110.00"`, matching what real `psql -t
+ * -A` prints for a `numeric(10,2)` column) keep working unchanged.
  */
 export function psqlRow(sql) {
   const raw = psql(sql);
   if (DB_MODE !== "linked") return raw;
 
-  const lines = raw.split("\n").filter((l) => l.trim().startsWith("│") && !l.includes("─"));
-  if (lines.length < 2) return "";
-  // lines[0] is the header row, lines[1] is the (only) data row for a
-  // single-row query.
-  return lines[1]
-    .split("│")
-    .map((cell) => cell.trim())
-    .filter((cell, i, arr) => !(i === 0 || i === arr.length - 1) || cell !== "")
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return "";
+  }
+  const row = parsed?.rows?.[0];
+  if (!row) return "";
+  return Object.values(row)
+    .map((v) => (v === null ? "" : String(v)))
     .join("|");
 }
 

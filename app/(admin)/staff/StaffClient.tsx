@@ -701,9 +701,18 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
         </div>
       </Modal>
 
-      {/* Delete — destructive, guarded with a typed confirmation; not yet
-          wired to a real backend delete (Phase 10 scope: UI/confirmation
-          flow only, see docs/04_PHASE_PLAN.md's Phase 10 section). */}
+      {/* Delete — guarded with a typed confirmation, same severity as a
+          real destructive action. A true hard-delete is unsafe for this
+          table: users.id has no ON DELETE CASCADE/SET NULL from
+          stock_entries.created_by / ingredient_entries.created_by /
+          expenses.created_by / orders.created_by (docs/01_DATA_MODEL.md
+          §"Deliberate omissions" / the users table's own schema comment),
+          so removing the row would either FK-violate or silently orphan
+          every entry that account ever logged. This confirms, then calls
+          the same deactivate path Quick Deactivate uses — the account
+          stops being able to log in and disappears from active-staff
+          pickers, while every past entry keeps its correct attribution.
+          Reactivate (via the same menu, once deactivated) reverses it. */}
       <Modal
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
@@ -715,21 +724,25 @@ export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
             </Button>
             <Button
               variant="destructive"
-              disabled={deleteConfirmText !== deleteTarget?.name}
-              onClick={() => {
-                setToast("Hard-delete isn't wired up yet — use Deactivate for now.");
+              disabled={deleteConfirmText !== deleteTarget?.name || editSubmitting}
+              onClick={async () => {
+                if (!deleteTarget) return;
+                await handleQuickDeactivate(deleteTarget);
                 setDeleteTarget(null);
               }}
             >
-              Delete permanently
+              Delete
             </Button>
           </>
         }
       >
         <div className={catalogStyles.form}>
           <p className={styles.deleteWarning}>
-            This permanently removes the account. This is different from Deactivate, which can be
-            reversed. Type <strong>{deleteTarget?.name}</strong> to confirm.
+            Staff accounts can&rsquo;t be permanently removed — past entries they logged (stock, ingredients,
+            expenses, orders) stay attributed to them forever, even after this. This deactivates the account
+            instead: they can no longer log in, and they drop out of pickers elsewhere in the app. You can
+            reverse this later from the same menu (Reactivate). Type <strong>{deleteTarget?.name}</strong> to
+            confirm.
           </p>
           <Input
             label="Confirm name"

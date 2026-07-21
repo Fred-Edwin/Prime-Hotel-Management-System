@@ -270,8 +270,11 @@ async function main() {
     check("Both purchases persisted as separate rows (2, not 1 clobbered)", purchaseCount === "2", purchaseCount);
   }
 
-  console.log("\n=== TEST 8: Purchase rows are immutable (no update/delete RLS policy) ===");
+  console.log("\n=== TEST 8: Purchase rows can't be directly UPDATEd (no update RLS policy) ===");
   {
+    // Delete is now possible, but only through the admin-only DELETE
+    // policy + delete_canteen_stock_purchase() added post-launch — see
+    // post-launch-purchase-delete.mjs, not re-tested here.
     const anyPurchase = psqlRow(
       `select id from canteen_stock_purchases where item_id = '${itemId}' limit 1;`,
     );

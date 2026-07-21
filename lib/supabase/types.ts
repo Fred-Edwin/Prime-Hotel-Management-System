@@ -155,38 +155,69 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_categories: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount: number
-          category: Database["public"]["Enums"]["expense_category"]
+          category_id: string
           created_at: string
           created_by: string
           expense_date: string
           id: string
-          location: Database["public"]["Enums"]["location_type"]
+          location: Database["public"]["Enums"]["location_type"] | null
           note: string | null
         }
         Insert: {
           amount: number
-          category: Database["public"]["Enums"]["expense_category"]
+          category_id: string
           created_at?: string
           created_by: string
           expense_date: string
           id?: string
-          location: Database["public"]["Enums"]["location_type"]
+          location?: Database["public"]["Enums"]["location_type"] | null
           note?: string | null
         }
         Update: {
           amount?: number
-          category?: Database["public"]["Enums"]["expense_category"]
+          category_id?: string
           created_at?: string
           created_by?: string
           expense_date?: string
           id?: string
-          location?: Database["public"]["Enums"]["location_type"]
+          location?: Database["public"]["Enums"]["location_type"] | null
           note?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expenses_created_by_fkey"
             columns: ["created_by"]
@@ -909,7 +940,28 @@ export type Database = {
           wastage_value: number
         }[]
       }
+      delete_canteen_stock_purchase: {
+        Args: { p_purchase_id: string }
+        Returns: undefined
+      }
+      delete_ingredient_purchase: {
+        Args: { p_purchase_id: string }
+        Returns: undefined
+      }
+      delete_item: { Args: { p_item_id: string }; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
+      item_delete_impact: {
+        Args: { p_item_id: string }
+        Returns: {
+          canteen_purchases_count: number
+          canteen_purchases_value: number
+          orders_affected_count: number
+          orders_to_delete_count: number
+          staff_meal_entries_count: number
+          stock_entries_count: number
+          stock_entries_sales_value: number
+        }[]
+      }
       lock_ingredient_entry_row: {
         Args: { p_entry_date: string; p_ingredient_id: string }
         Returns: undefined
@@ -931,6 +983,14 @@ export type Database = {
       my_location: {
         Args: never
         Returns: Database["public"]["Enums"]["location_type"]
+      }
+      rebuild_canteen_item_buying_price: {
+        Args: { p_item_id: string }
+        Returns: undefined
+      }
+      rebuild_ingredient_buying_price: {
+        Args: { p_ingredient_id: string }
+        Returns: undefined
       }
       recompute_ingredient_entry_chain: {
         Args: { p_from_date: string; p_ingredient_id: string }

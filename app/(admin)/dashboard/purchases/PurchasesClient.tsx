@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/Card";
 import { PeriodToggle } from "@/components/PeriodToggle";
+import { SearchBar } from "@/components/SearchBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { PurchaseModal, type PurchaseModalIngredient } from "@/components/PurchaseModal";
 import { CanteenPurchaseModal, type CanteenPurchaseModalItem } from "@/components/CanteenPurchaseModal";
 import { Toast } from "@/components/Toast";
+import { ActionMenu } from "@/components/ActionMenu";
+import { Modal } from "@/components/Modal";
+import { Button } from "@/components/Button";
 import catalogStyles from "../../catalog.module.css";
 import styles from "./purchases.module.css";
 
@@ -118,6 +122,7 @@ function qty(value: number): string {
 export function PurchasesClient() {
   const [source, setSource] = useState<Source>("ingredients");
   const [period, setPeriod] = useState<Period>("today");
+  const [search, setSearch] = useState("");
 
   const [ingredientData, setIngredientData] = useState<IngredientPurchasesResponse | null>(null);
   const [canteenData, setCanteenData] = useState<CanteenPurchasesResponse | null>(null);
@@ -129,6 +134,36 @@ export function PurchasesClient() {
   );
   const [canteenPurchaseTarget, setCanteenPurchaseTarget] = useState<CanteenPurchaseModalItem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { source: "ingredients"; purchase: IngredientPurchaseRow }
+    | { source: "canteen"; purchase: CanteenPurchaseRow }
+    | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const url =
+        deleteTarget.source === "ingredients"
+          ? `/api/ingredient-purchases/${deleteTarget.purchase.id}`
+          : `/api/canteen-purchases/${deleteTarget.purchase.id}`;
+      const res = await fetch(url, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete purchase");
+      setDeleteTarget(null);
+      setToast("Purchase deleted");
+      await load();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete purchase");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const loadIngredients = useCallback(async () => {
     const res = await fetch(`/api/ingredient-purchases?period=${period}`);
@@ -185,9 +220,19 @@ export function PurchasesClient() {
   }
 
   const isIngredients = source === "ingredients";
+  const searchTerm = search.trim().toLowerCase();
+  const filteredIngredientStock = (ingredientData?.stockOnHand ?? []).filter((row) =>
+    row.name.toLowerCase().includes(searchTerm),
+  );
+  const filteredCanteenStock = (canteenData?.stockOnHand ?? []).filter((row) =>
+    row.name.toLowerCase().includes(searchTerm),
+  );
   const stockOnHandEmpty = isIngredients
     ? !loading && ingredientData && ingredientData.stockOnHand.length === 0
     : !loading && canteenData && canteenData.stockOnHand.length === 0;
+  const stockOnHandNoMatches = isIngredients
+    ? !stockOnHandEmpty && searchTerm !== "" && filteredIngredientStock.length === 0
+    : !stockOnHandEmpty && searchTerm !== "" && filteredCanteenStock.length === 0;
   const purchasesEmpty = isIngredients
     ? ingredientData && ingredientData.purchases.length === 0
     : canteenData && canteenData.purchases.length === 0;
@@ -208,6 +253,12 @@ export function PurchasesClient() {
       </div>
 
       {error && <p className={catalogStyles.formError}>{error}</p>}
+
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        placeholder={isIngredients ? "Search ingredients…" : "Search items…"}
+      />
 
       {/* Stock on hand — current quantity + running weighted-average cost,
           independent of the period toggle above (it's a point-in-time
@@ -236,6 +287,8 @@ export function PurchasesClient() {
                 : "Mark an item as 'Canteen independent' on the Items screen — it'll appear here to log a purchase against."
             }
           />
+        ) : stockOnHandNoMatches ? (
+          <p className={styles.noResults}>No {isIngredients ? "ingredients" : "items"} match &ldquo;{search}&rdquo;.</p>
         ) : isIngredients ? (
           <>
             <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
@@ -250,7 +303,7 @@ export function PurchasesClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(ingredientData?.stockOnHand ?? []).map((row) => (
+                  {filteredIngredientStock.map((row) => (
                     <tr key={row.ingredient_id} className={styles.purchaseRow} onClick={() => openIngredientPurchase(row)}>
                       <td>{row.name}</td>
                       <td className={catalogStyles.numeric}>
@@ -278,7 +331,7 @@ export function PurchasesClient() {
             </Card>
 
             <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-              {(ingredientData?.stockOnHand ?? []).map((row) => (
+              {filteredIngredientStock.map((row) => (
                 <li
                   key={row.ingredient_id}
                   className={`${catalogStyles.itemCard} ${styles.purchaseCard}`}
@@ -314,7 +367,7 @@ export function PurchasesClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(canteenData?.stockOnHand ?? []).map((row) => (
+                  {filteredCanteenStock.map((row) => (
                     <tr key={row.item_id} className={styles.purchaseRow} onClick={() => openCanteenPurchase(row)}>
                       <td>{row.name}</td>
                       <td className={catalogStyles.numeric}>{qty(row.quantity)}</td>
@@ -340,7 +393,7 @@ export function PurchasesClient() {
             </Card>
 
             <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-              {(canteenData?.stockOnHand ?? []).map((row) => (
+              {filteredCanteenStock.map((row) => (
                 <li
                   key={row.item_id}
                   className={`${catalogStyles.itemCard} ${styles.purchaseCard}`}
@@ -393,6 +446,7 @@ export function PurchasesClient() {
                     <th className={catalogStyles.numeric}>Total</th>
                     <th>Logged by</th>
                     <th>Note</th>
+                    <th aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody>
@@ -407,6 +461,18 @@ export function PurchasesClient() {
                       <td className={catalogStyles.numeric}>{money(purchase.total_cost)}</td>
                       <td>{purchase.users?.name ?? "Unknown"}</td>
                       <td>{purchase.supplier_note ?? "—"}</td>
+                      <td>
+                        <ActionMenu
+                          aria-label={`Actions for purchase — ${purchase.ingredients?.name ?? "Unknown ingredient"}`}
+                          items={[
+                            {
+                              label: "Delete",
+                              destructive: true,
+                              onClick: () => setDeleteTarget({ source: "ingredients", purchase }),
+                            },
+                          ]}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -432,6 +498,15 @@ export function PurchasesClient() {
                       </span>
                     </span>
                   </div>
+                  <div className={styles.itemCardActionRow}>
+                    <button
+                      type="button"
+                      className={`${catalogStyles.itemCardEditBtn} ${styles.itemCardDeleteBtn}`}
+                      onClick={() => setDeleteTarget({ source: "ingredients", purchase })}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -449,6 +524,7 @@ export function PurchasesClient() {
                     <th className={catalogStyles.numeric}>Total</th>
                     <th>Logged by</th>
                     <th>Note</th>
+                    <th aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody>
@@ -461,6 +537,18 @@ export function PurchasesClient() {
                       <td className={catalogStyles.numeric}>{money(purchase.total_cost)}</td>
                       <td>{purchase.users?.name ?? "Unknown"}</td>
                       <td>{purchase.supplier_note ?? "—"}</td>
+                      <td>
+                        <ActionMenu
+                          aria-label={`Actions for purchase — ${purchase.items?.name ?? "Unknown item"}`}
+                          items={[
+                            {
+                              label: "Delete",
+                              destructive: true,
+                              onClick: () => setDeleteTarget({ source: "canteen", purchase }),
+                            },
+                          ]}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -481,6 +569,15 @@ export function PurchasesClient() {
                       <span className={catalogStyles.itemCardPrice}>{money(purchase.total_cost)}</span>
                       <span className={styles.stockBadge}>{qty(purchase.quantity)}</span>
                     </span>
+                  </div>
+                  <div className={styles.itemCardActionRow}>
+                    <button
+                      type="button"
+                      className={`${catalogStyles.itemCardEditBtn} ${styles.itemCardDeleteBtn}`}
+                      onClick={() => setDeleteTarget({ source: "canteen", purchase })}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </li>
               ))}
@@ -508,6 +605,56 @@ export function PurchasesClient() {
           load();
         }}
       />
+
+      {/* Delete — reverses both side effects a purchase caused at insert
+          time (weighted-average buying_price, that period's added_stock/
+          received) server-side via delete_ingredient_purchase()/
+          delete_canteen_stock_purchase(); see
+          supabase/migrations/20260721060000_purchase_delete.sql. Purchases
+          are otherwise an append-only log by design — this is a narrow,
+          purpose-built correction path, not a general edit. */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+        title="Delete this purchase?"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete purchase"}
+            </Button>
+          </>
+        }
+      >
+        <div className={catalogStyles.form}>
+          <p className={styles.deleteWarning}>
+            This removes{" "}
+            <strong>
+              {deleteTarget?.source === "ingredients"
+                ? deleteTarget.purchase.ingredients?.name ?? "this purchase"
+                : deleteTarget?.source === "canteen"
+                  ? deleteTarget.purchase.items?.name ?? "this purchase"
+                  : ""}
+            </strong>
+            {deleteTarget ? ` — ${qty(deleteTarget.purchase.quantity)} on ${deleteTarget.purchase.purchase_date}` : ""}
+            , recalculates the average cost from the remaining purchases, and removes this quantity from that
+            period&rsquo;s stock. This can&rsquo;t be undone.
+          </p>
+          {deleteError && <p className={catalogStyles.formError}>{deleteError}</p>}
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>
