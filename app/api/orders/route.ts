@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { orderSchema } from "@/lib/validation";
-import { nairobiToday, orderTotal, weekStartMonday } from "@/lib/calculations";
+import { nairobiToday, orderTotal } from "@/lib/calculations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   const { data: orders, error: ordersError }: Awaited<typeof ordersQuery> = await ordersQuery;
   if (ordersError) return serverErrorResponse(ordersError, "orders");
 
-  // Today's (or, for canteen, this week's) stock_entries rows -- lets the
+  // Today's stock_entries row (both locations, daily cadence) -- lets the
   // screen show remaining stock per item and cap the quantity stepper at
   // the real limit, same "prevent oversell before it's attempted" rule
   // Entry's screen already follows (docs/design/02_PATTERNS_AND_CHECKLIST.md
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
   // oversell re-check in apply_order_to_stock_entry() is still the real
   // enforcement (§3.4) — a stale client-side cap can never let an
   // oversell actually persist.
-  const entryDate = user.location === "canteen" ? weekStartMonday(new Date(date)) : date;
+  const entryDate = date;
   const stockEntriesQuery = supabase
     .from("stock_entries")
     .select("*")

@@ -42,7 +42,7 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
   // 20260717140000_stock_entry_canteen_autosave.sql (errcode P0003).
   if (error.code === "P0003" || error.message.includes("not_yet_supplied")) {
     return {
-      message: "The restaurant hasn't sent this week's supply yet for this item.",
+      message: "The restaurant hasn't sent today's supply yet for this item.",
       status: 409,
     };
   }

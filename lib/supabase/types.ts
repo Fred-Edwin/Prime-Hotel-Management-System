@@ -716,6 +716,13 @@ export type Database = {
         Args: { p_item_id: string; p_week_end: string; p_week_start: string }
         Returns: number
       }
+      canteen_supplied_totals_batch: {
+        Args: { p_date: string; p_item_ids: string[] }
+        Returns: {
+          item_id: string
+          total: number
+        }[]
+      }
       create_order: {
         Args: {
           p_buying_prices: Json

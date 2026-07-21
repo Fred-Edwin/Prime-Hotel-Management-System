@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { nairobiToday, weekStartMonday } from "@/lib/calculations";
+import { nairobiToday } from "@/lib/calculations";
 import { staffMealSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";

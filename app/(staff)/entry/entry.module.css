@@ -27,47 +27,6 @@
   overflow-x: auto;
 }
 
-/*
- * Weekly reconciliation header (canteen only) — per
- * docs/design/02_PATTERNS_AND_CHECKLIST.md §5: a sunken surface band with
- * an overline + date-range label, a deliberate small cue that this is a
- * periodic action, not the daily till screen's plain header.
- *
- * StaffShell's own page background is already color-surface-sunken (see
- * StaffShell.module.css), so this band uses color-surface-raised (white)
- * with a visible border instead — using the same sunken token here would
- * make the header invisible against its own page, defeating the pattern's
- * purpose. Confirmed via a real rendered screenshot during Phase 5 testing
- * (see docs/phases/phase5_context.md) — the sunken-on-sunken version was
- * indistinguishable at a glance, exactly the kind of layout issue
- * CLAUDE.md's "verify, don't guess" rule exists to catch.
- */
-.weeklyHeader {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-}
-
-.weeklyOverline {
-  font-family: var(--font-family-structural);
-  font-size: var(--font-size-overline);
-  line-height: var(--line-height-overline);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-}
-
-.weekRangeLabel {
-  font-family: var(--font-family-data);
-  font-size: var(--font-size-body-sm);
-  color: var(--color-text-secondary);
-}
-
 .noResults {
   padding: var(--space-6) 0;
   text-align: center;

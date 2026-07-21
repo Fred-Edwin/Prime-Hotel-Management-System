@@ -12,12 +12,18 @@
  * - RBAC: admin-only — unlike ingredient purchases, canteen has no
  *   store-manager-equivalent role, so even Anne (canteen staff) herself
  *   must be forbidden, not just restaurant cashiers
- * - concurrent purchases for the same item/week don't race the
+ * - concurrent purchases for the same item/day don't race the
  *   weighted-average recalculation (shares lock_stock_entry_row() with
  *   Anne's own /entry autosave)
  * - the oversell check still holds after a purchase increases added_stock
- * - week-Monday normalization, same convention as every other canteen
- *   write path
+ * - purchase_date is stored as-is (the real submitted date), NOT
+ *   normalized to a week's Monday — updated 2026-07-20 for the canteen
+ *   daily-cadence conversion (docs/01_DATA_MODEL.md §3.1); before that
+ *   conversion this script asserted the opposite (normalization to
+ *   WEEK_START), which was the correct behavior at the time but is now
+ *   stale. See docs/phases/postlaunch_canteen_daily_context.md and the
+ *   dedicated scripts/acceptance/post-launch-canteen-daily-cadence.mjs
+ *   for the conversion's own full acceptance coverage.
  *
  * Uses dedicated fixture items (created and torn down by this script) so
  * it never touches real seed items' purchase history.
@@ -33,16 +39,6 @@ const SUPPLIED_FIXTURE_NAME = "[acceptance-test] Canteen Purchases Item (supplie
 const itemId = randomUUID();
 const raceItemId = randomUUID();
 const suppliedItemId = randomUUID();
-
-function weekStartMonday(dateStr) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const day = d.getUTCDay(); // 0 = Sunday
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
-
-const WEEK_START = weekStartMonday(TODAY);
 
 function cleanup() {
   psql(
@@ -79,8 +75,8 @@ async function main() {
     check("Purchase unit_cost = 100", body?.purchase?.unit_cost === 100, body?.purchase);
     check("Purchase total_cost = 2000", body?.purchase?.total_cost === 2000, body?.purchase);
     check(
-      "Purchase purchase_date normalized to this week's Monday",
-      body?.purchase?.purchase_date === WEEK_START,
+      "Purchase purchase_date stored as-is (the real submitted date, not normalized to a Monday)",
+      body?.purchase?.purchase_date === TODAY,
       body?.purchase,
     );
 
@@ -90,7 +86,7 @@ async function main() {
     check("items.buying_price becomes 100.00 (first purchase, no prior stock)", avgCost === "100.00", avgCost);
 
     const entry = psqlRow(
-      `select added_stock, closing_stock from stock_entries where item_id = '${itemId}' and location = 'canteen' and entry_date = '${WEEK_START}';`,
+      `select added_stock, closing_stock from stock_entries where item_id = '${itemId}' and location = 'canteen' and entry_date = '${TODAY}';`,
     );
     check("stock_entries.added_stock = 20.00 (folded from the purchase)", entry === "20.00|20.00", entry);
   }
@@ -116,7 +112,7 @@ async function main() {
     );
 
     const entry = psqlRow(
-      `select added_stock, closing_stock, buying_price_snapshot from stock_entries where item_id = '${itemId}' and location = 'canteen' and entry_date = '${WEEK_START}';`,
+      `select added_stock, closing_stock, buying_price_snapshot from stock_entries where item_id = '${itemId}' and location = 'canteen' and entry_date = '${TODAY}';`,
     );
     check(
       "added_stock folds additively to 30.00 (20 + 10, not overwritten to 10)",
@@ -225,7 +221,7 @@ async function main() {
     check("Oversell still rejected with 409 after a purchase", status === 409, { status, body });
   }
 
-  console.log("\n=== TEST 7 (MANDATORY): Concurrent same-week purchases don't race the weighted average ===");
+  console.log("\n=== TEST 7 (MANDATORY): Concurrent same-day purchases don't race the weighted average ===");
   {
     psql(
       `insert into items (id, name, category, supply_type, buying_price, selling_price, low_stock_threshold) values ('${raceItemId}', '${RACE_FIXTURE_NAME}', 'retail', 'canteen_independent', 50.00, 80.00, 5);`,
@@ -257,7 +253,7 @@ async function main() {
     );
 
     const entry = psqlRow(
-      `select added_stock, closing_stock from stock_entries where item_id = '${raceItemId}' and location = 'canteen' and entry_date = '${WEEK_START}';`,
+      `select added_stock, closing_stock from stock_entries where item_id = '${raceItemId}' and location = 'canteen' and entry_date = '${TODAY}';`,
     );
     check("Both quantities landed: added_stock = 20.00 (10 + 10, neither dropped)", entry === "20.00|20.00", entry);
 

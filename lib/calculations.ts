@@ -129,10 +129,11 @@ export function isIngredientEntryOversold(params: {
 }
 
 /**
- * Canteen's weekly entry_date convention (docs/01_DATA_MODEL.md §3.1,
- * 04_PHASE_PLAN.md Phase 5): entry_date is always the Monday of the
- * current ISO week, computed from the given date — never client-typed.
- * Sunday counts as the end of the same week, not the start of a new one.
+ * Monday-start-of-week helper, used by dashboardPeriodRange()'s "week"
+ * period toggle. No longer used for canteen's stock_entries cadence
+ * (canteen converted to daily — see docs/01_DATA_MODEL.md §3.1) — kept
+ * here purely for the dashboard's Week view. Sunday counts as the end
+ * of the same week, not the start of a new one.
  */
 export function weekStartMonday(date: Date): string {
   const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -156,10 +157,11 @@ export type DashboardPeriod = "today" | "week" | "month";
  * 04_PHASE_PLAN.md Phase 7). Shared by both dashboard API routes
  * (summary + ledger) so "today/week/month" means exactly the same date
  * range everywhere — never reimplemented per route. Week reuses
- * weekStartMonday/weekEndSunday above (same convention canteen's cadence
- * already uses). Month is calendar-month-to-date-bounded (1st through the
- * month's last day), matching the Period Toggle's plain "this month"
- * framing in the PRD.
+ * weekStartMonday/weekEndSunday above (Monday–Sunday, for the dashboard's
+ * Week toggle only — orthogonal to either location's storage cadence).
+ * Month is calendar-month-to-date-bounded (1st through the month's last
+ * day), matching the Period Toggle's plain "this month" framing in the
+ * PRD.
  */
 export function dashboardPeriodRange(period: DashboardPeriod): { from: string; to: string } {
   const now = nairobiNow();

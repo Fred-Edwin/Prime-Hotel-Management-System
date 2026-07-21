@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { ItemEntryCard, type ItemEntryField, type ItemEntryFieldSaveState } from "@/components/ItemEntryCard";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
-import { nairobiNow, nairobiToday, weekStartMonday } from "@/lib/calculations";
+import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "./entry.module.css";
 
@@ -33,23 +33,15 @@ function todayISO(): string {
   return nairobiToday();
 }
 
-function formatWeekLabel(weekStart: string, weekEnd: string): string {
-  const start = new Date(`${weekStart}T00:00:00Z`);
-  const end = new Date(`${weekEnd}T00:00:00Z`);
-  const startLabel = start.toLocaleDateString("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
-  const endLabel = end.toLocaleDateString("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
-  return `Week of ${startLabel}–${endLabel}`;
-}
-
 /**
- * Canteen's weekly reconciliation screen — a genuinely different shape
- * from EntryClient (restaurant, daily), not a cadence variant of it: no
- * sent_out field, added_stock is read-only (pulled from
- * canteen_supplied_total()) for canteen_supplied items and a typed
- * numeric input for canteen_independent items, and the header uses
- * the "Weekly reconciliation" pattern (docs/design/02_PATTERNS_AND_CHECKLIST.md
- * §5: sunken band, date-range label) instead of the daily screen's plain
- * header.
+ * Canteen's daily entry screen — still structurally distinct from
+ * EntryClient (restaurant), but only in one respect now: no sent_out
+ * field, and added_stock is read-only (pulled from
+ * canteen_supplied_total(), a same-day figure) for canteen_supplied
+ * items and a typed numeric input for canteen_independent items. As of
+ * the daily-cadence conversion (docs/01_DATA_MODEL.md §3.1), the header
+ * is the same plain pattern EntryClient uses — no more sunken-band
+ * "Weekly reconciliation" treatment.
  *
  * Post-launch redesign (same session as the restaurant store-manager/
  * cashier autosave rework): one person (Anne) owns both quantity_sold
@@ -65,8 +57,7 @@ export function CanteenEntryClient() {
   const [savedEntries, setSavedEntries] = useState<Record<string, StockEntryRow>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [suppliedTotals, setSuppliedTotals] = useState<Record<string, number>>({});
-  const [weekStart, setWeekStart] = useState<string>(() => weekStartMonday(nairobiNow()));
-  const [weekEnd, setWeekEnd] = useState<string>(weekStart);
+  const [entryDate, setEntryDate] = useState<string>(() => todayISO());
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "canteen_supplied" | "canteen_independent">("all");
   const [loading, setLoading] = useState(true);
@@ -93,7 +84,7 @@ export function CanteenEntryClient() {
       if (cancelled) return;
 
       if (!res.ok) {
-        setToast({ message: body.error ?? "Couldn't load this week's items", status: "error" });
+        setToast({ message: body.error ?? "Couldn't load today's items", status: "error" });
         setLoading(false);
         return;
       }
@@ -122,8 +113,7 @@ export function CanteenEntryClient() {
       setSavedEntries(entriesByItemId);
       setLines(nextLines);
       setSuppliedTotals(body.supplied_totals ?? {});
-      setWeekStart(body.entry_date ?? requestedDate);
-      setWeekEnd(body.week_end ?? body.entry_date ?? requestedDate);
+      setEntryDate(body.entry_date ?? requestedDate);
       setLoading(false);
     }
 
@@ -171,7 +161,7 @@ export function CanteenEntryClient() {
       setPendingSaves((n) => n + 1);
 
       const payload: Record<string, unknown> = {
-        entry_date: weekStart,
+        entry_date: entryDate,
         item_id: itemId,
       };
       if (field === "quantitySold") {
@@ -204,7 +194,7 @@ export function CanteenEntryClient() {
         setPendingSaves((n) => n - 1);
       }
     },
-    [weekStart],
+    [entryDate],
   );
 
   function updateField(itemId: string, field: CanteenFieldKey, value: number) {
@@ -248,7 +238,7 @@ export function CanteenEntryClient() {
     loading || items.length === 0 ? null : (
       <StatusStrip
         state={autosaveStripState}
-        totalValueLabel={`KES ${totalValue.toFixed(2)} sold this week`}
+        totalValueLabel={`KES ${totalValue.toFixed(2)} sold today`}
         errorMessage={lastAutosaveError ?? undefined}
       />
     ),
@@ -256,7 +246,7 @@ export function CanteenEntryClient() {
   );
 
   if (loading) {
-    return <p className={styles.loading}>Loading this week&apos;s items…</p>;
+    return <p className={styles.loading}>Loading today&apos;s items…</p>;
   }
 
   if (items.length === 0) {
@@ -264,17 +254,16 @@ export function CanteenEntryClient() {
       <EmptyState
         icon={<Icon name="entry" size={48} />}
         heading="No items yet"
-        body="Ask an admin to add sellable items before you can log this week's entry."
+        body="Ask an admin to add sellable items before you can log today's entry."
       />
     );
   }
 
   return (
     <div className={styles.page}>
-      <div className={styles.weeklyHeader}>
-        <p className={styles.weeklyOverline}>Weekly reconciliation</p>
+      <div className={styles.header}>
         <h1 className={styles.title}>Canteen Entry</h1>
-        <p className={styles.weekRangeLabel}>{formatWeekLabel(weekStart, weekEnd)}</p>
+        <p className={styles.dateLabel}>{entryDate}</p>
       </div>
 
       <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search items…" />
@@ -341,7 +330,7 @@ export function CanteenEntryClient() {
               name={item.name}
               priceLabel={`KES ${item.selling_price.toFixed(2)}`}
               openingLabel={`Opening: ${opening}`}
-              openingTooltip="Last week's leftover stock. You don't type this in."
+              openingTooltip="Yesterday's leftover stock. You don't type this in."
               availableLabel={`Available: ${remaining}`}
               fields={fields}
             />

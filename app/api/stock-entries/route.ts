@@ -9,7 +9,6 @@ import {
 } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
-import { weekEndSunday, weekStartMonday } from "@/lib/calculations";
 
 /**
  * GET /api/stock-entries?date=YYYY-MM-DD
@@ -17,12 +16,11 @@ import { weekEndSunday, weekStartMonday } from "@/lib/calculations";
  * stock_entries rows for that date, so the entry screen can render
  * opening stock / saved values without a second round trip.
  *
- * Restaurant: `date` is used as-is (daily cadence).
- * Canteen: `date` is normalized to the Monday of its week server-side
- * (docs/01_DATA_MODEL.md §3.1's weekly convention — never trusted
- * verbatim from the client), and canteen_supplied items also get a
+ * Both restaurant and canteen use `date` as-is (daily cadence for both,
+ * docs/01_DATA_MODEL.md §3.1). Canteen_supplied items also get a
  * `canteen_supplied_total` figure so the screen can show the read-only
- * aggregate before the staff member has saved anything yet.
+ * aggregate before the staff member has saved anything yet — now a
+ * same-day figure, not a weekly sum.
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -56,7 +54,7 @@ export async function GET(request: Request) {
 
   if (itemsError) return serverErrorResponse(itemsError, "stock-entries");
 
-  const entryDate = user.location === "canteen" ? weekStartMonday(new Date(date)) : date;
+  const entryDate = date;
 
   const entriesQuery = supabase
     .from("stock_entries")
@@ -71,25 +69,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ items, entries, entry_date: entryDate });
   }
 
-  const weekEnd = weekEndSunday(entryDate);
   const suppliedItems = (items ?? []).filter((item) => item.supply_type === "canteen_supplied");
 
+  // One round trip for every canteen_supplied item's same-day figure,
+  // not one round trip per item (canteen_supplied_totals_batch(),
+  // 20260720130000_canteen_supplied_totals_batch.sql) — the prior
+  // per-item loop measured ~10s against this project's hosted Supabase
+  // project with the real ~25-item canteen_supplied catalog, since the
+  // daily-cadence conversion made this same-day figure load on every
+  // visit instead of once a week.
   const suppliedTotals: Record<string, number> = {};
-  for (const item of suppliedItems) {
-    const { data: total, error: totalError } = await supabase.rpc("canteen_supplied_total", {
-      p_item_id: item.id,
-      p_week_start: entryDate,
-      p_week_end: weekEnd,
+  if (suppliedItems.length > 0) {
+    const { data: totals, error: totalsError } = await supabase.rpc("canteen_supplied_totals_batch", {
+      p_item_ids: suppliedItems.map((item) => item.id),
+      p_date: entryDate,
     });
-    if (totalError) return serverErrorResponse(totalError, "stock-entries");
-    suppliedTotals[item.id] = total ?? 0;
+    if (totalsError) return serverErrorResponse(totalsError, "stock-entries");
+    for (const row of totals ?? []) {
+      suppliedTotals[row.item_id] = row.total ?? 0;
+    }
   }
 
   return NextResponse.json({
     items,
     entries,
     entry_date: entryDate,
-    week_end: weekEnd,
     supplied_totals: suppliedTotals,
   });
 }
@@ -254,9 +258,10 @@ async function saveCanteenEntries(
     );
   }
 
-  // entry_date is normalized to the Monday of its week server-side —
-  // never trusted verbatim from the client (§3.1).
-  const entry_date = weekStartMonday(new Date(parsed.data.entry_date));
+  // entry_date is used as-is, daily like restaurant's (§3.1) — still
+  // validated as a well-formed date by canteenStockEntriesSaveSchema,
+  // just not week-normalized.
+  const entry_date = parsed.data.entry_date;
   const { lines } = parsed.data;
 
   const itemIds = lines.map((line) => line.item_id);
@@ -481,9 +486,8 @@ async function putCashierField(
  * per call (canteenStockEntryFieldSaveSchema enforces this); the other
  * is passed as null so the RPC preserves whatever the row already has.
  *
- * entry_date is re-normalized to that week's Monday server-side (§3.1),
- * never trusted verbatim from the client — same as GET/POST's canteen
- * paths.
+ * entry_date is used as-is, daily like restaurant's (§3.1) — same as
+ * GET/POST's canteen paths.
  */
 async function putCanteenField(
   body: unknown,
@@ -500,7 +504,7 @@ async function putCanteenField(
   }
 
   const { item_id, till_quantity_sold, added_stock } = parsed.data;
-  const entry_date = weekStartMonday(new Date(parsed.data.entry_date));
+  const entry_date = parsed.data.entry_date;
 
   const itemQuery = supabase
     .from("items")

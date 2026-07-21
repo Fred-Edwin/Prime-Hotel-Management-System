@@ -18,7 +18,9 @@
  * 2. A downstream oversell revealed by the recompute rejects the whole
  *    cascade atomically (409) — no row in the chain is left half-updated.
  * 3. A canteen_supplied item's restaurant sent_out edit cascades into the
- *    linked canteen week's added_stock too (§3.1's link).
+ *    linked canteen row's added_stock too (§3.1's link) — a same-day 1:1
+ *    match as of the 2026-07-20 daily-cadence conversion, updated from
+ *    the original week-range cascade (see TEST 9 below).
  * 4. Price snapshots are provably untouched on every row the cascade
  *    touches — captured before, compared byte-for-byte after.
  * 5. created_by stays the row's original author on an edit, and every
@@ -559,30 +561,35 @@ async function main() {
   }
 
   console.log(
-    "\n=== TEST 9: Editing a canteen_supplied item's restaurant sent_out cascades into the linked canteen week's added_stock ===",
+    "\n=== TEST 9 (updated 2026-07-20 for the canteen daily-cadence conversion): Editing a canteen_supplied item's restaurant sent_out cascades into the linked SAME-DAY canteen row's added_stock ===",
   );
   {
     // Chapati is canteen_supplied (supabase/seed.sql) -- its canteen
-    // added_stock is server-derived (canteen_supplied_total()) from the
-    // SUM of the restaurant's sent_out across that ISO week, never a
-    // manual input (docs/01_DATA_MODEL.md §3.1).
+    // added_stock is server-derived (canteen_supplied_total()) as a
+    // same-day 1:1 mirror of the restaurant's sent_out for that exact
+    // calendar day (docs/01_DATA_MODEL.md §3.1) -- NOT a week-range sum,
+    // as of the 2026-07-20 daily-cadence conversion
+    // (docs/phases/postlaunch_canteen_daily_context.md). Before that
+    // conversion, this test built both rows on that week's Monday; now
+    // both rows use today's real date, and recompute_stock_entry_cascade()
+    // only touches a canteen row whose entry_date exactly equals the
+    // edited restaurant row's date (see
+    // scripts/acceptance/post-launch-canteen-daily-cadence.mjs TEST 8 for
+    // the dedicated coverage of this cascade redesign, including the
+    // no-same-day-row case).
     const chapatiId = psql(`select id from items where name = 'Chapati';`);
     const chapatiBuying = psql(`select buying_price from items where name = 'Chapati';`);
     const chapatiSelling = psql(`select selling_price from items where name = 'Chapati';`);
-    // Canteen tracks weekly -- normalize to this week's Monday, same
-    // convention every other canteen write path uses.
     const today = new Date();
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-    const weekStartStr = weekStart.toISOString().slice(0, 10);
-    const restaurantDate = weekStartStr; // Monday of this week, restaurant-side daily row
+    const todayStr = today.toISOString().slice(0, 10);
+    const restaurantDate = todayStr; // today, restaurant-side daily row
 
     psql(
       `delete from stock_entries where item_id = '${chapatiId}' and entry_date = '${restaurantDate}' and location = 'restaurant';`,
     );
-    psql(`delete from stock_entries where item_id = '${chapatiId}' and entry_date = '${weekStartStr}' and location = 'canteen';`);
+    psql(`delete from stock_entries where item_id = '${chapatiId}' and entry_date = '${todayStr}' and location = 'canteen';`);
 
-    // Restaurant sends 30 Chapati on the week's Monday.
+    // Restaurant sends 30 Chapati today.
     psql(`
       insert into stock_entries (
         item_id, location, entry_date, opening_stock, added_stock, sent_out,
@@ -595,9 +602,10 @@ async function main() {
         ${10 * chapatiBuying}, 0, '${sarahId}'
       );
     `);
-    // Canteen's own week row: added_stock should already reflect the
-    // restaurant's 30 sent_out (canteen_supplied_total() sums it) --
-    // simulate that as already-saved with a real canteen sale against it.
+    // Canteen's own today row: added_stock should already reflect the
+    // restaurant's 30 sent_out (canteen_supplied_total() reads it
+    // same-day) -- simulate that as already-saved with a real canteen
+    // sale against it.
     psql(`
       insert into stock_entries (
         item_id, location, entry_date, opening_stock, added_stock, sent_out,
@@ -605,7 +613,7 @@ async function main() {
         buying_price_snapshot, closing_stock, sales_value, cost_value,
         closing_stock_value, wastage_value, created_by
       ) values (
-        '${chapatiId}', 'canteen', '${weekStartStr}', 0, 30, 0,
+        '${chapatiId}', 'canteen', '${todayStr}', 0, 30, 0,
         5, 5, 0, ${chapatiSelling}, ${chapatiBuying}, 25, ${5 * chapatiSelling}, ${5 * chapatiBuying},
         ${25 * chapatiBuying}, 0, (select id from users where name = 'Anne Gitonga')
       );
@@ -624,17 +632,17 @@ async function main() {
     check("Edit to restaurant sent_out succeeds (200)", res.status === 200, res);
 
     const canteenRow = psql(
-      `select added_stock, opening_stock, closing_stock from stock_entries where item_id = '${chapatiId}' and location = 'canteen' and entry_date = '${weekStartStr}';`,
+      `select added_stock, opening_stock, closing_stock from stock_entries where item_id = '${chapatiId}' and location = 'canteen' and entry_date = '${todayStr}';`,
     );
     const [cAdded, cOpening, cClosing] = canteenRow.split("|").map(Number);
     check(
-      "Canteen week's added_stock cascaded to match the new sent_out total (45)",
+      "Canteen's same-day added_stock cascaded to match the new sent_out total (45)",
       cAdded === 45,
       canteenRow,
     );
     // opening(0) + added(45) - sold(5) - wastage(0) = 40 (was 25, +15 matching the +15 sent_out)
-    check("Canteen week's closing_stock recomputed against the new added_stock (0 + 45 - 5 = 40)", cClosing === 40, canteenRow);
-    check("Canteen week's opening_stock unaffected (still 0, no prior canteen week)", cOpening === 0, canteenRow);
+    check("Canteen's closing_stock recomputed against the new added_stock (0 + 45 - 5 = 40)", cClosing === 40, canteenRow);
+    check("Canteen's opening_stock unaffected (still 0, no prior canteen row)", cOpening === 0, canteenRow);
 
     const audit = psql(
       `select changes from audit_log where action = 'stock_entry.admin_edit' and target_id = (select id from stock_entries where item_id = '${chapatiId}' and location = 'restaurant' and entry_date = '${restaurantDate}') order by created_at desc limit 1;`,
@@ -650,7 +658,7 @@ async function main() {
     psql(
       `delete from stock_entries where item_id = '${chapatiId}' and entry_date = '${restaurantDate}' and location = 'restaurant';`,
     );
-    psql(`delete from stock_entries where item_id = '${chapatiId}' and entry_date = '${weekStartStr}' and location = 'canteen';`);
+    psql(`delete from stock_entries where item_id = '${chapatiId}' and entry_date = '${todayStr}' and location = 'canteen';`);
     psql(
       `delete from audit_log where action = 'stock_entry.admin_edit' and target_id in (select id from stock_entries where item_id = '${chapatiId}');`,
     );
