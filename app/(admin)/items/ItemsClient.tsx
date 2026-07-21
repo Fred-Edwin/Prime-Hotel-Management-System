@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Card } from "@/components/Card";
@@ -13,6 +13,7 @@ import { Toast } from "@/components/Toast";
 import { ActionMenu } from "@/components/ActionMenu";
 import { Modal } from "@/components/Modal";
 import { itemSchema, type ItemInput } from "@/lib/validation";
+import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import styles from "../catalog.module.css";
 
@@ -85,6 +86,71 @@ const MARGIN_BAND_CLASS = {
   low: "itemCardMarginLow",
 } as const;
 
+function money(value: number): string {
+  return `KES ${Math.round(value).toLocaleString("en-KE")}`;
+}
+
+/**
+ * Profit-by-range date picker (Items page, client request 2026-07-21) —
+ * mirrors app/(admin)/dashboard/DashboardClient.tsx's RangePicker exactly
+ * (same control, same interaction), reused here rather than extracted into
+ * a shared component since this is the second, not yet third, occurrence.
+ */
+function RangePicker({
+  range,
+  rangeDraft,
+  setRangeDraft,
+  open,
+  setOpen,
+  onApply,
+}: {
+  range: { from: string; to: string };
+  rangeDraft: { from: string; to: string };
+  setRangeDraft: (draft: { from: string; to: string }) => void;
+  open: boolean;
+  setOpen: (updater: (open: boolean) => boolean) => void;
+  onApply: () => void;
+}) {
+  return (
+    <div className={styles.rangePicker}>
+      <button
+        type="button"
+        className={styles.rangeButton}
+        onClick={() => {
+          setRangeDraft(range);
+          setOpen((prev) => !prev);
+        }}
+      >
+        <Icon name="summary" size={16} />
+        {range.from === range.to ? range.from : `${range.from} → ${range.to}`}
+      </button>
+      {open && (
+        <div className={styles.rangePopover}>
+          <label className={styles.rangeField}>
+            <span>From</span>
+            <input
+              type="date"
+              value={rangeDraft.from}
+              onChange={(e) => setRangeDraft({ ...rangeDraft, from: e.target.value })}
+            />
+          </label>
+          <label className={styles.rangeField}>
+            <span>To</span>
+            <input
+              type="date"
+              value={rangeDraft.to}
+              onChange={(e) => setRangeDraft({ ...rangeDraft, to: e.target.value })}
+            />
+          </label>
+          <button type="button" className={styles.rangeApply} onClick={onApply}>
+            Apply
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -98,6 +164,50 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Profit-by-range column (client request, 2026-07-21) — defaults to today,
+  // independent of the Margin column which is always the item's current
+  // static buying/selling price. Keyed by item_id so it can be merged into
+  // whichever items are currently in view.
+  const today = nairobiToday();
+  const [profitRange, setProfitRange] = useState({ from: today, to: today });
+  const [profitRangeDraft, setProfitRangeDraft] = useState(profitRange);
+  const [profitRangeOpen, setProfitRangeOpen] = useState(false);
+  const [profitByItem, setProfitByItem] = useState<Record<string, number>>({});
+  const [profitLoading, setProfitLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function loadProfit() {
+      setProfitLoading(true);
+      const params = new URLSearchParams({ from: profitRange.from, to: profitRange.to });
+      if (locationFilter) params.set("location", locationFilter);
+
+      fetch(`/api/items/profit?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data: { profit?: { item_id: string; profit: number }[] }) => {
+          if (cancelled) return;
+          const next: Record<string, number> = {};
+          for (const row of data.profit ?? []) {
+            next[row.item_id] = row.profit;
+          }
+          setProfitByItem(next);
+        })
+        .catch(() => {
+          if (!cancelled) setProfitByItem({});
+        })
+        .finally(() => {
+          if (!cancelled) setProfitLoading(false);
+        });
+    }
+
+    loadProfit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profitRange, locationFilter]);
 
   const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<DeleteImpact | null>(null);
@@ -271,6 +381,19 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
             },
           ]}
         />
+        <RangePicker
+          range={profitRange}
+          rangeDraft={profitRangeDraft}
+          setRangeDraft={setProfitRangeDraft}
+          open={profitRangeOpen}
+          setOpen={setProfitRangeOpen}
+          onApply={() => {
+            if (!profitRangeDraft.from || !profitRangeDraft.to) return;
+            if (profitRangeDraft.from > profitRangeDraft.to) return;
+            setProfitRange(profitRangeDraft);
+            setProfitRangeOpen(false);
+          }}
+        />
       </div>
 
       {items.length === 0 ? (
@@ -299,6 +422,9 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                   <th className={styles.numeric}>Buying</th>
                   <th className={styles.numeric}>Selling</th>
                   <th className={styles.numeric}>Margin</th>
+                  <th className={styles.numeric}>
+                    Profit ({profitRange.from === profitRange.to ? profitRange.from : `${profitRange.from} → ${profitRange.to}`})
+                  </th>
                   <th className={styles.numeric}>Low stock at</th>
                   <th>Status</th>
                   <th aria-label="Actions" />
@@ -316,6 +442,9 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                       <td className={styles.numeric}>KES {item.selling_price.toFixed(2)}</td>
                       <td className={styles.numeric}>
                         {margin === null ? "—" : `${margin.toFixed(1)}%`}
+                      </td>
+                      <td className={styles.numeric}>
+                        {profitLoading ? "…" : money(profitByItem[item.id] ?? 0)}
                       </td>
                       <td className={styles.numeric}>{item.low_stock_threshold}</td>
                       <td>
@@ -403,6 +532,12 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
                       <div className={styles.itemCardDetailLine}>
                         <span>Buying price</span>
                         <strong>KES {item.buying_price.toFixed(2)}</strong>
+                      </div>
+                      <div className={styles.itemCardDetailLine}>
+                        <span>
+                          Profit ({profitRange.from === profitRange.to ? profitRange.from : `${profitRange.from} → ${profitRange.to}`})
+                        </span>
+                        <strong>{profitLoading ? "…" : money(profitByItem[item.id] ?? 0)}</strong>
                       </div>
                       <div className={styles.itemCardDetailLine}>
                         <span>Supply type</span>

@@ -374,7 +374,16 @@
 }
 
 .toolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
+}
+
+.toolbarRow > :first-child {
+  flex: 1 1 auto;
 }
 
 .deleteLink {
@@ -469,4 +478,73 @@
   font-family: var(--font-family-data);
   font-size: var(--font-size-body-sm);
   color: var(--color-text-primary);
+}
+
+/* --- Profit-by-range date picker (Items page) ---
+   Mirrors app/(admin)/dashboard/dashboard.module.css's .rangePicker family
+   exactly (same control, same interaction) — a button showing the active
+   range that opens a popover with From/To date inputs. */
+.rangePicker {
+  position: relative;
+}
+
+.rangeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  cursor: pointer;
+}
+
+.rangePopover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 220px;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevation-2);
+}
+
+.rangeField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.rangeField input {
+  min-height: var(--space-touch);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-primary);
+}
+
+.rangeApply {
+  min-height: var(--space-touch);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-primary);
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  cursor: pointer;
 }

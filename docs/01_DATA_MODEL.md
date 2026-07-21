@@ -868,6 +868,22 @@ A real bug found live-testing this feature: the staff-facing picker's first vers
 
 ---
 
+## 3.6 Item Master profit-by-date-range column (post-launch addition, 2026-07-21)
+
+The `/items` (Item Master) table has always shown a static per-unit **Margin %** column, computed from an item's *current* `buying_price`/`selling_price` — useful for pricing decisions, but not "how much money has this item actually made." WaPrecious asked for a second, date-range-scoped **Profit** column showing real KES profit earned by each item.
+
+`public.items_profit_by_range(p_from, p_to, p_location)` (`20260721100000_items_profit_by_range.sql`) computes, per item:
+
+```
+profit = sum(sales_value) - sum(cost_value) - sum(wastage_value)
+```
+
+summed over each `stock_entries` row's already-snapshotted `sales_value`/`cost_value`/`wastage_value` for that date range (and location, if filtered) — **never** the item's current `buying_price`/`selling_price`, so a past price change doesn't silently distort a range that spans it. Matches the existing `dashboard_stock_summary`/`dashboard_item_ledger` functions' `security invoker` + set-based-aggregation-in-SQL convention (`20260712121500_dashboard_aggregation_functions.sql`) rather than introducing a new pattern; the only difference from `dashboard_item_ledger` is that this one groups/aggregates per item across the whole range instead of returning one row per item per day, since the Item Master table needs one total per item, not a daily breakdown.
+
+Exposed via `GET /api/items/profit?from=&to=&location=`, admin-only. The `/items` page's date-range picker defaults to today and is independent of the Margin column, which always reflects the item's current price regardless of the picked range.
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.

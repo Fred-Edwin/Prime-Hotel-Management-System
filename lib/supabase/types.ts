@@ -962,6 +962,17 @@ export type Database = {
           stock_entries_sales_value: number
         }[]
       }
+      items_profit_by_range: {
+        Args: {
+          p_from: string
+          p_location?: Database["public"]["Enums"]["location_type"]
+          p_to: string
+        }
+        Returns: {
+          item_id: string
+          profit: number
+        }[]
+      }
       lock_ingredient_entry_row: {
         Args: { p_entry_date: string; p_ingredient_id: string }
         Returns: undefined
