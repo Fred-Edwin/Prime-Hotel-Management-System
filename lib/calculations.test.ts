@@ -10,6 +10,7 @@ import {
   nairobiToday,
   netProfit,
   orderTotal,
+  periodicCogs,
   totalStock,
   weekEndSunday,
   weekStartMonday,
@@ -221,6 +222,28 @@ describe("netProfit", () => {
     expect(
       netProfit({ salesValue: 100, costValue: 200, expenses: 50, wastageValue: 10, staffMealValue: 0 }),
     ).toBe(-160);
+  });
+});
+
+describe("periodicCogs", () => {
+  it("computes COGS as opening + added - closing stock value (client's own Excel-era formula)", () => {
+    // Chapati example from client conversation: items opening+added value
+    // 3,000, closing value 400; flour opening+received value 2,400,
+    // closing value 560 -- combined into one COGS by summing both sides
+    // before calling this function (caller's job, per §3.2 note).
+    expect(
+      periodicCogs({ openingStockValue: 3000 + 2400, addedStockValue: 0, closingStockValue: 400 + 560 }),
+    ).toBe(4440);
+  });
+
+  it("splits opening/added for callers that sum them separately", () => {
+    expect(periodicCogs({ openingStockValue: 3000, addedStockValue: 2400, closingStockValue: 960 })).toBe(
+      4440,
+    );
+  });
+
+  it("can go negative when closing stock value exceeds opening + added", () => {
+    expect(periodicCogs({ openingStockValue: 100, addedStockValue: 50, closingStockValue: 200 })).toBe(-50);
   });
 });
 

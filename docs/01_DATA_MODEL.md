@@ -569,6 +569,8 @@ staff_meal_value     = staff_meals * buying_price_snapshot -- see §3.5; a DISTI
 
 `closing_stock_value` is the cash value of unsold inventory — it mirrors the "Value of Closing Stock" column WaPrecious already tracks by hand, and is a first-class figure on the admin dashboard (capital currently tied up in stock), not just an internal intermediate.
 
+Per-row `cost_value` above (`quantity_sold * buying_price_snapshot`) is still the correct, unchanged figure for **item-level** questions — the Item Master profit-by-date-range column (§3.6) and the admin ledger both still use it, since "how profitable was this specific item" is a genuinely different question from "what did the whole business's stock movement cost this period." The admin **dashboard's** top-line COGS is a separate, period-level calculation layered on top of these same rows — see §3.8.
+
 **Validation rule**: reject a write where `sent_out + quantity_sold + wastage + staff_meals > total_stock` (can't sell/send/waste/eat more than you have). Surface this as a clear inline error, not a silent clamp. Same rule applies to `ingredient_entries`: reject `quantity_used + wastage > opening_stock + received` (staff meals are a `stock_entries`-only concept — ingredients are consumed in cooking, never eaten directly by staff, see §3.2).
 
 Because `quantity_sold` now has two contributors (§3.4), this check must run **after** `public.recalculate_stock_entry()` recomputes the combined total, inside the same transaction — not against just the field the current write-path is touching. A till save that would push the *combined* total over `total_stock` must be rejected even if `till_quantity_sold` alone looks fine, and the same for an order that would push it over given the existing `till_quantity_sold`. Either write-path can be the one that tips it over; the check has to see the whole picture, not just its own contribution.
@@ -923,6 +925,37 @@ Sanity-checking the new Stock Movement table against a real screenshot surfaced 
 
 - **The table omitted `quantity_sold`/`quantity_used`**, the figures that actually explain most of the gap between opening+added and closing stock. Without them, e.g. "opening 19 + added 0 = 19" against "closing 16" looked like 3 units had silently vanished. `dashboard_stock_summary`/`dashboard_ingredient_summary` were extended again (`20260721130000_dashboard_stock_sold_used_columns.sql`) with `quantity_sold` (stock_entries — already includes both till and order-driven sales, §3.4) and `quantity_used` (ingredient_entries), added to the API response as `byLocation.*.quantitySold`/`ingredients.quantityUsed` and shown as a "Sold (units)"/"Used (units)" row in their respective tables — so opening + added − sent − sold(−wastage) now visibly accounts for closing stock instead of leaving an unexplained gap.
 - **Canteen's "Sent to canteen" cell showed a bare "—"**, which reads as missing/broken data rather than "doesn't apply here" (canteen never sends stock anywhere — its `added_stock` for `canteen_supplied` items is a same-day mirror of this same restaurant figure, §3.1, so showing it again under Canteen would double-count rather than inform). Changed to an explicit muted note, "N/A — mirrors restaurant" (`styles.comparisonNote` in `dashboard.module.css`), so the reason is stated rather than implied.
+
+---
+
+## 3.8 Dashboard COGS switched to the client's periodic-inventory formula (post-launch change, 2026-07-21)
+
+**Client-directed change, not an engineering judgment call.** WaPrecious has always calculated COGS on her Excel sheet as:
+
+```
+COGS = Opening Stock Value + Added Stock Value − Closing Stock Value
+```
+
+This is the standard periodic-inventory shortcut — it infers cost of goods sold from the change in inventory value over a period, rather than costing each sale directly. The app's dashboard previously computed COGS differently (`sum(quantity_sold * buying_price_snapshot)` — see §3's per-row `cost_value`), which only agrees with her formula when nothing leaves stock except sales. Since wastage and staff meals also reduce stock (§3.3, §3.5), the two methods can diverge. Raised to the client directly; she confirmed she wants her own formula used on the dashboard, not the sold-based one.
+
+**She also confirmed a second, non-obvious instruction**: her "closing stock" should be items' closing stock **plus** ingredients' closing stock, added together into one combined figure — not scoped to menu items alone. Concretely, for the *whole* COGS calculation (not just the closing-stock term), items' and ingredients' opening/added/closing **values** are summed together before the single subtraction, i.e.:
+
+```
+COGS = (Opening Value_items + Opening Value_ingredients)
+     + (Added Value_items + Added Value_ingredients)
+     − (Closing Value_items + Closing Value_ingredients)
+```
+
+**Known, accepted overlap — not a bug.** Items and ingredients are separate, unlinked stock pools with no recipe/yield formula between them (§3.2 — deliberate V1 scope decision). An in-house-cooked menu item (e.g. Chapati) carries its own `buying_price_snapshot`, entered as a flat catalog estimate, **and** the ingredients that went into cooking it (flour, etc.) are tracked and costed separately. Combining both pools' values into one COGS means that cost is counted twice for such items — once via the item's own price, once via the ingredient it consumed. This mirrors exactly how her one-sheet Excel process worked (everything was "stock" on one list, no separate items/ingredients split), so the overlap isn't a regression relative to what she's used to — it's a structural side effect of this app's schema splitting items and ingredients into two tables that Excel never had. Flagged to the client; she chose to proceed as-is rather than have `buying_price` zeroed out for cooked items.
+
+**Implementation:**
+- `lib/calculations.ts` — new `periodicCogs({ openingStockValue, addedStockValue, closingStockValue })`, a pure combining step (same convention as `netProfit()`). Callers are responsible for summing items+ingredients values before calling it, same division of responsibility as `netProfit()`'s wastage-value parameter.
+- `dashboard_stock_summary(p_from, p_to)` / `dashboard_ingredient_summary(p_from, p_to)` (`20260721140000_dashboard_periodic_cogs_columns.sql`) gained `opening_stock_value` and `added_stock_value`/`received_value` — genuine period-correct **values**, not just the quantities §3.7 already added. `opening_stock_value` follows the same point-in-time rule as `opening_stock` (each item's/ingredient's *earliest* row in the range, priced at that same row's own `buying_price_snapshot` — never today's catalog price). `added_stock_value`/`received_value` are real period sums, each row costed at its own snapshot price, same pattern as the existing `cost_value`/`wastage_value` columns (so a mid-period price change is captured correctly, never "latest price × total quantity").
+- `app/api/dashboard/summary/route.ts` — `combined.costValue` is `periodicCogs()` over items (both locations) + ingredients combined. `byLocation.restaurant.costValue` folds in ingredients (restaurant's own central store, §3.2); `byLocation.canteen.costValue` is items-only (canteen has no ingredients). All three net-profit calls now receive this periodic cost instead of the old sold-based sum.
+- **The dashboard's daily trend chart is deliberately unchanged** — `dashboard_daily_trend()` still returns the old `sum(quantity_sold * buying_price_snapshot)` per day. Periodic COGS only means something over a real range; a single day's opening/added/closing swings don't represent "cost of what moved that day," so applying this formula per-day would produce a spiky, misleading line rather than a meaningful one.
+- Per-row `cost_value` (`stock_entries`/`ingredient_entries` themselves) is untouched — still `quantity_sold * buying_price_snapshot`, still correct and still used by the Item Master profit-by-date-range column (§3.6) and the admin ledger. Only the admin dashboard's top-line COGS/net-profit figures changed.
+
+**Carried forward:** like §3.7, this is a read-side/aggregation change — no write path, no RLS policy, and no `stock_entries`/`ingredient_entries` schema change. If a future phase reintroduces a formal recipe/yield link between ingredients and items (currently out of scope, §3.2), this double-counting would need revisiting at that point — noting it here so it isn't rediscovered as a surprise.
 
 ---
 

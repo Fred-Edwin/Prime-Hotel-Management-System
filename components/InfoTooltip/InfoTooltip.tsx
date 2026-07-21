@@ -7,6 +7,7 @@ import styles from "./InfoTooltip.module.css";
 export interface InfoTooltipProps {
   label: string;
   message: string;
+  onDark?: boolean;
 }
 
 /**
@@ -16,7 +17,7 @@ export interface InfoTooltipProps {
  * Dropdown's popover surface (elevation-2, radius-md) rather than inventing
  * a new visual language.
  */
-export function InfoTooltip({ label, message }: InfoTooltipProps) {
+export function InfoTooltip({ label, message, onDark = false }: InfoTooltipProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -43,7 +44,7 @@ export function InfoTooltip({ label, message }: InfoTooltipProps) {
     <span className={styles.root} ref={rootRef}>
       <button
         type="button"
-        className={styles.trigger}
+        className={[styles.trigger, onDark ? styles.triggerOnDark : ""].filter(Boolean).join(" ")}
         aria-label={`About ${label}`}
         aria-expanded={open}
         aria-controls={panelId}

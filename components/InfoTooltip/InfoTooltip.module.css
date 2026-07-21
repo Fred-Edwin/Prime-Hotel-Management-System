@@ -24,6 +24,14 @@
   box-shadow: 0 0 0 3px rgba(107, 47, 91, 0.15);
 }
 
+/* Dark-surface variant (hero band MetricCards) — .trigger's default
+   --color-text-secondary is a dark grey that fails contrast on
+   --color-surface-dark, same reasoning as MetricCard.module.css's
+   .labelOnDark. */
+.triggerOnDark {
+  color: var(--color-brand-accent);
+}
+
 .panel {
   position: absolute;
   bottom: calc(100% + var(--space-1));

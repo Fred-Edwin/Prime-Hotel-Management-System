@@ -1,4 +1,5 @@
 import { Card } from "../Card";
+import { InfoTooltip } from "../InfoTooltip";
 import styles from "./MetricCard.module.css";
 
 export type MetricTrend = "up" | "down" | "neutral";
@@ -9,6 +10,10 @@ export interface MetricCardProps {
   trend?: MetricTrend;
   trendLabel?: string;
   onDark?: boolean;
+  /** Plain-language explanation of how `value` is calculated, shown via a
+   *  click-to-open InfoTooltip next to the label. Optional — most metrics
+   *  don't need one, only figures whose calculation isn't obvious. */
+  tooltip?: string;
 }
 
 const trendClassName: Record<MetricTrend, string> = {
@@ -26,11 +31,12 @@ const trendClassNameOnDark: Record<MetricTrend, string> = {
   neutral: "trendNeutralOnDark",
 };
 
-export function MetricCard({ label, value, trend, trendLabel, onDark = false }: MetricCardProps) {
+export function MetricCard({ label, value, trend, trendLabel, onDark = false, tooltip }: MetricCardProps) {
   const body = (
     <>
-      <p className={[styles.label, onDark ? styles.labelOnDark : ""].filter(Boolean).join(" ")}>
-        {label}
+      <p className={[styles.labelRow, onDark ? styles.labelOnDark : styles.label].filter(Boolean).join(" ")}>
+        <span>{label}</span>
+        {tooltip && <InfoTooltip label={label} message={tooltip} onDark={onDark} />}
       </p>
       <p className={[styles.value, onDark ? styles.valueOnDark : ""].filter(Boolean).join(" ")}>
         {value}

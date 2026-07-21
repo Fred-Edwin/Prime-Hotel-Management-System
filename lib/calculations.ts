@@ -213,6 +213,9 @@ export function orderTotal(params: {
  * separate parameter, never folded into wastageValue — staff meals are a
  * distinct, third deduction bucket (consumed on purpose, not spoiled), not
  * a wastage sub-type.
+ *
+ * costValue is expected to be periodicCogs()'s output as of the post-launch
+ * COGS methodology change (2026-07-21) — see that function's doc comment.
  */
 export function netProfit(params: {
   salesValue: number;
@@ -224,6 +227,42 @@ export function netProfit(params: {
   return (
     params.salesValue - params.costValue - params.expenses - params.wastageValue - params.staffMealValue
   );
+}
+
+/**
+ * COGS via the client's (WaPrecious) own periodic-inventory method —
+ * replaces the previous quantity_sold * buying_price_snapshot approach on
+ * the admin dashboard (post-launch change, 2026-07-21, client-directed):
+ *
+ *   COGS = Opening Stock Value + Added Stock Value - Closing Stock Value
+ *
+ * This is the same formula she already used on her Excel sheet, applied to
+ * a combined items+ingredients figure — she explicitly confirmed she wants
+ * the two closing-stock VALUES added together into one COGS, accepting
+ * that an in-house-cooked item's own buying_price and the ingredient cost
+ * that produced it both contribute (a genuine overlap vs. a formal
+ * bill-of-materials system, but not something this app models — see
+ * docs/01_DATA_MODEL.md §3.2/§3 note added alongside this change).
+ *
+ * Each of the three inputs must already be a period-correct VALUE (money,
+ * not quantity) from the dashboard_stock_summary()/dashboard_ingredient_
+ * summary() SQL functions — opening/added priced at each row's own
+ * buying_price_snapshot, closing priced the same way, never today's
+ * catalog price. This function is a pure combining step, same convention
+ * as netProfit() above.
+ *
+ * Only meaningful over a genuine date RANGE, not a single day — do not use
+ * this for the dashboard's daily trend chart, which stays on the older
+ * quantity_sold-based cost_value (a single day's opening/added/closing
+ * swings don't represent "cost of what moved that day" the way a
+ * sold-based daily figure does).
+ */
+export function periodicCogs(params: {
+  openingStockValue: number;
+  addedStockValue: number;
+  closingStockValue: number;
+}): number {
+  return params.openingStockValue + params.addedStockValue - params.closingStockValue;
 }
 
 /**

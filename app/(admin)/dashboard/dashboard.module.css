@@ -427,6 +427,15 @@
   border-left: none;
 }
 
+/* Row-label cell with an inline InfoTooltip (post-launch addition,
+   2026-07-21, client request — click-to-see-the-calculation) — flex so
+   the "?" trigger sits right next to the label, not wrapping below it. */
+.comparisonLabelCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .comparisonTable th:last-child,
 .comparisonTable td:last-child {
   border-right: none;

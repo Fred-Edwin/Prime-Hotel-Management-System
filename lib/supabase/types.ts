@@ -857,8 +857,10 @@ export type Database = {
           closing_stock: number
           closing_stock_value: number
           opening_stock: number
+          opening_stock_value: number
           quantity_used: number
           received: number
+          received_value: number
           wastage_value: number
         }[]
       }
@@ -938,11 +940,13 @@ export type Database = {
         Args: { p_from: string; p_to: string }
         Returns: {
           added_stock: number
+          added_stock_value: number
           closing_stock: number
           closing_stock_value: number
           cost_value: number
           location: Database["public"]["Enums"]["location_type"]
           opening_stock: number
+          opening_stock_value: number
           quantity_sold: number
           sales_value: number
           sent_out: number

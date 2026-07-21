@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { dashboardPeriodRange, netProfit, type DashboardPeriod } from "@/lib/calculations";
+import { dashboardPeriodRange, netProfit, periodicCogs, type DashboardPeriod } from "@/lib/calculations";
 import { serverErrorResponse } from "@/lib/errors";
 
 /**
@@ -15,8 +15,26 @@ import { serverErrorResponse } from "@/lib/errors";
  * low-stock "Needs attention" list. All aggregation happens in SQL via
  * the public.dashboard_*() functions (see
  * 20260712121500_dashboard_aggregation_functions.sql,
- * 20260721120000_dashboard_stock_quantity_columns.sql) — this route only
+ * 20260721120000_dashboard_stock_quantity_columns.sql,
+ * 20260721140000_dashboard_periodic_cogs_columns.sql) — this route only
  * combines already-aggregated numbers, never sums raw rows in JS.
+ *
+ * COGS methodology (post-launch change, 2026-07-21, client-directed —
+ * WaPrecious): `combined`/`byLocation.restaurant`'s costValue is now
+ * `periodicCogs()` (lib/calculations.ts) — her own Excel-era formula,
+ * Opening Stock Value + Added Stock Value − Closing Stock Value —
+ * computed over items AND ingredients COMBINED into one figure, per her
+ * explicit confirmation that she wants the two closing-stock values added
+ * together. This deliberately double-counts an in-house-cooked item's own
+ * buying_price against the ingredient cost that produced it (e.g.
+ * Chapati's own price + the flour used to make it) — a known overlap
+ * accepted by the client, not a bug; see docs/01_DATA_MODEL.md §3.2's
+ * note. `byLocation.canteen` has no ingredients (§3.2, restaurant-only),
+ * so canteen's costValue is items-only periodic COGS. The dashboard's
+ * daily TREND chart (`dashboard_daily_trend()`) deliberately still uses
+ * the OLD quantity_sold * buying_price_snapshot cost_value — periodic
+ * COGS only makes sense over a real range, a single day's opening/added/
+ * closing swings don't represent "cost of what moved that day."
  *
  * `byLocation.restaurant`/`byLocation.canteen` are menu-item stock
  * (stock_entries) only. `ingredients` (post-launch addition, 2026-07-21)
@@ -103,7 +121,9 @@ export async function GET(request: Request) {
     wastage_value: 0,
     closing_stock_value: 0,
     opening_stock: 0,
+    opening_stock_value: 0,
     received: 0,
+    received_value: 0,
     quantity_used: 0,
     closing_stock: 0,
   };
@@ -120,9 +140,29 @@ export async function GET(request: Request) {
   const restaurantStaffMeals = staffMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
   const canteenStaffMeals = staffMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
 
+  // Combined periodic COGS (client formula, see route doc comment above):
+  // items' + ingredients' opening/added/closing VALUES all summed
+  // together before the single opening+added-closing subtraction, per
+  // WaPrecious's explicit instruction to add the two closing-stock values
+  // together into one figure.
+  const combinedCostValue = periodicCogs({
+    openingStockValue:
+      (restaurantStock?.opening_stock_value ?? 0) +
+      (canteenStock?.opening_stock_value ?? 0) +
+      ingredientSummary.opening_stock_value,
+    addedStockValue:
+      (restaurantStock?.added_stock_value ?? 0) +
+      (canteenStock?.added_stock_value ?? 0) +
+      ingredientSummary.received_value,
+    closingStockValue:
+      (restaurantStock?.closing_stock_value ?? 0) +
+      (canteenStock?.closing_stock_value ?? 0) +
+      ingredientSummary.closing_stock_value,
+  });
+
   const combined = {
     salesValue: (restaurantStock?.sales_value ?? 0) + (canteenStock?.sales_value ?? 0),
-    costValue: (restaurantStock?.cost_value ?? 0) + (canteenStock?.cost_value ?? 0),
+    costValue: combinedCostValue,
     // Ingredient wastage is restaurant-only (§3.2) — folded into the
     // combined figure, but not attributed to canteen's per-location split.
     wastageValue:
@@ -156,10 +196,25 @@ export async function GET(request: Request) {
   // their cost only ever shows up as part of the restaurant's), but the
   // `ingredients` block further down surfaces ingredient stock as its own
   // row for the comparison table, distinct from menu items.
+  // Restaurant's periodic COGS folds in ingredients (its own central
+  // store, §3.2) — same combined-values approach as `combined` above,
+  // just scoped to restaurant's items instead of items+canteen. Canteen
+  // has no ingredients of its own, so its COGS below stays items-only.
+  const restaurantCostValue = periodicCogs({
+    openingStockValue: (restaurantStock?.opening_stock_value ?? 0) + ingredientSummary.opening_stock_value,
+    addedStockValue: (restaurantStock?.added_stock_value ?? 0) + ingredientSummary.received_value,
+    closingStockValue: (restaurantStock?.closing_stock_value ?? 0) + ingredientSummary.closing_stock_value,
+  });
+  const canteenCostValue = periodicCogs({
+    openingStockValue: canteenStock?.opening_stock_value ?? 0,
+    addedStockValue: canteenStock?.added_stock_value ?? 0,
+    closingStockValue: canteenStock?.closing_stock_value ?? 0,
+  });
+
   const byLocation = {
     restaurant: {
       salesValue: restaurantStock?.sales_value ?? 0,
-      costValue: restaurantStock?.cost_value ?? 0,
+      costValue: restaurantCostValue,
       wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
       staffMealValue: restaurantStaffMeals,
       closingStockValue: restaurantStock?.closing_stock_value ?? 0,
@@ -171,7 +226,7 @@ export async function GET(request: Request) {
       expenses: restaurantExpenses,
       netProfit: netProfit({
         salesValue: restaurantStock?.sales_value ?? 0,
-        costValue: restaurantStock?.cost_value ?? 0,
+        costValue: restaurantCostValue,
         wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
         staffMealValue: restaurantStaffMeals,
         expenses: restaurantExpenses,
@@ -179,7 +234,7 @@ export async function GET(request: Request) {
     },
     canteen: {
       salesValue: canteenStock?.sales_value ?? 0,
-      costValue: canteenStock?.cost_value ?? 0,
+      costValue: canteenCostValue,
       wastageValue: canteenStock?.wastage_value ?? 0,
       staffMealValue: canteenStaffMeals,
       closingStockValue: canteenStock?.closing_stock_value ?? 0,
@@ -191,7 +246,7 @@ export async function GET(request: Request) {
       expenses: canteenExpenses,
       netProfit: netProfit({
         salesValue: canteenStock?.sales_value ?? 0,
-        costValue: canteenStock?.cost_value ?? 0,
+        costValue: canteenCostValue,
         wastageValue: canteenStock?.wastage_value ?? 0,
         staffMealValue: canteenStaffMeals,
         expenses: canteenExpenses,
