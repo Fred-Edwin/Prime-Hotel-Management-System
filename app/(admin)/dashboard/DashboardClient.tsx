@@ -96,6 +96,12 @@ function formatUpdatedAt(date: Date): string {
 
 export function DashboardClient() {
   const [period, setPeriod] = useState<Period>("today");
+  // Custom date range (mirrors the Item Ledger's existing range picker,
+  // app/(admin)/dashboard/ledger/LedgerClient.tsx) — overrides period when
+  // set. Cleared whenever a Today/Week/Month toggle option is chosen.
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
+  const [rangeDraft, setRangeDraft] = useState({ from: "", to: "" });
+  const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -111,7 +117,12 @@ export function DashboardClient() {
     }
     setError(null);
     try {
-      const res = await fetch(`/api/dashboard/summary?period=${period}`);
+      const params = new URLSearchParams({ period });
+      if (customRange) {
+        params.set("from", customRange.from);
+        params.set("to", customRange.to);
+      }
+      const res = await fetch(`/api/dashboard/summary?${params.toString()}`);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "Failed to load dashboard");
       if (!cancelledRef.current) {
@@ -127,7 +138,7 @@ export function DashboardClient() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  }, [period, customRange]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -139,7 +150,18 @@ export function DashboardClient() {
       cancelledRef.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  }, [period, customRange]);
+
+  function selectPeriod(value: Period) {
+    setCustomRange(null);
+    setPeriod(value);
+  }
+
+  function applyCustomRange() {
+    if (!rangeDraft.from || !rangeDraft.to || rangeDraft.from > rangeDraft.to) return;
+    setCustomRange({ from: rangeDraft.from, to: rangeDraft.to });
+    setRangePickerOpen(false);
+  }
 
   const restaurantLowItems = data?.lowStockItems.filter((i) => i.location === "restaurant") ?? [];
   const canteenLowItems = data?.lowStockItems.filter((i) => i.location === "canteen") ?? [];
@@ -174,7 +196,19 @@ export function DashboardClient() {
     <div className={styles.topBarControls}>
       {lastUpdated && <span className={styles.lastUpdated}>Updated {formatUpdatedAt(lastUpdated)}</span>}
       {refreshButton}
-      <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
+      <PeriodToggle
+        options={PERIOD_OPTIONS}
+        value={customRange ? "" : period}
+        onChange={(v) => selectPeriod(v as Period)}
+      />
+      <RangePicker
+        customRange={customRange}
+        rangeDraft={rangeDraft}
+        setRangeDraft={setRangeDraft}
+        open={rangePickerOpen}
+        setOpen={setRangePickerOpen}
+        onApply={applyCustomRange}
+      />
     </div>
   );
 
@@ -186,8 +220,17 @@ export function DashboardClient() {
           <div className={styles.heroPeriodToggleMobileOnly}>
             <PeriodToggle
               options={PERIOD_OPTIONS}
-              value={period}
-              onChange={(v) => setPeriod(v as Period)}
+              value={customRange ? "" : period}
+              onChange={(v) => selectPeriod(v as Period)}
+              onDark
+            />
+            <RangePicker
+              customRange={customRange}
+              rangeDraft={rangeDraft}
+              setRangeDraft={setRangeDraft}
+              open={rangePickerOpen}
+              setOpen={setRangePickerOpen}
+              onApply={applyCustomRange}
               onDark
             />
           </div>
@@ -341,10 +384,74 @@ export function DashboardClient() {
 
           {data.trend.length > 1 && (
             <section className={styles.section}>
-              <SalesTrendChart trend={data.trend} period={period} />
+              <SalesTrendChart trend={data.trend} period={period} isCustomRange={customRange !== null} />
             </section>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Custom date-range picker (mirrors app/(admin)/dashboard/ledger's
+ * identical control) — a button showing the active range that opens a
+ * popover with From/To date inputs. `onDark` renders the mobile-hero
+ * variant of the trigger button; the popover itself is always the
+ * light-surface card regardless, since it sits above both contexts.
+ */
+function RangePicker({
+  customRange,
+  rangeDraft,
+  setRangeDraft,
+  open,
+  setOpen,
+  onApply,
+  onDark,
+}: {
+  customRange: { from: string; to: string } | null;
+  rangeDraft: { from: string; to: string };
+  setRangeDraft: (draft: { from: string; to: string }) => void;
+  open: boolean;
+  setOpen: (updater: (open: boolean) => boolean) => void;
+  onApply: () => void;
+  onDark?: boolean;
+}) {
+  return (
+    <div className={styles.rangePicker}>
+      <button
+        type="button"
+        className={onDark ? styles.rangeButtonOnDark : styles.rangeButton}
+        onClick={() => {
+          setRangeDraft(customRange ?? { from: "", to: "" });
+          setOpen((prev) => !prev);
+        }}
+      >
+        <Icon name="summary" size={16} />
+        {customRange ? `${customRange.from} → ${customRange.to}` : "Custom range"}
+      </button>
+      {open && (
+        <div className={styles.rangePopover}>
+          <label className={styles.rangeField}>
+            <span>From</span>
+            <input
+              type="date"
+              value={rangeDraft.from}
+              onChange={(e) => setRangeDraft({ ...rangeDraft, from: e.target.value })}
+            />
+          </label>
+          <label className={styles.rangeField}>
+            <span>To</span>
+            <input
+              type="date"
+              value={rangeDraft.to}
+              onChange={(e) => setRangeDraft({ ...rangeDraft, to: e.target.value })}
+            />
+          </label>
+          <button type="button" className={styles.rangeApply} onClick={onApply}>
+            Apply
+          </button>
+        </div>
       )}
     </div>
   );
@@ -409,7 +516,15 @@ function RestockCard({
  * baseline, 2px gap between bars, single series so no legend box (the
  * title names it), selective direct label only on the most recent bar.
  */
-function SalesTrendChart({ trend, period }: { trend: TrendPoint[]; period: Period }) {
+function SalesTrendChart({
+  trend,
+  period,
+  isCustomRange,
+}: {
+  trend: TrendPoint[];
+  period: Period;
+  isCustomRange: boolean;
+}) {
   const width = 900;
   const height = 220;
   const paddingLeft = 56;
@@ -427,11 +542,16 @@ function SalesTrendChart({ trend, period }: { trend: TrendPoint[]; period: Perio
   // default, which assumes a denser multi-bar chart than this one.
   const barWidth = Math.max(barSlot - 12, 8);
 
+  // A custom range can span many weeks/months, where "weekday: short"
+  // (Mon/Tue/…) repeats and stops being a unique axis label — use a
+  // "D MMM" date label instead whenever a custom range is active,
+  // regardless of how many points it happens to produce.
   const dateLabel = (iso: string) => {
     const d = new Date(`${iso}T00:00:00`);
-    return period === "today"
-      ? "Today"
-      : d.toLocaleDateString("en-KE", { weekday: "short" });
+    if (isCustomRange) {
+      return d.toLocaleDateString("en-KE", { day: "numeric", month: "short" });
+    }
+    return period === "today" ? "Today" : d.toLocaleDateString("en-KE", { weekday: "short" });
   };
 
   const ticks = [0, niceMax * 0.25, niceMax * 0.5, niceMax * 0.75, niceMax];
@@ -442,7 +562,8 @@ function SalesTrendChart({ trend, period }: { trend: TrendPoint[]; period: Perio
         <div>
           <h2 className={styles.trendTitle}>Sales trend</h2>
           <p className={styles.trendSubtitle}>
-            Daily sales value for the selected period ({PERIOD_OPTIONS.find((p) => p.value === period)?.label.toLowerCase()}).
+            Daily sales value for the selected {isCustomRange ? "date range" : "period"}
+            {isCustomRange ? "" : ` (${PERIOD_OPTIONS.find((p) => p.value === period)?.label.toLowerCase()})`}.
           </p>
         </div>
       </div>

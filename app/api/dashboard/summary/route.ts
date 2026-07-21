@@ -6,6 +6,7 @@ import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/dashboard/summary?period=today|week|month
+ * GET /api/dashboard/summary?from=YYYY-MM-DD&to=YYYY-MM-DD (custom range, overrides period)
  *
  * Profit dashboard's top-line figures (04_PHASE_PLAN.md Phase 7): sales,
  * cost, wastage (stock_entries + ingredient_entries, §3.3), net profit
@@ -31,7 +32,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid period" }, { status: 400 });
   }
 
-  const { from, to } = dashboardPeriodRange(period as DashboardPeriod);
+  // A custom date range (matching the Item Ledger's existing range picker,
+  // app/api/dashboard/ledger/route.ts) overrides the period-derived range —
+  // same underlying dashboard_*() RPCs, which already take explicit
+  // p_from/p_to, so no schema change is needed here.
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  let from: string;
+  let to: string;
+  if (fromParam && toParam) {
+    if (!isoDate.test(fromParam) || !isoDate.test(toParam) || fromParam > toParam) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+    from = fromParam;
+    to = toParam;
+  } else {
+    ({ from, to } = dashboardPeriodRange(period as DashboardPeriod));
+  }
 
   const supabase = await createServerSupabaseClient();
 
