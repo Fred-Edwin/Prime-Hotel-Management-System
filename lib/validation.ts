@@ -406,20 +406,67 @@ export const orderSchema = z
 
 export type OrderInput = z.infer<typeof orderSchema>;
 
-export const expenseCategorySchema = z.enum(["electricity", "gas", "charcoal", "other"]);
-
 /**
  * Expense log entry — see docs/01_DATA_MODEL.md §2 `expenses`. Submitted
  * one at a time (not a batch sheet like stock_entries), scoped server-side
  * to the caller's own location — see app/api/expenses/route.ts.
+ *
+ * `category_id` references the admin-managed public.expense_categories
+ * catalog (post-launch addition, 2026-07-21 — see
+ * 20260721090000_expense_categories_catalog.sql) — no longer a fixed
+ * enum. Same "live FK, not a snapshot" choice as stock_entries.item_id:
+ * renaming a category should relabel past entries consistently.
  */
 export const expenseSchema = z.object({
-  category: expenseCategorySchema,
+  category_id: z.string().uuid("Choose a category"),
   amount: nonNegativeAmount,
   note: z.string().trim().min(1).nullable().optional(),
 });
 
 export type ExpenseInput = z.infer<typeof expenseSchema>;
+
+/**
+ * Admin expense log entry — same shape as expenseSchema, plus an explicit
+ * location choice: 'restaurant' | 'canteen' | null (business-wide, e.g.
+ * rent, salaries — see 20260721070000_admin_business_wide_expenses.sql).
+ * Staff never send `location`; it stays server-derived from their session.
+ */
+export const adminExpenseSchema = z.object({
+  category_id: z.string().uuid("Choose a category"),
+  amount: nonNegativeAmount,
+  note: z.string().trim().min(1).nullable().optional(),
+  location: z.enum(["restaurant", "canteen"]).nullable(),
+});
+
+export type AdminExpenseInput = z.infer<typeof adminExpenseSchema>;
+
+/**
+ * Admin edit of an existing expense — every field optional/independent
+ * (a PATCH, not a full replace), all admin-only per expenses_update_admin_only
+ * RLS. location follows the same 'restaurant' | 'canteen' | null
+ * business-wide convention as adminExpenseSchema.
+ */
+export const expenseUpdateSchema = z.object({
+  category_id: z.string().uuid("Choose a category").optional(),
+  amount: nonNegativeAmount.optional(),
+  note: z.string().trim().min(1).nullable().optional(),
+  location: z.enum(["restaurant", "canteen"]).nullable().optional(),
+  expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date").optional(),
+});
+
+export type ExpenseUpdateInput = z.infer<typeof expenseUpdateSchema>;
+
+/**
+ * Expense category catalog entry — admin-managed (add/rename/retire),
+ * shared by both staff's and admin's /expenses category pickers. See
+ * 20260721090000_expense_categories_catalog.sql.
+ */
+export const expenseCategorySchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(60, "Keep it under 60 characters"),
+  active: z.boolean().optional(),
+});
+
+export type ExpenseCategoryInput = z.infer<typeof expenseCategorySchema>;
 
 /**
  * Staff meal claim — see docs/01_DATA_MODEL.md §3.5,

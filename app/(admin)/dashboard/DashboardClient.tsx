@@ -23,6 +23,13 @@ interface LocationFigures {
   netProfit: number;
 }
 
+interface CombinedFigures extends LocationFigures {
+  // Admin-logged expenses with no location (rent, salaries, etc.) — not
+  // attributable to either location's own P&L, so it only exists on the
+  // combined figures, never in byLocation.
+  businessWideExpenses: number;
+}
+
 interface TrendPoint {
   entry_date: string;
   sales_value: number;
@@ -52,7 +59,7 @@ interface SummaryResponse {
   period: Period;
   from: string;
   to: string;
-  combined: LocationFigures;
+  combined: CombinedFigures;
   byLocation: { restaurant: LocationFigures; canteen: LocationFigures };
   trend: TrendPoint[];
   lowStockItems: LowStockItem[];
@@ -222,6 +229,13 @@ export function DashboardClient() {
               <MetricCard label="Wastage cost" value={money(data.combined.wastageValue)} onDark />
               <MetricCard label="Staff meals" value={money(data.combined.staffMealValue)} onDark />
               <MetricCard label="Closing stock value" value={money(data.combined.closingStockValue)} onDark />
+              {data.combined.businessWideExpenses > 0 && (
+                <MetricCard
+                  label="Business-wide expenses"
+                  value={money(data.combined.businessWideExpenses)}
+                  onDark
+                />
+              )}
             </div>
           </>
         ) : null}

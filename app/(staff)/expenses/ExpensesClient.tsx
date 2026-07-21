@@ -14,15 +14,10 @@ import styles from "./expenses.module.css";
 
 type Tab = "expenses" | "staff_meals";
 
-type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"];
-type ExpenseCategory = Database["public"]["Enums"]["expense_category"];
-
-const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
-  { value: "electricity", label: "Electricity" },
-  { value: "gas", label: "Gas" },
-  { value: "charcoal", label: "Charcoal" },
-  { value: "other", label: "Other" },
-];
+type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"] & {
+  expense_categories: { id: string; name: string } | null;
+};
+type ExpenseCategoryRow = Database["public"]["Tables"]["expense_categories"]["Row"];
 
 function todayISO(): string {
   return nairobiToday();
@@ -39,7 +34,8 @@ function todayISO(): string {
 export function ExpensesClient() {
   const [tab, setTab] = useState<Tab>("expenses");
   const today = todayISO();
-  const [category, setCategory] = useState<ExpenseCategory>("electricity");
+  const [categories, setCategories] = useState<ExpenseCategoryRow[]>([]);
+  const [categoryId, setCategoryId] = useState<string>("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -62,7 +58,10 @@ export function ExpensesClient() {
         return;
       }
 
+      const fetchedCategories = (body.expenseCategories ?? []) as ExpenseCategoryRow[];
       setExpenses(body.expenses ?? []);
+      setCategories(fetchedCategories);
+      setCategoryId((current) => current || fetchedCategories[0]?.id || "");
       setLoading(false);
     }
 
@@ -77,6 +76,10 @@ export function ExpensesClient() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!categoryId) {
+      setToast({ message: "Choose a category", status: "error" });
+      return;
+    }
     if (!amountValid) {
       setToast({ message: "Enter a valid amount", status: "error" });
       return;
@@ -88,7 +91,7 @@ export function ExpensesClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category,
+          category_id: categoryId,
           amount: parsedAmount,
           note: note.trim() ? note.trim() : null,
         }),
@@ -139,9 +142,9 @@ export function ExpensesClient() {
         <div className={styles.field}>
           <span className={styles.fieldLabel}>Category</span>
           <CategoryChips
-            options={CATEGORY_OPTIONS}
-            value={category}
-            onChange={(value) => setCategory(value as ExpenseCategory)}
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            value={categoryId}
+            onChange={setCategoryId}
           />
         </div>
 
@@ -191,7 +194,7 @@ export function ExpensesClient() {
               <li key={expense.id} className={styles.expenseRow}>
                 <div>
                   <p className={styles.expenseCategory}>
-                    {CATEGORY_OPTIONS.find((c) => c.value === expense.category)?.label ?? expense.category}
+                    {expense.expense_categories?.name ?? "Unknown category"}
                   </p>
                   {expense.note && <p className={styles.expenseNote}>{expense.note}</p>}
                 </div>

@@ -1,0 +1,186 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.backLink {
+  display: inline-block;
+  margin-top: var(--space-1);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fieldLabel {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Business-wide is deliberately a separate toggle below the
+   Restaurant/Canteen chips, not a third chip in the same row — rent/
+   salaries are rare, large, whole-business costs, not a location, and
+   stacking it as a visually-identical third pill risked reading as
+   "just another branch" next to Restaurant/Canteen. */
+.businessWideToggle,
+.businessWideToggleActive {
+  align-self: flex-start;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.businessWideToggleActive {
+  border-style: solid;
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+  font-weight: 600;
+}
+
+.categoryFieldHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.manageLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.sectionTotal {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.loading {
+  padding: var(--space-8) 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-structural);
+}
+
+.locationBadge {
+  display: inline-block;
+  align-self: flex-start;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-page);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+
+/* Mobile card footer — plain inline buttons rather than catalog.module.css's
+   ActionMenu popover, same reasoning as Purchases' itemCardActionRow:
+   the popover is position:absolute and can get clipped by an ancestor's
+   overflow. */
+.itemCardActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 0;
+}
+
+.itemCardDeleteBtn {
+  color: var(--color-status-error);
+}
+
+.deleteWarning {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.inlineForm {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.categoryManageList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.categoryManageRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-page);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-primary);
+}
+
+.categoryInactive {
+  color: var(--color-text-secondary);
+  text-decoration: line-through;
+}

@@ -29,6 +29,7 @@ const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   { href: "/items", label: "Items", icon: "items" },
   { href: "/ingredients", label: "Ingredients", icon: "ingredients" },
   { href: "/dashboard/purchases", label: "Purchases", icon: "store" },
+  { href: "/dashboard/expenses", label: "Expenses", icon: "expenses" },
   { href: "/delivery-locations", label: "Delivery", icon: "delivery" },
   { href: "/dashboard/orders", label: "Orders", icon: "orders" },
   { href: "/staff", label: "Staff", icon: "staff" },

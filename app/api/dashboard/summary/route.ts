@@ -77,6 +77,11 @@ export async function GET(request: Request) {
   const canteenStock = stockByLocation.find((r) => r.location === "canteen");
   const restaurantExpenses = expensesByLocation.find((r) => r.location === "restaurant")?.total_amount ?? 0;
   const canteenExpenses = expensesByLocation.find((r) => r.location === "canteen")?.total_amount ?? 0;
+  // Admin-only business-wide expenses (rent, salaries, etc. — location is
+  // null, see 20260721070000_admin_business_wide_expenses.sql). Not
+  // attributable to either location's own P&L split, but still netted out
+  // of the combined figure below.
+  const businessWideExpenses = expensesByLocation.find((r) => r.location === null)?.total_amount ?? 0;
   const restaurantStaffMeals = staffMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
   const canteenStaffMeals = staffMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
 
@@ -100,7 +105,8 @@ export async function GET(request: Request) {
       (restaurantStock?.closing_stock_value ?? 0) +
       (canteenStock?.closing_stock_value ?? 0) +
       ingredientSummary.closing_stock_value,
-    expenses: restaurantExpenses + canteenExpenses,
+    expenses: restaurantExpenses + canteenExpenses + businessWideExpenses,
+    businessWideExpenses,
   };
 
   const netProfitCombined = netProfit(combined);

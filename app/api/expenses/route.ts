@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { nairobiToday } from "@/lib/calculations";
-import { expenseSchema } from "@/lib/validation";
+import { expenseSchema, adminExpenseSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/expenses?date=YYYY-MM-DD
- * Returns the caller's own location's expenses for the given date, most
- * recent first — the running list shown below the log form on /expenses.
- * RLS (expenses_select_scoped) already restricts this to the caller's
- * location, but we also filter explicitly server-side per CLAUDE.md's
- * "check server-side, don't rely on RLS alone" rule.
+ * Staff: returns their own location's expenses for the given date.
+ * Admin: returns every expense for the given date, across both locations
+ * plus business-wide (location = null) rows — RLS (expenses_select_scoped)
+ * already grants admin unrestricted select, so no location filter is
+ * applied for that role. Most recent first — the running list shown below
+ * the log form on /expenses (staff) or /dashboard/expenses (admin).
+ *
+ * Also bundles the active expense_categories catalog in the response —
+ * same pattern GET /api/orders already uses for delivery_locations
+ * (RLS's expense_categories_select_all already permits any authenticated
+ * user to read it; this just saves the client a second request).
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  if (!user || (user.role === "staff" && !user.location)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -26,62 +32,114 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createServerSupabaseClient();
+  const staffLocation = user.role === "staff" ? user.location : null;
 
-  const expensesQuery = supabase
-    .from("expenses")
+  const expensesQuery = staffLocation
+    ? supabase
+        .from("expenses")
+        .select("*, expense_categories(id, name)")
+        .eq("expense_date", date)
+        .eq("location", staffLocation)
+        .order("created_at", { ascending: false })
+    : supabase
+        .from("expenses")
+        .select("*, expense_categories(id, name)")
+        .eq("expense_date", date)
+        .order("created_at", { ascending: false });
+
+  const categoriesQuery = supabase
+    .from("expense_categories")
     .select("*")
-    .eq("location", user.location)
-    .eq("expense_date", date)
-    .order("created_at", { ascending: false });
-  const { data: expenses, error }: Awaited<typeof expensesQuery> = await expensesQuery;
+    .eq("active", true)
+    .order("name");
+
+  const [{ data: expenses, error }, { data: expenseCategories, error: categoriesError }] = await Promise.all([
+    expensesQuery,
+    categoriesQuery,
+  ]);
 
   if (error) return serverErrorResponse(error, "expenses");
+  if (categoriesError) return serverErrorResponse(categoriesError, "expenses/categories");
 
-  return NextResponse.json({ expenses });
+  return NextResponse.json({ expenses, expenseCategories });
 }
 
 /**
  * POST /api/expenses
- * Logs a single expense (category, amount, optional note) for the
- * caller's own location and today's date — submitted one at a time, not
- * as a batch sheet like stock_entries, since expenses occur sporadically
- * rather than as a fixed daily set of rows (see docs/phases/phase5_context.md
- * for why this diverges from Phase 4's till-strip batch-save pattern).
- * `location`/`created_by`/`expense_date` are always server-derived —
- * never accepted from the client body, so a crafted cross-location
+ * Logs a single expense (category, amount, optional note) — submitted one
+ * at a time, not as a batch sheet like stock_entries, since expenses occur
+ * sporadically rather than as a fixed daily set of rows (see
+ * docs/phases/phase5_context.md for why this diverges from Phase 4's
+ * till-strip batch-save pattern).
+ *
+ * Staff: `location`/`created_by`/`expense_date` are always server-derived
+ * — never accepted from the client body, so a crafted cross-location
  * request has no field to spoof.
+ *
+ * Admin: can log an expense against a specific location OR business-wide
+ * (location = null, e.g. rent, salaries — see
+ * 20260721070000_admin_business_wide_expenses.sql). `location` is the one
+ * field admin's request body supplies that staff's never can.
+ *
+ * `category_id` references the admin-managed expense_categories catalog
+ * (20260721090000_expense_categories_catalog.sql) — both roles pick from
+ * the same shared list, no hardcoded category set.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  if (!user || (user.role === "staff" && !user.location)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
-  const parsed = expenseSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
-      { status: 400 },
-    );
-  }
-
-  const { category, amount, note } = parsed.data;
   const supabase = await createServerSupabaseClient();
 
-  const { data, error } = await supabase
-    .from("expenses")
-    .insert({
-      location: user.location,
-      expense_date: nairobiToday(),
-      category,
-      amount,
-      note: note ?? null,
-      created_by: user.id,
-    })
-    .select("*")
-    .single();
+  let insertResult;
+  if (user.role === "admin") {
+    const parsed = adminExpenseSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+        { status: 400 },
+      );
+    }
+    const { category_id, amount, note, location } = parsed.data;
+    insertResult = await supabase
+      .from("expenses")
+      .insert({
+        location,
+        expense_date: nairobiToday(),
+        category_id,
+        amount,
+        note: note ?? null,
+        created_by: user.id,
+      })
+      .select("*, expense_categories(id, name)")
+      .single();
+  } else {
+    const parsed = expenseSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+        { status: 400 },
+      );
+    }
+    const { category_id, amount, note } = parsed.data;
+    insertResult = await supabase
+      .from("expenses")
+      .insert({
+        location: user.location,
+        expense_date: nairobiToday(),
+        category_id,
+        amount,
+        note: note ?? null,
+        created_by: user.id,
+      })
+      .select("*, expense_categories(id, name)")
+      .single();
+  }
+
+  const { data, error } = insertResult;
 
   if (error) {
     return NextResponse.json({ error: "Couldn't save the expense — please try again." }, { status: 500 });
