@@ -1,16 +1,25 @@
 # Acceptance scripts
 
-One script per phase (`phaseX-*.mjs`) — real, repeatable HTTP-level acceptance checks against a **live dev server + local Supabase stack**, reconstructing the exact assertions each phase's gating checklist made (see `docs/phases/phaseX_context.md`'s "Gating checklist results" for the prose version of what each script checks).
+One script per phase (`phaseX-*.mjs`) — real, repeatable HTTP-level acceptance checks against a **live dev server + hosted Supabase dev project**, reconstructing the exact assertions each phase's gating checklist made (see `docs/phases/phaseX_context.md`'s "Gating checklist results" for the prose version of what each script checks).
 
 ## Why these exist
 
 Phases 4–6 were each verified by hand-written, one-off Node scripts during their sessions — logging in as real seeded roster accounts, hitting routes directly, checking RLS/oversell/concurrency/idempotency. Those scripts were written to `/tmp` and lost after each session, meaning that real coverage (same-day RLS bugs, INSERT-policy date-scoping, canteen aggregation math, the Phase 6 concurrency/idempotency guarantees) could only be re-verified by re-deriving the same script from scratch. These are that work, done once and kept.
 
-## Running one
+## No local Docker, no local Postgres — hosted Supabase cloud only
+
+This project never uses a local Supabase/Docker stack (see `CLAUDE.md`'s "Local dev setup" section). There are two hosted projects: **`prosper-hotel-dev`** (ref `fbowdsdyccpsumcxcuti`, what `.env.local`/these scripts target) and **`prime-hotel-demo`** (production — never touched by any script here). Some of this file's older prose below still describes a "local Supabase stack" / `docker ps` / `supabase start` workflow from before this was clarified — that's now historical, not the current instruction. Follow this section instead.
+
+**The agent (Claude) never runs raw SQL against either hosted project — not `psql`, not `supabase db query --linked`, not `supabase db push`, not `_lib.mjs`'s `psql()`/`psqlRow()`/`psqlAsUser()` helpers.** The human runs all SQL through the Supabase SQL Editor themselves. Concretely, this splits every acceptance script into two kinds of work:
+
+- **HTTP checks** (`login()`, `api()` from `_lib.mjs`) — these hit the running dev server's route handlers, the same as a browser or `curl` would. The agent runs these itself; no DB access involved.
+- **Direct-SQL checks** (`psql()`, `psqlRow()`, `psqlAsUser()`) — fixture setup/teardown, RLS-impersonation checks, and raw value assertions that go straight to Postgres. The agent does **not** run these. Instead: write out the exact SQL, give it to the human to paste into the SQL Editor for `prosper-hotel-dev`, and have them report back what it returned (row counts, computed values, whether a policy blocked a query). The `post-launch-staff-meals.mjs` / `post-launch-canteen-daily-cadence.mjs` entries below already show one working pattern for this (a service-role Supabase client instead of `psql()`) — for scripts that still use `psql()`/`psqlRow()`, either convert them the same way, or run the script's `main()` logic by hand, substituting a human-run SQL Editor query for the runnable equivalent.
+- A script whose *only* DB dependency is `psql()`-based fixture creation for rows the app's own API would reject (backdated dates, etc.) can still be handed to the human as a short block of SQL to run once before the HTTP-only portion executes — same effect, just sequenced as "human sets up fixtures → agent runs HTTP checks → human tears down fixtures" instead of one unattended script.
+
+## Running one (HTTP-only portion)
 
 ```bash
-npx supabase status      # confirm the local stack is up (npx supabase start if not)
-pnpm dev                 # in another terminal, leave running
+pnpm dev                 # leave running in another terminal
 
 node scripts/acceptance/phase4-entry.mjs
 node scripts/acceptance/phase5-canteen-expenses.mjs
@@ -37,18 +46,18 @@ Post-launch (non-phase) fixes with real correctness risk get a `post-launch-<sho
 
 `post-launch-canteen-daily-cadence.mjs` covers the canteen stock-tracking cadence conversion from weekly to daily (post-launch, 2026-07-20 — `docs/01_DATA_MODEL.md` §3.1, `docs/phases/postlaunch_canteen_daily_context.md`): same-day 1:1 linkage between a `canteen_supplied` item's restaurant `sent_out` and canteen's `added_stock` (proven by changing a *different* day's `sent_out` and confirming today's canteen total is unaffected — not still range-summing), daily opening-stock carry-forward (today's opening = yesterday's closing), the oversell check unchanged, the `not_yet_supplied` (`P0003`) rejection firing with the corrected "today's supply" copy, both RLS policies collapsed correctly (`stock_update_admin_or_current_period_location` / `stock_insert_current_period_scoped` — same-day writes permitted, a same-ISO-week-but-not-today write now correctly `403`s, proving the dropped canteen-week escape hatch is actually gone), `record_canteen_stock_purchase()` storing the real submitted `purchase_date` instead of normalizing to that week's Monday, `recompute_stock_entry_cascade()`'s same-day cascade collapse (updates a same-day canteen row, leaves a no-same-day-row edit untouched), a frozen pre-conversion weekly fixture row proven byte-for-byte untouched by unrelated same-item/different-date activity, and the admin dashboard's "Today" toggle now showing non-zero canteen figures regardless of whether today happens to be a Monday. **Does not use `psql()`**, same reasoning and same pattern as `post-launch-staff-meals.mjs` — this project's dev environment is cloud Supabase, and the human running it has confirmed CLI/`supabase db query --linked` access is unreliable here; fixture setup/teardown/inspection (including the frozen-row and different-day fixtures, which RLS correctly refuses to accept via the app's own API) goes through a direct service-role Supabase client instead.
 
-If your local Supabase container name differs from `_lib.mjs`'s default (check with `docker ps` — the project's local containers are currently named `supabase_db_mqtlxuwbjzsjtywhjjtf_Reference_used_in_A`, a Docker-volume-naming artifact from a prior backup-restore, not the project's actual ref), override it: `ACCEPTANCE_DB_CONTAINER=<name> node scripts/acceptance/phaseX-*.mjs`.
+`ACCEPTANCE_DB_CONTAINER`/`ACCEPTANCE_DB_MODE=docker` (Docker-container-based `psql()`) are **not applicable to this project** — ignore any script comment that still references them; they're leftover from before the hosted-cloud-only workflow was clarified.
 
 Each script logs in as the real seeded roster accounts (`scripts/seed-staff.ts`'s names/PINs — same roster `scripts/verify-screenshot.mjs` uses), prints `PASS`/`FAIL` per check, and exits non-zero if anything failed.
 
 ## What they mutate, and how they clean up
 
-These scripts create real rows (`stock_entries`, `orders`, `expenses`, etc.) against your local dev database, then delete everything they created before exiting — every script is safe to re-run any number of times without leaving residue or needing a `supabase db reset`. Two techniques make this safe:
+These scripts create real rows (`stock_entries`, `orders`, `expenses`, etc.) against the hosted `prosper-hotel-dev` database, then delete everything they created before exiting — every script is safe to re-run any number of times without leaving residue. Two techniques make this safe:
 
 - **Orders/expenses are tagged** with a `[acceptance-test]` marker in `customer_name`/`note`, so cleanup targets exactly (and only) that script's own data — never a blanket wipe that could delete real dev data you're separately working with.
-- **`stock_entries` fixtures are manufactured via direct SQL** (`psql()` in `_lib.mjs`), not through the app's own API — the app's write paths are correctly date-scoped (see `docs/phases/phase5_context.md`) and will reject a backdated write from a real client. Direct SQL is the documented, correct way to build test fixtures for these date-scoped tables (carry-forward tests need a "yesterday"/"last week" row; concurrency tests need real opening stock to sell against).
+- **`stock_entries` fixtures need direct SQL**, not the app's own API — the app's write paths are correctly date-scoped (see `docs/phases/phase5_context.md`) and will reject a backdated write from a real client. Per the "No local Docker" section above, this SQL is written out for the human to run in the SQL Editor, not executed by the agent via `psql()` — carry-forward tests need a "yesterday"/"last week" row; concurrency tests need real opening stock to sell against.
 
-If a script is interrupted mid-run (Ctrl-C, crash) its cleanup won't have run — check `git status`-style: query `stock_entries`/`orders` for today's date, or just re-run the script (its own `cleanup()` runs first, wiping any partial leftovers from the previous attempt) before doing anything else.
+If a script (or a human-run SQL Editor cleanup step) is interrupted mid-run, its cleanup won't have completed — check by asking the human to query `stock_entries`/`orders` for today's date and `[acceptance-test]`-tagged rows in the SQL Editor, or just re-run the script (its own `cleanup()` runs first, wiping any partial leftovers from the previous attempt) before doing anything else.
 
 ## When to use these vs. other verification
 
@@ -65,5 +74,5 @@ These scripts are **not** run in CI and are **not** part of `pnpm test` — they
 1. Copy the shape of an existing script (imports from `_lib.mjs`, a `cleanup()` at both the top and bottom of `main()`, one `console.log("=== TEST N: ... ===")` block per scenario, `check(label, condition, detail)` for each assertion, `summarizeAndExit(phaseName)` at the end).
 2. Reconstruct the assertions from that phase's `docs/phases/phaseX_context.md` gating-checklist section (or write new ones as you build/test the phase — don't wait until after the session to backfill).
 3. Tag any orders/expenses/other free-text-bearing rows you create with a distinctive marker so cleanup can target them precisely.
-4. Prefer manufacturing backdated/cross-period fixtures via `psql()` over trying to trick the app's date-scoped write paths — it won't work, and isn't the point of the test anyway.
-5. Run it twice in a row and confirm identical output both times, and confirm the DB is back to its pre-run state after — that's the bar for "safe to re-run anytime."
+4. Prefer manufacturing backdated/cross-period fixtures via direct SQL over trying to trick the app's date-scoped write paths — it won't work, and isn't the point of the test anyway. Per the "No local Docker" section above, write this SQL for the human to run in the SQL Editor rather than calling `psql()` yourself — or follow `post-launch-staff-meals.mjs`'s pattern of a service-role Supabase client where that's a cleaner fit.
+5. Run it twice in a row and confirm identical output both times, and confirm the DB is back to its pre-run state after — that's the bar for "safe to re-run anytime." For the direct-SQL portions, this means asking the human to confirm the state twice, not assuming it from the script's own exit code.
