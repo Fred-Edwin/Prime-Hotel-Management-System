@@ -101,24 +101,21 @@ const PERIOD_OPTIONS = [
 
 // Plain-language calculation explanations (post-launch addition,
 // 2026-07-21, client request — WaPrecious wants to be able to check how
-// each dashboard figure was arrived at). Wording matches what was already
-// explained to her directly for the COGS formula change (§3.8) — kept
-// here rather than duplicated so the in-app text and the conversation
-// with her stay consistent. Shown via InfoTooltip, click-to-open (not
-// hover-only — this is a mobile-first app).
+// each dashboard figure was arrived at). Deliberately terse (revised
+// 2026-07-21 after client feedback that the first pass was too wordy) —
+// one short phrase or formula, not a justification. Shown via
+// InfoTooltip, click-to-open (not hover-only — this is a mobile-first
+// app). The four former closingStock* variants collapsed into one shared
+// string since the tile/row label already states which location/pool.
 const TOOLTIPS = {
-  netProfit: "Total sales, minus cost of goods, wastage, staff meals, and operating expenses.",
-  salesValue: "Everything sold this period, at the price it was sold for (till sales plus delivery/pickup orders).",
-  costValue:
-    "Opening stock value + added stock value − closing stock value, for menu items and ingredients combined. This is WaPrecious's own method: it works out cost from how much the stock's value changed, not just from what was sold — so it also picks up wastage, staff meals, and ingredients used in cooking.",
-  wastageValue: "Stock lost to spoilage, breakage, or spillage — valued at what it cost to buy or produce, not what it would have sold for.",
-  staffMealValue: "Menu items staff ate without paying, valued at cost — a separate figure from wastage since it was consumed on purpose, not spoiled.",
-  closingStock: "Value of unsold stock still on hand at the end of this period, priced at buying cost.",
-  closingStockRestaurant: "Value of unsold restaurant menu-item stock still on hand at the end of this period, priced at buying cost.",
-  closingStockCanteen: "Value of unsold canteen stock still on hand at the end of this period, priced at buying cost.",
-  closingStockIngredients: "Value of raw ingredients still in the central store at the end of this period, priced at buying cost.",
-  businessWideExpenses: "Costs not tied to either location specifically — rent, salaries, and similar — still subtracted from the combined net profit.",
-  expenses: "Costs logged for this location — utilities, supplies, and similar — via the Expenses tab.",
+  netProfit: "Sales − cost of goods − wastage − staff meals − expenses.",
+  salesValue: "Till sales + delivery/pickup orders, at selling price.",
+  costValue: "Opening stock + added stock − closing stock (items and ingredients combined).",
+  wastageValue: "Spoiled or damaged stock, valued at cost.",
+  staffMealValue: "Food given to staff, valued at cost.",
+  closingStock: "Unsold stock on hand, valued at cost.",
+  businessWideExpenses: "Costs not tied to one location — rent, salaries.",
+  expenses: "Costs logged for this location.",
 } as const;
 
 const COMPARISON_ROWS = [
@@ -374,19 +371,19 @@ export function DashboardClient() {
                 label="Closing stock (Restaurant)"
                 value={money(data.byLocation.restaurant.closingStockValue)}
                 onDark
-                tooltip={TOOLTIPS.closingStockRestaurant}
+                tooltip={TOOLTIPS.closingStock}
               />
               <MetricCard
                 label="Closing stock (Canteen)"
                 value={money(data.byLocation.canteen.closingStockValue)}
                 onDark
-                tooltip={TOOLTIPS.closingStockCanteen}
+                tooltip={TOOLTIPS.closingStock}
               />
               <MetricCard
                 label="Closing stock (Ingredients)"
                 value={money(data.ingredients.closingStockValue)}
                 onDark
-                tooltip={TOOLTIPS.closingStockIngredients}
+                tooltip={TOOLTIPS.closingStock}
               />
               {data.combined.businessWideExpenses > 0 && (
                 <MetricCard
@@ -559,7 +556,7 @@ export function DashboardClient() {
                   <tr>
                     <td className={styles.comparisonLabelCell}>
                       <span>Closing stock value</span>
-                      <InfoTooltip label="Closing stock value" message={TOOLTIPS.closingStockIngredients} />
+                      <InfoTooltip label="Closing stock value" message={TOOLTIPS.closingStock} />
                     </td>
                     <td className={styles.comparisonNumeric}>{money(data.ingredients.closingStockValue)}</td>
                   </tr>
