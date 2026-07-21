@@ -471,6 +471,17 @@
   color: var(--color-status-error);
 }
 
+/* Explanatory text standing in for a number (e.g. canteen's "Sent to
+   canteen" cell, which doesn't apply to that location at all rather than
+   genuinely being zero/missing) -- muted and smaller so it reads as a
+   note, not a data point, and never gets mistaken for a broken value. */
+.comparisonTable td:is(.comparisonNote) {
+  text-align: right;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
 /* --- Sales trend chart --- */
 
 .trendCard {

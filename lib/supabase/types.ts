@@ -854,7 +854,11 @@ export type Database = {
       dashboard_ingredient_summary: {
         Args: { p_from: string; p_to: string }
         Returns: {
+          closing_stock: number
           closing_stock_value: number
+          opening_stock: number
+          quantity_used: number
+          received: number
           wastage_value: number
         }[]
       }
@@ -933,10 +937,15 @@ export type Database = {
       dashboard_stock_summary: {
         Args: { p_from: string; p_to: string }
         Returns: {
+          added_stock: number
+          closing_stock: number
           closing_stock_value: number
           cost_value: number
           location: Database["public"]["Enums"]["location_type"]
+          opening_stock: number
+          quantity_sold: number
           sales_value: number
+          sent_out: number
           wastage_value: number
         }[]
       }

@@ -19,6 +19,16 @@ interface LocationFigures {
   wastageValue: number;
   staffMealValue: number;
   closingStockValue: number;
+  // Quantity flows (post-launch addition, 2026-07-21) — opening_stock/
+  // closing_stock are point-in-time balances (each item's earliest/latest
+  // row in the selected range), added_stock/sent_out/quantitySold are
+  // period sums. See 20260721120000_dashboard_stock_quantity_columns.sql,
+  // 20260721130000_dashboard_stock_sold_used_columns.sql.
+  openingStock: number;
+  addedStock: number;
+  sentOut: number;
+  quantitySold: number;
+  closingStock: number;
   expenses: number;
   netProfit: number;
 }
@@ -28,6 +38,21 @@ interface CombinedFigures extends LocationFigures {
   // attributable to either location's own P&L, so it only exists on the
   // combined figures, never in byLocation.
   businessWideExpenses: number;
+}
+
+// Ingredients (raw materials, §3.2) — a third, separate stock pool from
+// restaurant/canteen menu items. No sales/cost/expenses/net-profit of its
+// own since ingredients are never sold directly; just stock-level figures
+// for its own comparison-table row, kept out of byLocation.restaurant so
+// the client can see menu-item stock trend toward 0 distinctly from
+// ingredient stock-on-hand.
+interface IngredientFigures {
+  wastageValue: number;
+  closingStockValue: number;
+  openingStock: number;
+  received: number;
+  quantityUsed: number;
+  closingStock: number;
 }
 
 interface TrendPoint {
@@ -61,6 +86,7 @@ interface SummaryResponse {
   to: string;
   combined: CombinedFigures;
   byLocation: { restaurant: LocationFigures; canteen: LocationFigures };
+  ingredients: IngredientFigures;
   trend: TrendPoint[];
   lowStockItems: LowStockItem[];
   lowStockIngredients: LowStockIngredient[];
@@ -78,6 +104,22 @@ const COMPARISON_ROWS = [
   { label: "Recorded wastage", key: "wastageValue" },
   { label: "Staff meals", key: "staffMealValue" },
   { label: "Operating expenses", key: "expenses" },
+  { label: "Closing stock value", key: "closingStockValue" },
+] as const;
+
+// Quantity flows (post-launch addition, 2026-07-21) — a separate table
+// from COMPARISON_ROWS since these are raw quantities, not money, and
+// shouldn't run through money()/negative-highlight styling. Opening/
+// closing stock are point-in-time balances (each item's earliest/latest
+// row in the selected range); added stock/sent out are period sums — see
+// the dashboard_stock_summary() comment in
+// 20260721120000_dashboard_stock_quantity_columns.sql.
+const QUANTITY_ROWS = [
+  { label: "Opening stock (units)", key: "openingStock" },
+  { label: "Added stock (units)", key: "addedStock" },
+  { label: "Sent to canteen (units)", key: "sentOut" },
+  { label: "Sold (units)", key: "quantitySold" },
+  { label: "Closing stock (units)", key: "closingStock" },
 ] as const;
 
 // Both wastage and staff meals are deductions worth calling out in the
@@ -88,6 +130,10 @@ const NEGATIVE_HIGHLIGHT_KEYS: ReadonlySet<string> = new Set(["wastageValue", "s
 
 function money(value: number): string {
   return `KES ${Math.round(value).toLocaleString("en-KE")}`;
+}
+
+function units(value: number): string {
+  return value.toLocaleString("en-KE");
 }
 
 function formatUpdatedAt(date: Date): string {
@@ -137,7 +183,6 @@ export function DashboardClient() {
         setRefreshing(false);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, customRange]);
 
   useEffect(() => {
@@ -271,7 +316,22 @@ export function DashboardClient() {
               <MetricCard label="Total cost" value={money(data.combined.costValue)} onDark />
               <MetricCard label="Wastage cost" value={money(data.combined.wastageValue)} onDark />
               <MetricCard label="Staff meals" value={money(data.combined.staffMealValue)} onDark />
-              <MetricCard label="Closing stock value" value={money(data.combined.closingStockValue)} onDark />
+              {/* Split (post-launch, 2026-07-21) rather than one combined
+                  "Closing stock value" tile: restaurant menu-item stock
+                  should trend toward 0 under the "cook it, send it, sell
+                  it" model, while canteen genuinely carries a standing
+                  shop-style balance — collapsing them into one number hid
+                  that distinction. */}
+              <MetricCard
+                label="Closing stock (Restaurant)"
+                value={money(data.byLocation.restaurant.closingStockValue)}
+                onDark
+              />
+              <MetricCard
+                label="Closing stock (Canteen)"
+                value={money(data.byLocation.canteen.closingStockValue)}
+                onDark
+              />
               {data.combined.businessWideExpenses > 0 && (
                 <MetricCard
                   label="Business-wide expenses"
@@ -376,6 +436,88 @@ export function DashboardClient() {
                     >
                       {money(data.byLocation.canteen.netProfit)}
                     </td>
+                  </tr>
+                </tbody>
+              </table>
+            </Card>
+
+            {/* Quantity flows (post-launch addition, 2026-07-21) — raw
+                units, not money, so a separate table from the figures
+                above. "Sent to canteen" is restaurant-only: canteen never
+                sends stock anywhere, its added_stock for canteen_supplied
+                items is just a same-day mirror of this same number
+                (§3.1) — shown as an explanatory note rather than a bare
+                "—", so it reads as "doesn't apply here" rather than
+                missing/broken data. "Sold" is quantity_sold, which
+                already includes both till and order-driven sales (§3.4)
+                — added so opening + added − sent − sold visibly accounts
+                for closing stock instead of leaving an unexplained gap. */}
+            <Card className={styles.comparisonCard}>
+              <table className={styles.comparisonTable}>
+                <thead>
+                  <tr>
+                    <th>Stock movement</th>
+                    <th className={styles.comparisonNumeric}>Restaurant</th>
+                    <th className={styles.comparisonNumeric}>Canteen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {QUANTITY_ROWS.map((row) => (
+                    <tr key={row.key}>
+                      <td>{row.label}</td>
+                      <td className={styles.comparisonNumeric}>{units(data.byLocation.restaurant[row.key])}</td>
+                      {row.key === "sentOut" ? (
+                        <td className={styles.comparisonNote}>N/A — mirrors restaurant</td>
+                      ) : (
+                        <td className={styles.comparisonNumeric}>{units(data.byLocation.canteen[row.key])}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+
+            {/* Ingredients (raw materials, §3.2) — restaurant-only, no
+                canteen counterpart, so a single-column card rather than
+                forcing it into the two-location table above. Kept
+                visually distinct from the restaurant's own menu-item
+                figures per the client's request: ingredient stock-on-hand
+                is a different pool of cash tied up than finished menu
+                items sitting unsold. */}
+            <Card className={styles.comparisonCard}>
+              <table className={styles.comparisonTable}>
+                <thead>
+                  <tr>
+                    <th>Ingredients (central store)</th>
+                    <th className={styles.comparisonNumeric}>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Closing stock value</td>
+                    <td className={styles.comparisonNumeric}>{money(data.ingredients.closingStockValue)}</td>
+                  </tr>
+                  <tr>
+                    <td>Recorded wastage</td>
+                    <td className={[styles.comparisonNumeric, styles.comparisonNegative].join(" ")}>
+                      {money(data.ingredients.wastageValue)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Opening stock (units)</td>
+                    <td className={styles.comparisonNumeric}>{units(data.ingredients.openingStock)}</td>
+                  </tr>
+                  <tr>
+                    <td>Received (units)</td>
+                    <td className={styles.comparisonNumeric}>{units(data.ingredients.received)}</td>
+                  </tr>
+                  <tr>
+                    <td>Used (units)</td>
+                    <td className={styles.comparisonNumeric}>{units(data.ingredients.quantityUsed)}</td>
+                  </tr>
+                  <tr>
+                    <td>Closing stock (units)</td>
+                    <td className={styles.comparisonNumeric}>{units(data.ingredients.closingStock)}</td>
                   </tr>
                 </tbody>
               </table>

@@ -14,8 +14,21 @@ import { serverErrorResponse } from "@/lib/errors";
  * split, a daily trend series for the hero band's chart, and the
  * low-stock "Needs attention" list. All aggregation happens in SQL via
  * the public.dashboard_*() functions (see
- * 20260712121500_dashboard_aggregation_functions.sql) — this route only
+ * 20260712121500_dashboard_aggregation_functions.sql,
+ * 20260721120000_dashboard_stock_quantity_columns.sql) — this route only
  * combines already-aggregated numbers, never sums raw rows in JS.
+ *
+ * `byLocation.restaurant`/`byLocation.canteen` are menu-item stock
+ * (stock_entries) only. `ingredients` (post-launch addition, 2026-07-21)
+ * is a third, separate block for raw-material stock (ingredient_entries,
+ * restaurant-only, §3.2) — kept out of `byLocation.restaurant` so the
+ * client can see menu-item stock (which should trend toward 0 under the
+ * "cook it, send it, sell it" model) distinctly from ingredient stock-on-
+ * hand and canteen's shop-style standing balance. Ingredient wastage/
+ * closing-stock-value still fold into `combined` and into
+ * `byLocation.restaurant.netProfit`'s inputs (ingredients have no sales
+ * of their own, so their cost only ever surfaces via restaurant's P&L),
+ * just not into `byLocation.restaurant.closingStockValue` itself anymore.
  *
  * quantity_sold on stock_entries already includes order-driven sales
  * (docs/01_DATA_MODEL.md §3.4) — sales_value/cost_value sums here pick up
@@ -89,6 +102,10 @@ export async function GET(request: Request) {
   const ingredientSummary = ingredientSummaryRes.data?.[0] ?? {
     wastage_value: 0,
     closing_stock_value: 0,
+    opening_stock: 0,
+    received: 0,
+    quantity_used: 0,
+    closing_stock: 0,
   };
 
   const restaurantStock = stockByLocation.find((r) => r.location === "restaurant");
@@ -129,13 +146,28 @@ export async function GET(request: Request) {
 
   const netProfitCombined = netProfit(combined);
 
+  // Restaurant/canteen menu-item stock, shown separately from ingredients
+  // below (post-launch addition, 2026-07-21 — client wants to see, at a
+  // glance, that the restaurant's menu-item stock trends toward 0 since
+  // its model is "cook it, send it, sell it," while canteen genuinely
+  // carries a standing shop-style balance). netProfit still folds
+  // ingredient wastage/closing-stock into restaurant's own figure below
+  // (ingredients aren't sold, so they don't get an independent P&L —
+  // their cost only ever shows up as part of the restaurant's), but the
+  // `ingredients` block further down surfaces ingredient stock as its own
+  // row for the comparison table, distinct from menu items.
   const byLocation = {
     restaurant: {
       salesValue: restaurantStock?.sales_value ?? 0,
       costValue: restaurantStock?.cost_value ?? 0,
       wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
       staffMealValue: restaurantStaffMeals,
-      closingStockValue: (restaurantStock?.closing_stock_value ?? 0) + ingredientSummary.closing_stock_value,
+      closingStockValue: restaurantStock?.closing_stock_value ?? 0,
+      openingStock: restaurantStock?.opening_stock ?? 0,
+      addedStock: restaurantStock?.added_stock ?? 0,
+      sentOut: restaurantStock?.sent_out ?? 0,
+      quantitySold: restaurantStock?.quantity_sold ?? 0,
+      closingStock: restaurantStock?.closing_stock ?? 0,
       expenses: restaurantExpenses,
       netProfit: netProfit({
         salesValue: restaurantStock?.sales_value ?? 0,
@@ -151,6 +183,11 @@ export async function GET(request: Request) {
       wastageValue: canteenStock?.wastage_value ?? 0,
       staffMealValue: canteenStaffMeals,
       closingStockValue: canteenStock?.closing_stock_value ?? 0,
+      openingStock: canteenStock?.opening_stock ?? 0,
+      addedStock: canteenStock?.added_stock ?? 0,
+      sentOut: canteenStock?.sent_out ?? 0,
+      quantitySold: canteenStock?.quantity_sold ?? 0,
+      closingStock: canteenStock?.closing_stock ?? 0,
       expenses: canteenExpenses,
       netProfit: netProfit({
         salesValue: canteenStock?.sales_value ?? 0,
@@ -162,12 +199,27 @@ export async function GET(request: Request) {
     },
   };
 
+  // Ingredients: raw materials, not menu items (§3.2) — a third, distinct
+  // stock pool. No sales/cost/expenses/net-profit of its own (ingredients
+  // are never sold directly), just the stock-level figures the comparison
+  // table needs to show it as its own row instead of folded into
+  // restaurant's.
+  const ingredients = {
+    wastageValue: ingredientSummary.wastage_value,
+    closingStockValue: ingredientSummary.closing_stock_value,
+    openingStock: ingredientSummary.opening_stock,
+    received: ingredientSummary.received,
+    quantityUsed: ingredientSummary.quantity_used,
+    closingStock: ingredientSummary.closing_stock,
+  };
+
   return NextResponse.json({
     period,
     from,
     to,
     combined: { ...combined, netProfit: netProfitCombined },
     byLocation,
+    ingredients,
     trend: trendRes.data ?? [],
     lowStockItems: lowStockItemsRes.data ?? [],
     lowStockIngredients: lowStockIngredientsRes.data ?? [],

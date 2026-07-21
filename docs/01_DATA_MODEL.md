@@ -895,6 +895,37 @@ Exposed via `GET /api/items/profit?from=&to=&location=`, admin-only. The `/items
 
 ---
 
+## 3.7 Dashboard: restaurant/canteen/ingredients closing stock shown separately (post-launch addition, 2026-07-21)
+
+Client observation (WaPrecious, testing the live demo): the dashboard's single combined "Closing Stock Value" figure looked, at a glance, like it "equaled today's purchases" — actually just a coincidence of testing on a quiet day with no sales logged yet (`closing_stock = opening_stock + added_stock` when `quantity_sold = wastage = 0`, per §3's core formula). Working through it surfaced a real, separate product gap: the combined figure was summing three conceptually distinct stock pools into one number, obscuring a distinction that matters to how the client actually thinks about the two locations — **restaurant menu-item stock should trend toward 0** under the "cook it, send it, sell it" model (§3.2), while **canteen genuinely carries a standing, shop-style stock balance** (§3.1/§3.2's `canteen_independent` items especially). Ingredients (raw materials, §3.2) are a third pool again, never sold directly, so folding them into "restaurant" also obscured whether a near-zero restaurant figure was really about menu items or just an artifact of ingredient stock being large.
+
+**`dashboard_stock_summary(p_from, p_to)` and `dashboard_ingredient_summary(p_from, p_to)`** (`20260721120000_dashboard_stock_quantity_columns.sql`) were extended with quantity columns, alongside their existing money columns:
+
+- `dashboard_stock_summary`: added `opening_stock`, `added_stock`, `sent_out`, `closing_stock` (per location).
+- `dashboard_ingredient_summary`: added `opening_stock`, `received`, `closing_stock` (ingredients have no location split or `sent_out` — no restaurant→canteen equivalent for raw materials).
+
+Aggregation rule, consistent with the existing `closing_stock_value` handling in these same functions: **`opening_stock`/`closing_stock` are point-in-time balances** — each item's/ingredient's *earliest*/*latest* row within the date range respectively (summing across days would double-count carried-forward stock) — while **`added_stock`/`sent_out`/`received` are genuine period sums** (real flows that occurred during the range, safe to add up).
+
+`GET /api/dashboard/summary` (`app/api/dashboard/summary/route.ts`) now returns:
+- `byLocation.restaurant`/`byLocation.canteen` — **menu-item stock only** (`stock_entries`), each with the new quantity fields plus `closingStockValue` no longer including ingredients (previously `byLocation.restaurant.closingStockValue` silently folded ingredient stock value in — see the corrected code comment in the route file).
+- A new top-level `ingredients` block — `closingStockValue`, `wastageValue`, `openingStock`, `received`, `closingStock` — kept separate from `byLocation.restaurant`, matching the client's mental model above. Ingredients still have no sales/cost/expenses/net-profit of their own (never sold directly), so this block is stock-figures-only, not a third P&L column.
+- `combined.closingStockValue`/`combined.wastageValue` and `byLocation.restaurant.netProfit`'s inputs are unchanged — ingredient wastage/closing-stock-value still fold into the combined figure and into restaurant's own net-profit calculation exactly as before (ingredients' cost only ever surfaces via the restaurant's P&L, since they're never sold directly). Only `byLocation.restaurant.closingStockValue` itself stopped including ingredients — a correction, not a new omission, since that particular fold-in was never something the client had asked for or been shown as intentional.
+
+The admin dashboard (`app/(admin)/dashboard/DashboardClient.tsx`) now shows this split visibly rather than just in the API response:
+- Hero band: two tiles, "Closing stock (Restaurant)" and "Closing stock (Canteen)", replacing the old single combined "Closing stock value" tile.
+- "Location performance comparison" table: added a "Closing stock value" row (money) to the existing Restaurant/Canteen table, plus a new quantity-only table (Opening/Added/Sent to canteen/Closing stock, in units) and a separate single-column "Ingredients (central store)" card — restaurant-only, so it doesn't fit the two-location table shape.
+
+**Carried forward:** this is purely a read-side/display change — no write path, no RLS policy, and no schema table changed. `stock_entries`/`ingredient_entries`/their calculation rules (§3, `lib/calculations.ts`) are untouched; only the two `dashboard_*()` aggregation functions gained columns and the dashboard route/UI surfaced them.
+
+### Follow-up: "Sold"/"Used" rows and the canteen "Sent to canteen" label (same day)
+
+Sanity-checking the new Stock Movement table against a real screenshot surfaced two more readability problems, both fixed in the same round:
+
+- **The table omitted `quantity_sold`/`quantity_used`**, the figures that actually explain most of the gap between opening+added and closing stock. Without them, e.g. "opening 19 + added 0 = 19" against "closing 16" looked like 3 units had silently vanished. `dashboard_stock_summary`/`dashboard_ingredient_summary` were extended again (`20260721130000_dashboard_stock_sold_used_columns.sql`) with `quantity_sold` (stock_entries — already includes both till and order-driven sales, §3.4) and `quantity_used` (ingredient_entries), added to the API response as `byLocation.*.quantitySold`/`ingredients.quantityUsed` and shown as a "Sold (units)"/"Used (units)" row in their respective tables — so opening + added − sent − sold(−wastage) now visibly accounts for closing stock instead of leaving an unexplained gap.
+- **Canteen's "Sent to canteen" cell showed a bare "—"**, which reads as missing/broken data rather than "doesn't apply here" (canteen never sends stock anywhere — its `added_stock` for `canteen_supplied` items is a same-day mirror of this same restaurant figure, §3.1, so showing it again under Canteen would double-count rather than inform). Changed to an explicit muted note, "N/A — mirrors restaurant" (`styles.comparisonNote` in `dashboard.module.css`), so the reason is stated rather than implied.
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.
