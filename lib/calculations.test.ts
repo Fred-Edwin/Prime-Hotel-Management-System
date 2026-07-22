@@ -31,11 +31,13 @@ describe("calculateStockEntryTotals", () => {
       quantitySold: 15,
       wastage: 2,
       staffMeals: 0,
+      complimentaryMeals: 0,
+      stockAdjustments: 0,
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
     });
 
-    // total_stock = 30, closing = 30 - 5 - 15 - 2 - 0 = 8
+    // total_stock = 30, closing = 30 - 5 - 15 - 2 - 0 - 0 - 0 = 8
     expect(result.closingStock).toBe(8);
     expect(result.salesValue).toBe(750); // 15 * 50
     expect(result.costValue).toBe(450); // 15 * 30
@@ -51,6 +53,8 @@ describe("calculateStockEntryTotals", () => {
       quantitySold: 0,
       wastage: 4,
       staffMeals: 0,
+      complimentaryMeals: 0,
+      stockAdjustments: 0,
       sellingPriceSnapshot: 100,
       buyingPriceSnapshot: 20,
     });
@@ -66,14 +70,52 @@ describe("calculateStockEntryTotals", () => {
       quantitySold: 10,
       wastage: 2,
       staffMeals: 3,
+      complimentaryMeals: 0,
+      stockAdjustments: 0,
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
     });
 
-    // total_stock = 30, closing = 30 - 0 - 10 - 2 - 3 = 15
+    // total_stock = 30, closing = 30 - 0 - 10 - 2 - 3 - 0 - 0 = 15
     expect(result.closingStock).toBe(15);
     // wastageValue must NOT include staff meals — they're a separate bucket.
     expect(result.wastageValue).toBe(60); // 2 * 30, not 5 * 30
+  });
+
+  it("reduces closing stock by complimentary meals and stock adjustments (docs/backlog/05_stock_consumption.md)", () => {
+    const result = calculateStockEntryTotals({
+      openingStock: 30,
+      addedStock: 0,
+      sentOut: 0,
+      quantitySold: 10,
+      wastage: 2,
+      staffMeals: 3,
+      complimentaryMeals: 4,
+      stockAdjustments: 1,
+      sellingPriceSnapshot: 50,
+      buyingPriceSnapshot: 30,
+    });
+
+    // total_stock = 30, closing = 30 - 0 - 10 - 2 - 3 - 4 - 1 = 10
+    expect(result.closingStock).toBe(10);
+  });
+
+  it("a surplus stock adjustment (negative quantity) increases closing stock instead of reducing it (docs/backlog/05_stock_consumption.md, signed follow-up)", () => {
+    const result = calculateStockEntryTotals({
+      openingStock: 10,
+      addedStock: 0,
+      sentOut: 0,
+      quantitySold: 5,
+      wastage: 0,
+      staffMeals: 0,
+      complimentaryMeals: 0,
+      stockAdjustments: -3, // surplus: found 3 extra units
+      sellingPriceSnapshot: 50,
+      buyingPriceSnapshot: 30,
+    });
+
+    // total_stock = 10, closing = 10 - 0 - 5 - 0 - 0 - 0 - (-3) = 8
+    expect(result.closingStock).toBe(8);
   });
 });
 
@@ -87,6 +129,8 @@ describe("isStockEntryOversold", () => {
         quantitySold: 8,
         wastage: 3,
         staffMeals: 0,
+        complimentaryMeals: 0,
+        stockAdjustments: 0,
       }),
     ).toBe(true);
   });
@@ -100,6 +144,8 @@ describe("isStockEntryOversold", () => {
         quantitySold: 8,
         wastage: 2,
         staffMeals: 0,
+        complimentaryMeals: 0,
+        stockAdjustments: 0,
       }),
     ).toBe(false);
   });
@@ -113,6 +159,53 @@ describe("isStockEntryOversold", () => {
         quantitySold: 8,
         wastage: 0,
         staffMeals: 3,
+        complimentaryMeals: 0,
+        stockAdjustments: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects when complimentary meals or stock adjustments alone push the combined total over available stock", () => {
+    expect(
+      isStockEntryOversold({
+        openingStock: 10,
+        addedStock: 0,
+        sentOut: 0,
+        quantitySold: 8,
+        wastage: 0,
+        staffMeals: 0,
+        complimentaryMeals: 2,
+        stockAdjustments: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("a surplus stock adjustment (negative) never triggers a false oversell rejection (docs/backlog/05_stock_consumption.md, signed follow-up)", () => {
+    expect(
+      isStockEntryOversold({
+        openingStock: 10,
+        addedStock: 0,
+        sentOut: 0,
+        quantitySold: 8,
+        wastage: 0,
+        staffMeals: 0,
+        complimentaryMeals: 0,
+        stockAdjustments: -5, // surplus — should only ever help, never hurt
+      }),
+    ).toBe(false);
+  });
+
+  it("a genuine shortfall combined with an unrelated surplus on a different check still correctly rejects when the net total exceeds stock", () => {
+    expect(
+      isStockEntryOversold({
+        openingStock: 10,
+        addedStock: 0,
+        sentOut: 0,
+        quantitySold: 8,
+        wastage: 0,
+        staffMeals: 0,
+        complimentaryMeals: 0,
+        stockAdjustments: 5, // shortfall — still capped like every other term
       }),
     ).toBe(true);
   });
@@ -211,17 +304,12 @@ describe("orderTotal", () => {
 });
 
 describe("netProfit", () => {
-  it("subtracts cost, expenses, combined wastage, and staff meal value from sales (§3.3, docs/backlog/02_staff_meals.md)", () => {
-    // sales 1000, cost 400, expenses 150, wastage (stock 30 + ingredient 20) = 50, staff meals 25
-    expect(
-      netProfit({ salesValue: 1000, costValue: 400, expenses: 150, wastageValue: 50, staffMealValue: 25 }),
-    ).toBe(375);
+  it("subtracts cost and expenses from sales only (docs/backlog/05_stock_consumption.md, 2026-07-22 — wastage/staff meals/complimentary meals/stock adjustments are no longer subtracted, since periodicCogs() already reflects their cost via reduced closing stock)", () => {
+    expect(netProfit({ salesValue: 1000, costValue: 400, expenses: 150 })).toBe(450);
   });
 
   it("can go negative when costs exceed sales", () => {
-    expect(
-      netProfit({ salesValue: 100, costValue: 200, expenses: 50, wastageValue: 10, staffMealValue: 0 }),
-    ).toBe(-160);
+    expect(netProfit({ salesValue: 100, costValue: 200, expenses: 50 })).toBe(-150);
   });
 });
 

@@ -97,7 +97,7 @@ Full schema and calculation detail lives in `01_DATA_MODEL.md` — this is the p
 5. **Delivery orders and walk-in till sales both count toward the same day's total sold, correctly and without one overwriting the other**, even if logged by different people at different times.
 6. **No one can oversell** — the system rejects an entry that would sell/send/waste more stock than was actually available.
 7. **Every write is attributable** to the staff member who made it, and scoped to their own location, enforced by the database itself.
-8. **The admin sees a true net profit figure**: sales minus cost of goods sold minus expenses minus wastage — not just a stock margin.
+8. **The admin sees a true net profit figure**: sales minus cost of goods sold minus expenses — not just a stock margin. (Corrected 2026-07-22, see `01_DATA_MODEL.md` §3.10: wastage/staff meals/complimentary meals/stock adjustments are reporting-only figures, not profit deductions — their cost is already reflected in cost of goods sold via reduced closing stock.)
 
 ---
 

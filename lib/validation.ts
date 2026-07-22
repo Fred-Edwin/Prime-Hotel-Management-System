@@ -483,3 +483,38 @@ export const staffMealSchema = z.object({
 });
 
 export type StaffMealInput = z.infer<typeof staffMealSchema>;
+
+/**
+ * Complimentary meal claim / stock adjustment claim — see
+ * docs/backlog/05_stock_consumption.md. Identical shape to
+ * staffMealSchema above (item + quantity, not a free-text cash amount or
+ * a signed delta) — both are separate, distinctly-labeled reporting
+ * categories under the same "Stock Consumption" umbrella, submitted from
+ * their own tabs on /expenses, same cadence as staff meals.
+ */
+export const complimentaryMealSchema = z.object({
+  item_id: z.string().uuid(),
+  quantity: z.number({ error: "Enter a valid quantity" }).positive("Quantity must be greater than 0"),
+  note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type ComplimentaryMealInput = z.infer<typeof complimentaryMealSchema>;
+
+/**
+ * Signed (docs/backlog/05_stock_consumption.md, 2026-07-22 — client
+ * feedback that recounts sometimes find MORE stock than the system
+ * shows, not just less): positive quantity = shortfall (missing stock,
+ * same direction as every other consumption category), negative =
+ * surplus (found extra, added back). Only complimentaryMealSchema/
+ * staffMealSchema stay strictly positive — stock adjustments are the one
+ * category that can go either direction.
+ */
+export const stockAdjustmentSchema = z.object({
+  item_id: z.string().uuid(),
+  quantity: z
+    .number({ error: "Enter a valid quantity" })
+    .refine((n) => n !== 0, "Quantity can't be zero"),
+  note: z.string().trim().min(1).nullable().optional(),
+});
+
+export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;

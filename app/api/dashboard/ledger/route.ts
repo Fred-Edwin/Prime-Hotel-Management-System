@@ -10,9 +10,13 @@ import { serverErrorResponse } from "@/lib/errors";
  * Item Ledger view (04_PHASE_PLAN.md Phase 7, docs/SCREENS.md
  * "/dashboard/ledger"): every stock_entries column, per item, per period,
  * optionally filtered to one location. Plus a separate restaurant-only
- * ingredient ledger. Both come from single set-based SQL functions
- * (public.dashboard_item_ledger / dashboard_ingredient_ledger) — never an
- * N+1 fetch per item.
+ * ingredient ledger, and a unified "Stock Consumption" ledger (wastage +
+ * staff meals + complimentary meals + stock adjustments, one tagged-union
+ * result set — docs/backlog/05_stock_consumption.md, replacing the old
+ * standalone staff-meal-only ledger). All three come from single
+ * set-based SQL functions (public.dashboard_item_ledger /
+ * dashboard_ingredient_ledger / dashboard_stock_consumption_ledger) —
+ * never an N+1 fetch per item.
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -49,10 +53,14 @@ export async function GET(request: Request) {
 
   const supabase = await createServerSupabaseClient();
 
-  const [itemLedgerRes, ingredientLedgerRes, staffMealLedgerRes] = await Promise.all([
+  const [itemLedgerRes, ingredientLedgerRes, stockConsumptionLedgerRes] = await Promise.all([
     supabase.rpc("dashboard_item_ledger", { p_from: from, p_to: to, p_location: location }),
     supabase.rpc("dashboard_ingredient_ledger", { p_from: from, p_to: to }),
-    supabase.rpc("dashboard_staff_meal_ledger", { p_from: from, p_to: to, p_location: location }),
+    // Unified "Stock Consumption" ledger (docs/backlog/05_stock_consumption.md,
+    // replaces the old standalone dashboard_staff_meal_ledger call) —
+    // wastage + staff meals + complimentary meals + stock adjustments as
+    // one tagged-union result set, category-filterable client-side.
+    supabase.rpc("dashboard_stock_consumption_ledger", { p_from: from, p_to: to, p_location: location }),
   ]);
 
   if (itemLedgerRes.error) {
@@ -61,8 +69,8 @@ export async function GET(request: Request) {
   if (ingredientLedgerRes.error) {
     return serverErrorResponse(ingredientLedgerRes.error, "dashboard/ledger");
   }
-  if (staffMealLedgerRes.error) {
-    return serverErrorResponse(staffMealLedgerRes.error, "dashboard/ledger");
+  if (stockConsumptionLedgerRes.error) {
+    return serverErrorResponse(stockConsumptionLedgerRes.error, "dashboard/ledger");
   }
 
   return NextResponse.json({
@@ -71,6 +79,6 @@ export async function GET(request: Request) {
     to,
     items: itemLedgerRes.data ?? [],
     ingredients: ingredientLedgerRes.data ?? [],
-    staffMeals: staffMealLedgerRes.data ?? [],
+    stockConsumption: stockConsumptionLedgerRes.data ?? [],
   });
 }

@@ -720,6 +720,8 @@ Without a dedicated `wastage` column, any item that spoils or is discarded has n
 - `wastage_value = wastage * buying_price_snapshot` is a **distinct, visible cost** on the admin dashboard and ledger (`04_PHASE_PLAN.md` Phase 7) — separate from `cost_value` (COGS on what was actually sold) and from `expenses`. This is deliberate: WaPrecious should be able to see "we lost KES X to waste this week," not have that loss silently disappear into a lower closing-stock number she'd have to notice was smaller than expected.
 - Net profit's formula (`00_ARCHITECTURE.md`, `04_PHASE_PLAN.md` Phase 7) should be read as: sales_value − cost_value − expenses − wastage_value, so wastage is an explicit deduction, not an invisible one.
 
+**Correction (§3.10, 2026-07-22):** `wastage_value` is no longer subtracted in `net_profit`'s formula — see §3.10 for why (COGS already reflects it via reduced closing stock; subtracting it again double-counted it). `wastage_value` remains a distinct, visible figure, just reporting-only now, not a profit deduction.
+
 ---
 
 ## 3.4 Two writers, one stock figure: how orders and till sales share `stock_entries` safely
@@ -861,6 +863,8 @@ Same as every other write path (`stock_entries`/`expenses`/`orders`) — a staff
 
 `staff_meals` (the sum of `staff_meal_entries.quantity` for an item/location/period, via `public.staff_meals_total()` — the exact same "narrow, re-derived aggregate" pattern `canteen_supplied_total()` already established) becomes a third term in `closing_stock`'s formula and the oversell check, alongside `wastage` (see the updated formula in §3). **Critically, `staff_meal_value` is never folded into `wastage_value`** — wastage means spoiled/lost, staff meals means consumed on purpose for a legitimate business reason; conflating them would make the wastage dashboard figure lie about actual spoilage. They are two distinct, separately visible dashboard/ledger lines. `net_profit`'s formula (`lib/calculations.ts` `netProfit()`) gains a fifth term: `sales_value − cost_value − expenses − wastage_value − staff_meal_value`.
 
+**Correction (§3.10, 2026-07-22):** `staff_meal_value` is no longer subtracted in `net_profit`'s formula — see §3.10. It remains a distinct, visible figure (now alongside complimentary meals and stock adjustments in the "Non-Sales Stock Consumption" section), just reporting-only, not a profit deduction.
+
 ### The six `stock_entries` writers all needed updating
 
 Because `staff_meals` participates in `closing_stock` and the oversell check, and because (per §3.4) there is no single shared SQL helper for that arithmetic — each of the six writer functions computes it inline — every one of them needed the same one-line addition (`v_staff_meals := public.staff_meals_total(...)`, folded into its existing oversell check and `closing_stock`/`closing_stock_value` arithmetic): `save_stock_entry()`, `save_canteen_stock_entry()`, `apply_order_to_stock_entry()`, `save_stock_entry_store_manager_fields()`, `save_stock_entry_cashier_field()`, `save_stock_entry_canteen_field()`. See `20260719151000_stock_entries_staff_meals.sql`. None of their parameter signatures changed shape (staff meals are never passed in as an argument — always re-derived from `staff_meal_entries` inside the function, same discipline `quantity_sold` already follows for `order_items`), so this was a `create or replace` in place, not a drop-and-recreate.
@@ -992,6 +996,65 @@ This preserves §3.7's/§3.8's existing point-in-time-vs-period-sum distinction 
 `periodicCogs()` (`lib/calculations.ts`, §3.8) is unchanged — it already just combines whatever `opening_stock_value`/`added_stock_value`/`closing_stock_value` the aggregation functions hand it. Because the "Today" bug meant those inputs were false zeros, `combined.costValue` on a fresh morning was *also* silently wrong before this fix (a real `periodicCogs()` computed against three zeros collapses to zero) — this fix corrects that as a side effect, without changing the formula itself. `dashboard_daily_trend()` (the trend chart, §3.8) is untouched — it never had this bug, since it already returns one row per calendar day with activity and was never expected to backfill a day with none.
 
 **Carried forward:** read-side/aggregation-only change — no write path, no RLS policy, no `stock_entries`/`ingredient_entries` schema change, no change to either function's returned column set (`lib/supabase/types.ts` needed no update). If a future column is added to either function, the same per-item-universe CTE structure (`universe` → `closing`/`opening_before` → `opening` → `period_sums` → final combine) should be extended rather than reverting to the old flat `group by` shape, or this bug class will resurface for that new column.
+
+---
+
+## 3.10 Net profit stops double-counting wastage/staff meals; unified "Non-Sales Stock Consumption" (client-directed change, 2026-07-22, see `docs/backlog/05_stock_consumption.md`)
+
+**The problem.** §3.8 switched dashboard COGS to WaPrecious's own periodic-inventory formula (`Opening Stock Value + Added Stock Value − Closing Stock Value`). Because wastage and staff meals both reduce `closing_stock` (§3.3, §3.5), their cost was **already** embedded in that COGS figure via a lower closing-stock value. But `netProfit()` also subtracted `wastageValue`/`staffMealValue` as separate terms — double-counting their cost against net profit. She also flagged the same overlap one level down and resolved it herself at the data level, by zeroing `items.buying_price` for ingredient-cooked menu items (no schema change required for that half).
+
+**The fix — `netProfit()` drops wastage/staff-meal terms entirely:**
+
+```
+net_profit = sales_value − cost_value − expenses
+```
+
+Wastage, staff meals, and the two new categories below are now **reporting-only** — visible for stock-control purposes, never subtracted from profit (COGS already carries their cost via reduced closing stock).
+
+### Two new consumption categories: complimentary meals and stock adjustments
+
+Alongside the existing `wastage` (a `stock_entries`/`ingredient_entries` column pair, §3.3) and `staff_meal_entries` (§3.5), two new tables were added, both mirroring `staff_meal_entries`'s exact shape — item + quantity + optional note + staff attribution, `value = quantity * buying_price_snapshot`, own-location RLS:
+
+- **`complimentary_meal_entries`** — menu items given away free (e.g. to a guest/visitor). Same shape and reasoning as staff meals, just a different real-world reason. Quantity is always positive.
+- **`stock_adjustment_entries`** — a catch-all claim for reconciling a physical-count mismatch. **Signed** (see below) — the one category that isn't consumption-only.
+
+`closing_stock`'s formula gains two more terms, alongside `wastage` and `staff_meals`:
+
+```
+closing_stock = total_stock − sent_out − quantity_sold − wastage − staff_meals − complimentary_meals − stock_adjustments
+```
+
+Same treatment in the oversell check (`lib/calculations.ts`'s `isStockEntryOversold()`). All six existing `stock_entries` writer functions (`save_stock_entry`, `save_canteen_stock_entry`, `apply_order_to_stock_entry`, `save_stock_entry_store_manager_fields`, `save_stock_entry_cashier_field`, `save_stock_entry_canteen_field`) got the same mechanical addition `staff_meals_total()` already established in §3.5 — two more `_total()` lookups (`complimentary_meals_total()`, `stock_adjustments_total()`), folded into the same arithmetic. Two new write functions, `create_complimentary_meal_entry()`/`create_stock_adjustment_entry()`, mirror `create_staff_meal_entry()` exactly: insert the claim row, then force a same-transaction `stock_entries` recompute, oversell re-check including the new claim's own quantity. See `20260722070000_complimentary_meal_and_stock_adjustment_entries.sql` and `20260722080000_stock_entries_complimentary_meals_and_adjustments.sql`.
+
+### Stock adjustments are SIGNED (follow-up, same session)
+
+**Client feedback, raised immediately after the first pass shipped:** physical recounts at Prosper Hotel sometimes find **more** stock than the system shows, not just less — a consumption-only (positive-quantity) model couldn't represent a surplus.
+
+**Sign convention:** `stock_adjustment_entries.quantity` is signed — **positive = shortfall** (removes stock, same direction every other consumption category uses), **negative = surplus** (adds stock back). This is the least invasive option available: `closing_stock`'s formula above needed **no shape change** — subtracting a negative number already adds it back arithmetically — and the oversell check needed **no change either**, since a negative (surplus) adjustment only ever shrinks the check's left-hand side (can never cause a false rejection), while a positive (shortfall) adjustment is still capped exactly as before. None of the six writer functions' oversell arithmetic needed touching. Only `stock_adjustment_entries`'s column constraint (`check (quantity <> 0)`, was `check (quantity > 0)`) and `create_stock_adjustment_entry()`'s `value` derivation changed — see `20260722110000_signed_stock_adjustments.sql`, which also fixed a real bug found while regenerating `lib/supabase/types.ts`: `create_complimentary_meal_entry()`/`create_stock_adjustment_entry()`'s `p_note` parameter was declared without a `default null`, the same defect `20260719152000_staff_meal_entry_note_optional.sql` had already fixed once for `create_staff_meal_entry()` — Postgres requires optional parameters to trail required ones, so fixing this required dropping and recreating both functions with `p_note` moved to the end.
+
+`value = quantity * buying_price_snapshot` still works signed: a shortfall gets a positive (cost) value, a surplus gets a negative value.
+
+### UI: one shared component, an optional signed mode
+
+`StockConsumptionClient.tsx` (`app/(staff)/expenses/`) is one shared component behind all three self-service `/expenses` tabs (Staff meals, Complimentary meals, Stock adjustments) — originally `StaffMealsClient.tsx` (§3.5), generalized once a second and third category needed the identical item-picker/stepper/running-list pattern rather than duplicating ~400 lines twice more. It takes a `signed` prop, used only by the Stock Adjustments tab: when set, a two-option toggle ("Remove" / "Add" — relabeled from "Missing stock" / "Found extra", 2026-07-22, client request for simpler wording) appears above the quantity stepper. "Remove" behaves exactly like every other category (capped at available stock, sent as a positive quantity). "Add" has **no upper cap** — you can't oversell by finding more stock than the system shows — and negates the quantity before sending it, so the server-side sign convention is set once at the UI layer, not re-derived per caller. The other two tabs never pass `signed`, so they're unaffected.
+
+### Unified ledger presentation, not a unified table
+
+Wastage (sourced from `stock_entries`/`ingredient_entries` columns, no per-claim identity) and the three per-claim tables (staff meals, complimentary meals, stock adjustments) don't share one row shape — forcing them into one physical table would mean nullable-heavy columns or losing wastage's per-item-per-day shape. Instead, `dashboard_stock_consumption_ledger(p_from, p_to, p_location)` (`20260722090000_dashboard_stock_consumption_ledger.sql`) returns a tagged union: one row shape with a `category: 'wastage' | 'staff_meal' | 'complimentary_meal' | 'stock_adjustment'` discriminant plus common displayable fields (date, item/ingredient name, location, quantity, value, note, staff name where applicable — null for wastage, which has no per-claim attribution). This replaced the admin ledger's old standalone "Staff meals" section with one "Non-Sales Stock Consumption" section, filterable by category chips. A signed `stock_adjustment` row is labeled distinctly in the ledger ("Stock adjustment (surplus)" / "Stock adjustment (shortfall)") and shown with an explicit `+`/`−` prefix rather than a bare number that would misread as always-a-loss.
+
+### Dashboard summary
+
+`app/api/dashboard/summary/route.ts` computes a `stockConsumption` block (`total` + `wastageValue`/`staffMealValue`/`complimentaryMealValue`/`stockAdjustmentValue`) on `combined` and on each `byLocation` entry, replacing the old separate `wastageValue`/`staffMealValue` fields that used to feed `netProfit()`. None of these four values are passed to `netProfit()` anymore — it only ever receives `salesValue`/`costValue`/`expenses`. The admin dashboard displays this as its own "Non-Sales Stock Consumption" comparison table, separate from the P&L comparison table above it, plus a new **"Total closing stock"** hero metric (client request, same session) — restaurant + canteen + ingredients summed into one figure, shown alongside (not replacing) the three existing split tiles. No backend change was needed for that last card: `combined.closingStockValue` was already computed this way (§3.7).
+
+**Naming:** the section/UI label is **"Non-Sales Stock Consumption"** — a client-requested correction to the working title "Stock Consumption" used during the initial build (client feedback: the plain name didn't make clear this is stock that moved without a sale). Only the *display* label changed; the internal identifier (`stockConsumption` field name throughout the API/SQL/TypeScript, `dashboard_stock_consumption_ledger()` function name) was deliberately left as-is.
+
+**Confirmed decision: a surplus stock adjustment DOES flow through to raise net profit, symmetric with how a shortfall lowers it (2026-07-22).** A stock adjustment (either direction) never touches `sales_value` directly — its only effect on money is indirect, through `closing_stock` feeding `periodicCogs()`. A shortfall lowers closing stock → raises COGS → lowers net profit; a surplus raises closing stock → lowers COGS → raises net profit. This was raised explicitly as a judgment call (a surplus often reflects a *past* recording error being corrected today — a delivery never logged, a miscounted prior recount — not new value genuinely earned in the current period) and confirmed: treat both directions symmetrically, no special-casing, matching how wastage and staff meals already only affect profit indirectly via COGS. If this ever needs revisiting (e.g. surpluses should be excluded from net profit and shown as a pure reconciliation figure instead), that's a real design change to `periodicCogs()`'s inputs, not a quick tweak.
+
+**Display fix, same session:** `DashboardClient.tsx`'s comparison table and hero metric card initially showed `stockAdjustmentValue`/`stockConsumption.total` via a bare `money()` call, which rendered a surplus (negative value) as e.g. `KES -100` — reading as a loss when a staff member had just logged a `+10 Added` (surplus) entry. Added `moneySigned()`, used only for `stockAdjustmentValue` and any total that includes it (the other three consumption categories are never negative, so they keep plain `money()`), which shows an explicit `+` prefix for a negative value — mirroring the sign convention `LedgerClient.tsx`'s Non-Sales Stock Consumption section already used.
+
+**Explicitly not in scope:** any payroll/deduction logic tied to consumption value; a formal reason-code taxonomy for stock adjustments beyond free-text `note` (same "no reason enum" precedent as `wastage_note`); any change to how ingredient wastage is entered (still an open gap per §3.3's Phase 10 correction, unrelated to this work).
+
+**Carried forward:** `netProfit()`'s signature is now `{ salesValue, costValue, expenses }` only — any future caller must not reintroduce a wastage/staff-meal/consumption term into it. If ingredient wastage entry (§3.3's open gap) is ever built, it plugs into this same reporting-only "Non-Sales Stock Consumption" model, not into net profit.
 
 ---
 

@@ -14,11 +14,23 @@ import styles from "./dashboard.module.css";
 
 type Period = "today" | "week" | "month";
 
+// Stock Consumption (docs/backlog/05_stock_consumption.md, 2026-07-22):
+// wastage + staff meals + complimentary meals + stock adjustments —
+// reporting-only, never subtracted from netProfit (their cost is already
+// embedded in costValue via reduced closing stock, subtracting them
+// again would double-count it). Shared shape between `combined` and each
+// `byLocation` entry, same pattern as CombinedFigures/LocationFigures.
+interface StockConsumptionFigures {
+  total: number;
+  wastageValue: number;
+  staffMealValue: number;
+  complimentaryMealValue: number;
+  stockAdjustmentValue: number;
+}
+
 interface LocationFigures {
   salesValue: number;
   costValue: number;
-  wastageValue: number;
-  staffMealValue: number;
   closingStockValue: number;
   // Quantity flows (post-launch addition, 2026-07-21) — opening_stock/
   // closing_stock are point-in-time balances (each item's earliest/latest
@@ -32,6 +44,7 @@ interface LocationFigures {
   closingStock: number;
   expenses: number;
   netProfit: number;
+  stockConsumption: StockConsumptionFigures;
 }
 
 interface CombinedFigures extends LocationFigures {
@@ -108,11 +121,15 @@ const PERIOD_OPTIONS = [
 // app). The four former closingStock* variants collapsed into one shared
 // string since the tile/row label already states which location/pool.
 const TOOLTIPS = {
-  netProfit: "Sales − cost of goods − wastage − staff meals − expenses.",
+  netProfit: "Sales − cost of goods − expenses.",
   salesValue: "Till sales + delivery/pickup orders, at selling price.",
   costValue: "Opening stock + added stock − closing stock (items and ingredients combined).",
   wastageValue: "Spoiled or damaged stock, valued at cost.",
   staffMealValue: "Food given to staff, valued at cost.",
+  complimentaryMealValue: "Food given away free (e.g. to a guest), valued at cost.",
+  stockAdjustmentValue:
+    "Physical-count corrections that adjust closing stock, valued at cost. A + means stock was found; no + means stock is missing.",
+  stockConsumptionTotal: "Wastage + staff meals + complimentary meals + adjustments — non-sales stock usage, for stock control only, not subtracted from net profit (already reflected in cost of goods).",
   closingStock: "Unsold stock on hand, valued at cost.",
   businessWideExpenses: "Costs not tied to one location — rent, salaries.",
   expenses: "Costs logged for this location.",
@@ -121,10 +138,18 @@ const TOOLTIPS = {
 const COMPARISON_ROWS = [
   { label: "Gross sales", key: "salesValue", tooltip: TOOLTIPS.salesValue },
   { label: "Cost of goods", key: "costValue", tooltip: TOOLTIPS.costValue },
-  { label: "Recorded wastage", key: "wastageValue", tooltip: TOOLTIPS.wastageValue },
-  { label: "Staff meals", key: "staffMealValue", tooltip: TOOLTIPS.staffMealValue },
   { label: "Operating expenses", key: "expenses", tooltip: TOOLTIPS.expenses },
   { label: "Closing stock value", key: "closingStockValue", tooltip: TOOLTIPS.closingStock },
+] as const;
+
+// Stock Consumption comparison rows (docs/backlog/05_stock_consumption.md)
+// — a separate table from COMPARISON_ROWS above, reporting-only figures
+// that no longer feed net profit. Indexes byLocation[loc].stockConsumption[key].
+const STOCK_CONSUMPTION_ROWS = [
+  { label: "Wastage", key: "wastageValue", tooltip: TOOLTIPS.wastageValue },
+  { label: "Staff meals", key: "staffMealValue", tooltip: TOOLTIPS.staffMealValue },
+  { label: "Complimentary meals", key: "complimentaryMealValue", tooltip: TOOLTIPS.complimentaryMealValue },
+  { label: "Stock adjustments", key: "stockAdjustmentValue", tooltip: TOOLTIPS.stockAdjustmentValue },
 ] as const;
 
 // Quantity flows (post-launch addition, 2026-07-21) — a separate table
@@ -142,14 +167,33 @@ const QUANTITY_ROWS = [
   { label: "Closing stock (units)", key: "closingStock" },
 ] as const;
 
-// Both wastage and staff meals are deductions worth calling out in the
-// comparison table's negative-value styling — distinct rows, same visual
-// treatment, since both reduce profit without being a normal operating
-// expense (§3.5 — staff meals are never merged into wastageValue).
-const NEGATIVE_HIGHLIGHT_KEYS: ReadonlySet<string> = new Set(["wastageValue", "staffMealValue"]);
+// All four Stock Consumption rows get the same visual "usage" highlight
+// in their own table below — distinct from COMPARISON_ROWS, which no
+// longer contains any of these now that they're reporting-only
+// (docs/backlog/05_stock_consumption.md) rather than profit deductions.
+const STOCK_CONSUMPTION_HIGHLIGHT_KEYS: ReadonlySet<string> = new Set([
+  "wastageValue",
+  "staffMealValue",
+  "complimentaryMealValue",
+  "stockAdjustmentValue",
+]);
 
 function money(value: number): string {
   return `KES ${Math.round(value).toLocaleString("en-KE")}`;
+}
+
+/**
+ * Stock adjustments only (docs/backlog/05_stock_consumption.md, signed
+ * follow-up, 2026-07-22): a negative stockAdjustmentValue is a surplus
+ * (stock added back), not a bigger loss — the ONLY consumption category
+ * where a negative number means something different from every other
+ * row. money() alone (a bare "KES -100") reads as a loss, contradicting
+ * a staff member's own "+10 Added" ledger entry that produced it. Shows
+ * an explicit "+" for a negative value, mirroring the sign convention
+ * LedgerClient.tsx's Non-Sales Stock Consumption section already uses.
+ */
+function moneySigned(value: number): string {
+  return value < 0 ? `+${money(Math.abs(value))}` : money(value);
 }
 
 function units(value: number): string {
@@ -346,16 +390,22 @@ export function DashboardClient() {
                 tooltip={TOOLTIPS.costValue}
               />
               <MetricCard
-                label="Wastage cost"
-                value={money(data.combined.wastageValue)}
+                label="Non-sales stock consumption"
+                value={moneySigned(data.combined.stockConsumption.total)}
                 onDark
-                tooltip={TOOLTIPS.wastageValue}
+                tooltip={TOOLTIPS.stockConsumptionTotal}
               />
+              {/* Total closing stock (client request, 2026-07-22) — one
+                  combined figure (restaurant + canteen + ingredients,
+                  data.combined.closingStockValue — already summed this way
+                  by app/api/dashboard/summary/route.ts, no backend change
+                  needed) shown alongside, not instead of, the three split
+                  tiles below. */}
               <MetricCard
-                label="Staff meals"
-                value={money(data.combined.staffMealValue)}
+                label="Total closing stock"
+                value={money(data.combined.closingStockValue)}
                 onDark
-                tooltip={TOOLTIPS.staffMealValue}
+                tooltip={TOOLTIPS.closingStock}
               />
               {/* Split (post-launch, 2026-07-21) rather than one combined
                   "Closing stock value" tile: restaurant menu-item stock
@@ -457,22 +507,8 @@ export function DashboardClient() {
                         <span>{row.label}</span>
                         <InfoTooltip label={row.label} message={row.tooltip} />
                       </td>
-                      <td
-                        className={[
-                          styles.comparisonNumeric,
-                          NEGATIVE_HIGHLIGHT_KEYS.has(row.key) ? styles.comparisonNegative : "",
-                        ].join(" ")}
-                      >
-                        {money(data.byLocation.restaurant[row.key])}
-                      </td>
-                      <td
-                        className={[
-                          styles.comparisonNumeric,
-                          NEGATIVE_HIGHLIGHT_KEYS.has(row.key) ? styles.comparisonNegative : "",
-                        ].join(" ")}
-                      >
-                        {money(data.byLocation.canteen[row.key])}
-                      </td>
+                      <td className={styles.comparisonNumeric}>{money(data.byLocation.restaurant[row.key])}</td>
+                      <td className={styles.comparisonNumeric}>{money(data.byLocation.canteen[row.key])}</td>
                     </tr>
                   ))}
                   <tr className={styles.comparisonTotalRow}>
@@ -495,6 +531,74 @@ export function DashboardClient() {
                       ].join(" ")}
                     >
                       {money(data.byLocation.canteen.netProfit)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </Card>
+
+            {/* Stock Consumption (docs/backlog/05_stock_consumption.md,
+                2026-07-22) — a separate table from the P&L comparison
+                above. Wastage, staff meals, complimentary meals, and
+                stock adjustments are reporting-only: their cost is
+                already embedded in "Cost of goods" above (all four
+                reduce closing stock, which periodicCogs() derives cost
+                from), so they're no longer subtracted from net profit —
+                shown here purely for stock-control visibility. */}
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Non-sales stock consumption</h2>
+              <Link href="/dashboard/ledger" className={styles.ledgerLink}>
+                View ledger →
+              </Link>
+            </div>
+            <Card className={styles.comparisonCard}>
+              <table className={styles.comparisonTable}>
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th className={styles.comparisonNumeric}>Restaurant</th>
+                    <th className={styles.comparisonNumeric}>Canteen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {STOCK_CONSUMPTION_ROWS.map((row) => (
+                    <tr key={row.key}>
+                      <td className={styles.comparisonLabelCell}>
+                        <span>{row.label}</span>
+                        <InfoTooltip label={row.label} message={row.tooltip} />
+                      </td>
+                      <td
+                        className={[
+                          styles.comparisonNumeric,
+                          STOCK_CONSUMPTION_HIGHLIGHT_KEYS.has(row.key) ? styles.comparisonNegative : "",
+                        ].join(" ")}
+                      >
+                        {row.key === "stockAdjustmentValue"
+                          ? moneySigned(data.byLocation.restaurant.stockConsumption[row.key])
+                          : money(data.byLocation.restaurant.stockConsumption[row.key])}
+                      </td>
+                      <td
+                        className={[
+                          styles.comparisonNumeric,
+                          STOCK_CONSUMPTION_HIGHLIGHT_KEYS.has(row.key) ? styles.comparisonNegative : "",
+                        ].join(" ")}
+                      >
+                        {row.key === "stockAdjustmentValue"
+                          ? moneySigned(data.byLocation.canteen.stockConsumption[row.key])
+                          : money(data.byLocation.canteen.stockConsumption[row.key])}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className={styles.comparisonTotalRow}>
+                    <td className={styles.comparisonLabelCell}>
+                      <span>Total</span>
+                      <InfoTooltip label="Total" message={TOOLTIPS.stockConsumptionTotal} />
+                    </td>
+                    <td className={styles.comparisonNumeric}>
+                      {moneySigned(data.byLocation.restaurant.stockConsumption.total)}
+                    </td>
+                    <td className={styles.comparisonNumeric}>
+                      {moneySigned(data.byLocation.canteen.stockConsumption.total)}
                     </td>
                   </tr>
                 </tbody>

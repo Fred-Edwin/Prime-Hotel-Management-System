@@ -9,10 +9,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
-import { StaffMealsClient } from "./StaffMealsClient";
+import { StockConsumptionClient } from "./StockConsumptionClient";
 import styles from "./expenses.module.css";
 
-type Tab = "expenses" | "staff_meals";
+type Tab = "expenses" | "staff_meals" | "complimentary_meals" | "stock_adjustments";
 
 type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"] & {
   expense_categories: { id: string; name: string } | null;
@@ -116,10 +116,17 @@ export function ExpensesClient() {
 
   const todayTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
+  const TAB_TITLES: Record<Tab, string> = {
+    expenses: "Expenses",
+    staff_meals: "Staff meals",
+    complimentary_meals: "Complimentary meals",
+    stock_adjustments: "Stock adjustments",
+  };
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>{tab === "expenses" ? "Expenses" : "Staff meals"}</h1>
+        <h1 className={styles.title}>{TAB_TITLES[tab]}</h1>
         <p className={styles.dateLabel}>{today}</p>
       </div>
 
@@ -128,6 +135,8 @@ export function ExpensesClient() {
           options={[
             { value: "expenses", label: "Expenses" },
             { value: "staff_meals", label: "Staff meals" },
+            { value: "complimentary_meals", label: "Complimentary meals" },
+            { value: "stock_adjustments", label: "Stock adjustments" },
           ]}
           value={tab}
           onChange={(value) => setTab(value as Tab)}
@@ -135,7 +144,33 @@ export function ExpensesClient() {
       </div>
 
       {tab === "staff_meals" ? (
-        <StaffMealsClient />
+        <StockConsumptionClient
+          apiPath="/api/staff-meals"
+          submitLabel="Log meal"
+          submittedLabel="Meal logged"
+          listTitle="Today's staff meals"
+          emptyListBody="Meals staff eat from stock today, without paying, will show up here."
+          notePlaceholder="e.g. lunch"
+        />
+      ) : tab === "complimentary_meals" ? (
+        <StockConsumptionClient
+          apiPath="/api/complimentary-meals"
+          submitLabel="Log complimentary meal"
+          submittedLabel="Complimentary meal logged"
+          listTitle="Today's complimentary meals"
+          emptyListBody="Menu items given away free today (e.g. to a guest) will show up here."
+          notePlaceholder="e.g. guest of Mr. Otieno"
+        />
+      ) : tab === "stock_adjustments" ? (
+        <StockConsumptionClient
+          apiPath="/api/stock-adjustments"
+          submitLabel="Log adjustment"
+          submittedLabel="Stock adjustment logged"
+          listTitle="Today's stock adjustments"
+          emptyListBody="Corrections for a physical-count mismatch will show up here."
+          notePlaceholder="e.g. recount correction"
+          signed
+        />
       ) : (
         <>
           <form className={styles.form} onSubmit={handleSubmit}>

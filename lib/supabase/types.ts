@@ -128,6 +128,70 @@ export type Database = {
           },
         ]
       }
+      complimentary_meal_entries: {
+        Row: {
+          buying_price_snapshot: number
+          created_at: string
+          created_by: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          meal_date: string
+          note: string | null
+          quantity: number
+          staff_id: string
+          value: number
+        }
+        Insert: {
+          buying_price_snapshot: number
+          created_at?: string
+          created_by: string
+          id?: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          meal_date: string
+          note?: string | null
+          quantity: number
+          staff_id: string
+          value: number
+        }
+        Update: {
+          buying_price_snapshot?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          item_id?: string
+          location?: Database["public"]["Enums"]["location_type"]
+          meal_date?: string
+          note?: string | null
+          quantity?: number
+          staff_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complimentary_meal_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complimentary_meal_entries_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complimentary_meal_entries_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_locations: {
         Row: {
           active: boolean
@@ -579,6 +643,70 @@ export type Database = {
           },
         ]
       }
+      stock_adjustment_entries: {
+        Row: {
+          buying_price_snapshot: number
+          created_at: string
+          created_by: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          meal_date: string
+          note: string | null
+          quantity: number
+          staff_id: string
+          value: number
+        }
+        Insert: {
+          buying_price_snapshot: number
+          created_at?: string
+          created_by: string
+          id?: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          meal_date: string
+          note?: string | null
+          quantity: number
+          staff_id: string
+          value: number
+        }
+        Update: {
+          buying_price_snapshot?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          item_id?: string
+          location?: Database["public"]["Enums"]["location_type"]
+          meal_date?: string
+          note?: string | null
+          quantity?: number
+          staff_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_adjustment_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustment_entries_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustment_entries_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_entries: {
         Row: {
           added_stock: number
@@ -754,6 +882,55 @@ export type Database = {
           total: number
         }[]
       }
+      complimentary_meal_available_stock: {
+        Args: {
+          p_as_of_date: string
+          p_location: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: {
+          available: number
+          item_id: string
+        }[]
+      }
+      complimentary_meals_total: {
+        Args: {
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: number
+      }
+      create_complimentary_meal_entry: {
+        Args: {
+          p_created_by: string
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_meal_date: string
+          p_note?: string
+          p_quantity: number
+          p_staff_id: string
+        }
+        Returns: {
+          buying_price_snapshot: number
+          created_at: string
+          created_by: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          meal_date: string
+          note: string | null
+          quantity: number
+          staff_id: string
+          value: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "complimentary_meal_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_order: {
         Args: {
           p_buying_prices: Json
@@ -817,6 +994,43 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      create_stock_adjustment_entry: {
+        Args: {
+          p_created_by: string
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_meal_date: string
+          p_note?: string
+          p_quantity: number
+          p_staff_id: string
+        }
+        Returns: {
+          buying_price_snapshot: number
+          created_at: string
+          created_by: string
+          id: string
+          item_id: string
+          location: Database["public"]["Enums"]["location_type"]
+          meal_date: string
+          note: string | null
+          quantity: number
+          staff_id: string
+          value: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "stock_adjustment_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      dashboard_complimentary_meal_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          location: Database["public"]["Enums"]["location_type"]
+          value: number
+        }[]
       }
       dashboard_daily_trend: {
         Args: { p_from: string; p_to: string }
@@ -933,6 +1147,35 @@ export type Database = {
         Args: { p_from: string; p_to: string }
         Returns: {
           location: Database["public"]["Enums"]["location_type"]
+          value: number
+        }[]
+      }
+      dashboard_stock_adjustment_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          location: Database["public"]["Enums"]["location_type"]
+          value: number
+        }[]
+      }
+      dashboard_stock_consumption_ledger: {
+        Args: {
+          p_from: string
+          p_location?: Database["public"]["Enums"]["location_type"]
+          p_to: string
+        }
+        Returns: {
+          category: string
+          entry_date: string
+          ingredient_id: string
+          ingredient_name: string
+          item_id: string
+          item_name: string
+          location: Database["public"]["Enums"]["location_type"]
+          note: string
+          quantity: number
+          staff_id: string
+          staff_name: string
+          unit: string
           value: number
         }[]
       }
@@ -1518,6 +1761,25 @@ export type Database = {
         }[]
       }
       staff_meals_total: {
+        Args: {
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: number
+      }
+      stock_adjustment_available_stock: {
+        Args: {
+          p_as_of_date: string
+          p_location: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: {
+          available: number
+          item_id: string
+        }[]
+      }
+      stock_adjustments_total: {
         Args: {
           p_item_id: string
           p_location: Database["public"]["Enums"]["location_type"]

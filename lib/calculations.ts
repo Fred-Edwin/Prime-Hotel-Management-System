@@ -47,6 +47,8 @@ export function calculateStockEntryTotals(params: {
   quantitySold: number;
   wastage: number;
   staffMeals: number;
+  complimentaryMeals: number;
+  stockAdjustments: number;
   sellingPriceSnapshot: number;
   buyingPriceSnapshot: number;
 }): StockEntryTotals {
@@ -57,11 +59,20 @@ export function calculateStockEntryTotals(params: {
     quantitySold,
     wastage,
     staffMeals,
+    complimentaryMeals,
+    stockAdjustments,
     sellingPriceSnapshot,
     buyingPriceSnapshot,
   } = params;
 
-  const closingStock = totalStock(openingStock, addedStock) - sentOut - quantitySold - wastage - staffMeals;
+  const closingStock =
+    totalStock(openingStock, addedStock) -
+    sentOut -
+    quantitySold -
+    wastage -
+    staffMeals -
+    complimentaryMeals -
+    stockAdjustments;
 
   return {
     closingStock,
@@ -74,10 +85,22 @@ export function calculateStockEntryTotals(params: {
 
 /**
  * §3 validation rule: reject a write where sent_out + quantity_sold +
- * wastage + staff_meals > total_stock. Must be checked against the
- * COMBINED quantity_sold (till + orders) and the combined staff_meals
- * (sum of staff_meal_entries for that item/location/period), not just one
- * write-path's contribution — see §3.4.
+ * wastage + staff_meals + complimentary_meals + stock_adjustments >
+ * total_stock (docs/backlog/05_stock_consumption.md added the last two
+ * terms, 2026-07-22). Must be checked against the COMBINED quantity_sold
+ * (till + orders) and the combined staff_meals/complimentary_meals/
+ * stock_adjustments (each a sum over its own entries table for that
+ * item/location/period), not just one write-path's contribution — see
+ * §3.4.
+ *
+ * stockAdjustments is SIGNED (docs/backlog/05_stock_consumption.md,
+ * signed follow-up, 2026-07-22): positive = shortfall (removes stock,
+ * same direction as every other term here), negative = surplus (stock
+ * found, added back). This formula needs no special-casing for the sign
+ * — a negative stockAdjustments only ever shrinks the left-hand side, so
+ * a surplus can never trigger a false oversell rejection, while a
+ * shortfall is still capped exactly like wastage/staff meals/
+ * complimentary meals.
  */
 export function isStockEntryOversold(params: {
   openingStock: number;
@@ -86,9 +109,23 @@ export function isStockEntryOversold(params: {
   quantitySold: number;
   wastage: number;
   staffMeals: number;
+  complimentaryMeals: number;
+  stockAdjustments: number;
 }): boolean {
-  const { openingStock, addedStock, sentOut, quantitySold, wastage, staffMeals } = params;
-  return sentOut + quantitySold + wastage + staffMeals > totalStock(openingStock, addedStock);
+  const {
+    openingStock,
+    addedStock,
+    sentOut,
+    quantitySold,
+    wastage,
+    staffMeals,
+    complimentaryMeals,
+    stockAdjustments,
+  } = params;
+  return (
+    sentOut + quantitySold + wastage + staffMeals + complimentaryMeals + stockAdjustments >
+    totalStock(openingStock, addedStock)
+  );
 }
 
 export interface IngredientEntryTotals {
@@ -201,18 +238,20 @@ export function orderTotal(params: {
 
 /**
  * Admin dashboard net profit (04_PHASE_PLAN.md Phase 7, docs/01_DATA_MODEL.md
- * §3.3, staff meals added per docs/backlog/02_staff_meals.md): sales_value -
- * cost_value - expenses - wastage_value - staff_meal_value. All five
- * inputs are already period/location-aggregated in SQL (sum() over
- * stock_entries/ingredient_entries/expenses/staff_meal_entries) before
- * reaching this function — this is a pure combining step, never a
- * re-derivation of any of its inputs. wastageValue must already include
- * BOTH stock_entries.wastage_value and ingredient_entries.wastage_value
- * (§3.3) — this function doesn't know or care which table each unit came
- * from, the caller sums both first. staffMealValue is deliberately a
- * separate parameter, never folded into wastageValue — staff meals are a
- * distinct, third deduction bucket (consumed on purpose, not spoiled), not
- * a wastage sub-type.
+ * §3.3, revised per docs/backlog/05_stock_consumption.md, 2026-07-22):
+ * sales_value - cost_value - expenses. Both inputs are already
+ * period/location-aggregated in SQL before reaching this function — this
+ * is a pure combining step, never a re-derivation of either input.
+ *
+ * wastage/staff-meal/complimentary-meal/stock-adjustment values are
+ * DELIBERATELY NOT subtracted here (client-directed change, 2026-07-22 —
+ * WaPrecious). Since periodicCogs() (below) derives cost from the change
+ * in stock value over a period, and all four of those categories already
+ * reduce closing_stock (§3.3, §3.5, §3.10), their cost is already
+ * embedded in costValue. Subtracting them again here double-counted that
+ * cost against net profit. They remain visible, reporting-only figures
+ * (the dashboard's "Stock Consumption" section) — informational, not a
+ * profit deduction.
  *
  * costValue is expected to be periodicCogs()'s output as of the post-launch
  * COGS methodology change (2026-07-21) — see that function's doc comment.
@@ -221,12 +260,8 @@ export function netProfit(params: {
   salesValue: number;
   costValue: number;
   expenses: number;
-  wastageValue: number;
-  staffMealValue: number;
 }): number {
-  return (
-    params.salesValue - params.costValue - params.expenses - params.wastageValue - params.staffMealValue
-  );
+  return params.salesValue - params.costValue - params.expenses;
 }
 
 /**

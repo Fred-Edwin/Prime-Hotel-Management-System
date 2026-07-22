@@ -52,6 +52,17 @@ import { serverErrorResponse } from "@/lib/errors";
  * (docs/01_DATA_MODEL.md §3.4) — sales_value/cost_value sums here pick up
  * orders for free, no separate order aggregation needed (per
  * docs/phases/phase6_context.md's "Instructions for the next phase").
+ *
+ * Net profit no longer subtracts wastage/staff-meal/complimentary-meal/
+ * stock-adjustment value (client-directed change, 2026-07-22 — see
+ * docs/backlog/05_stock_consumption.md, lib/calculations.ts's netProfit()
+ * doc comment). Since periodicCogs() derives cost from the change in
+ * stock value over a period, and all four of those categories already
+ * reduce closing_stock, their cost is already embedded in costValue —
+ * subtracting them again in netProfit() double-counted it. They remain
+ * visible as `stockConsumption`, a combined total + per-category
+ * breakdown, purely for stock-control reporting — never fed into
+ * netProfit()'s inputs.
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -89,6 +100,8 @@ export async function GET(request: Request) {
     ingredientSummaryRes,
     expensesSummaryRes,
     staffMealSummaryRes,
+    complimentaryMealSummaryRes,
+    stockAdjustmentSummaryRes,
     trendRes,
     lowStockItemsRes,
     lowStockIngredientsRes,
@@ -97,6 +110,8 @@ export async function GET(request: Request) {
     supabase.rpc("dashboard_ingredient_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_expenses_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_staff_meal_summary", { p_from: from, p_to: to }),
+    supabase.rpc("dashboard_complimentary_meal_summary", { p_from: from, p_to: to }),
+    supabase.rpc("dashboard_stock_adjustment_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_daily_trend", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_low_stock_items"),
     supabase.rpc("dashboard_low_stock_ingredients"),
@@ -107,6 +122,8 @@ export async function GET(request: Request) {
     ingredientSummaryRes,
     expensesSummaryRes,
     staffMealSummaryRes,
+    complimentaryMealSummaryRes,
+    stockAdjustmentSummaryRes,
     trendRes,
     lowStockItemsRes,
     lowStockIngredientsRes,
@@ -117,6 +134,8 @@ export async function GET(request: Request) {
   const stockByLocation = stockSummaryRes.data ?? [];
   const expensesByLocation = expensesSummaryRes.data ?? [];
   const staffMealsByLocation = staffMealSummaryRes.data ?? [];
+  const complimentaryMealsByLocation = complimentaryMealSummaryRes.data ?? [];
+  const stockAdjustmentsByLocation = stockAdjustmentSummaryRes.data ?? [];
   const ingredientSummary = ingredientSummaryRes.data?.[0] ?? {
     wastage_value: 0,
     closing_stock_value: 0,
@@ -139,6 +158,14 @@ export async function GET(request: Request) {
   const businessWideExpenses = expensesByLocation.find((r) => r.location === null)?.total_amount ?? 0;
   const restaurantStaffMeals = staffMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
   const canteenStaffMeals = staffMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
+  const restaurantComplimentaryMeals =
+    complimentaryMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
+  const canteenComplimentaryMeals =
+    complimentaryMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
+  const restaurantStockAdjustments =
+    stockAdjustmentsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
+  const canteenStockAdjustments =
+    stockAdjustmentsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
 
   // Combined periodic COGS (client formula, see route doc comment above):
   // items' + ingredients' opening/added/closing VALUES all summed
@@ -160,22 +187,15 @@ export async function GET(request: Request) {
       ingredientSummary.closing_stock_value,
   });
 
+  const combinedWastageValue =
+    (restaurantStock?.wastage_value ?? 0) + (canteenStock?.wastage_value ?? 0) + ingredientSummary.wastage_value;
+  const combinedStaffMealValue = restaurantStaffMeals + canteenStaffMeals;
+  const combinedComplimentaryMealValue = restaurantComplimentaryMeals + canteenComplimentaryMeals;
+  const combinedStockAdjustmentValue = restaurantStockAdjustments + canteenStockAdjustments;
+
   const combined = {
     salesValue: (restaurantStock?.sales_value ?? 0) + (canteenStock?.sales_value ?? 0),
     costValue: combinedCostValue,
-    // Ingredient wastage is restaurant-only (§3.2) — folded into the
-    // combined figure, but not attributed to canteen's per-location split.
-    wastageValue:
-      (restaurantStock?.wastage_value ?? 0) +
-      (canteenStock?.wastage_value ?? 0) +
-      ingredientSummary.wastage_value,
-    // Staff meals (§3.5) — a distinct figure from wastageValue, never
-    // folded into it. Restaurant-only in practice today (canteen items
-    // can't currently be claimed as a staff meal from canteen's own
-    // screen — canteen staff use the same /expenses tab, scoped to their
-    // own location like every other write path), but summed the same
-    // both-locations way as expenses/wastage for forward consistency.
-    staffMealValue: restaurantStaffMeals + canteenStaffMeals,
     closingStockValue:
       (restaurantStock?.closing_stock_value ?? 0) +
       (canteenStock?.closing_stock_value ?? 0) +
@@ -185,6 +205,21 @@ export async function GET(request: Request) {
   };
 
   const netProfitCombined = netProfit(combined);
+
+  // Stock Consumption (docs/backlog/05_stock_consumption.md, 2026-07-22):
+  // wastage + staff meals + complimentary meals + stock adjustments,
+  // reporting-only — none of these four feed netProfit()'s inputs
+  // anymore (their cost is already embedded in costValue via reduced
+  // closing stock). Combined total + per-category breakdown, mirroring
+  // how `combined`/`byLocation` already separate a total from its parts.
+  const stockConsumption = {
+    total:
+      combinedWastageValue + combinedStaffMealValue + combinedComplimentaryMealValue + combinedStockAdjustmentValue,
+    wastageValue: combinedWastageValue,
+    staffMealValue: combinedStaffMealValue,
+    complimentaryMealValue: combinedComplimentaryMealValue,
+    stockAdjustmentValue: combinedStockAdjustmentValue,
+  };
 
   // Restaurant/canteen menu-item stock, shown separately from ingredients
   // below (post-launch addition, 2026-07-21 — client wants to see, at a
@@ -211,12 +246,13 @@ export async function GET(request: Request) {
     closingStockValue: canteenStock?.closing_stock_value ?? 0,
   });
 
+  const restaurantWastageValue = (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value;
+  const canteenWastageValue = canteenStock?.wastage_value ?? 0;
+
   const byLocation = {
     restaurant: {
       salesValue: restaurantStock?.sales_value ?? 0,
       costValue: restaurantCostValue,
-      wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
-      staffMealValue: restaurantStaffMeals,
       closingStockValue: restaurantStock?.closing_stock_value ?? 0,
       openingStock: restaurantStock?.opening_stock ?? 0,
       addedStock: restaurantStock?.added_stock ?? 0,
@@ -227,16 +263,19 @@ export async function GET(request: Request) {
       netProfit: netProfit({
         salesValue: restaurantStock?.sales_value ?? 0,
         costValue: restaurantCostValue,
-        wastageValue: (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value,
-        staffMealValue: restaurantStaffMeals,
         expenses: restaurantExpenses,
       }),
+      stockConsumption: {
+        total: restaurantWastageValue + restaurantStaffMeals + restaurantComplimentaryMeals + restaurantStockAdjustments,
+        wastageValue: restaurantWastageValue,
+        staffMealValue: restaurantStaffMeals,
+        complimentaryMealValue: restaurantComplimentaryMeals,
+        stockAdjustmentValue: restaurantStockAdjustments,
+      },
     },
     canteen: {
       salesValue: canteenStock?.sales_value ?? 0,
       costValue: canteenCostValue,
-      wastageValue: canteenStock?.wastage_value ?? 0,
-      staffMealValue: canteenStaffMeals,
       closingStockValue: canteenStock?.closing_stock_value ?? 0,
       openingStock: canteenStock?.opening_stock ?? 0,
       addedStock: canteenStock?.added_stock ?? 0,
@@ -247,10 +286,15 @@ export async function GET(request: Request) {
       netProfit: netProfit({
         salesValue: canteenStock?.sales_value ?? 0,
         costValue: canteenCostValue,
-        wastageValue: canteenStock?.wastage_value ?? 0,
-        staffMealValue: canteenStaffMeals,
         expenses: canteenExpenses,
       }),
+      stockConsumption: {
+        total: canteenWastageValue + canteenStaffMeals + canteenComplimentaryMeals + canteenStockAdjustments,
+        wastageValue: canteenWastageValue,
+        staffMealValue: canteenStaffMeals,
+        complimentaryMealValue: canteenComplimentaryMeals,
+        stockAdjustmentValue: canteenStockAdjustments,
+      },
     },
   };
 
@@ -272,7 +316,7 @@ export async function GET(request: Request) {
     period,
     from,
     to,
-    combined: { ...combined, netProfit: netProfitCombined },
+    combined: { ...combined, netProfit: netProfitCombined, stockConsumption },
     byLocation,
     ingredients,
     trend: trendRes.data ?? [],

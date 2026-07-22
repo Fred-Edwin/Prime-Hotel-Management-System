@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { CategoryChips } from "@/components/CategoryChips";
 import { Input } from "@/components/Input";
 import { Modal } from "@/components/Modal";
 import { PeriodToggle } from "@/components/PeriodToggle";
@@ -56,16 +57,30 @@ interface IngredientLedgerRow {
   low_stock_threshold: number;
 }
 
-interface StaffMealLedgerRow {
-  meal_date: string;
-  item_id: string;
-  item_name: string;
-  location: "restaurant" | "canteen";
+type StockConsumptionCategory = "wastage" | "staff_meal" | "complimentary_meal" | "stock_adjustment";
+
+/**
+ * Unified Stock Consumption ledger row (docs/backlog/05_stock_consumption.md)
+ * — a tagged union over wastage/staff meals/complimentary meals/stock
+ * adjustments, replacing the old standalone StaffMealLedgerRow. Only one
+ * of item_id/ingredient_id is ever non-null per row (wastage can be
+ * either; the three per-claim categories are always items). staff_id/
+ * staff_name are null for wastage rows (no per-claim attribution, §3.3).
+ */
+interface StockConsumptionLedgerRow {
+  category: StockConsumptionCategory;
+  entry_date: string;
+  item_id: string | null;
+  item_name: string | null;
+  ingredient_id: string | null;
+  ingredient_name: string | null;
+  unit: string | null;
+  location: "restaurant" | "canteen" | null;
   quantity: number;
   value: number;
   note: string | null;
-  staff_id: string;
-  staff_name: string;
+  staff_id: string | null;
+  staff_name: string | null;
 }
 
 interface LedgerResponse {
@@ -74,7 +89,7 @@ interface LedgerResponse {
   to: string;
   items: ItemLedgerRow[];
   ingredients: IngredientLedgerRow[];
-  staffMeals: StaffMealLedgerRow[];
+  stockConsumption: StockConsumptionLedgerRow[];
 }
 
 const PERIOD_OPTIONS = [
@@ -147,6 +162,12 @@ export function LedgerClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ingredientSearch, setIngredientSearch] = useState("");
+  // Stock Consumption category filter (docs/backlog/05_stock_consumption.md)
+  // — "all" shows every category in one list, matching the confirmed
+  // "one section, filter chips" UI direction.
+  const [consumptionCategoryFilter, setConsumptionCategoryFilter] = useState<
+    "all" | StockConsumptionCategory
+  >("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [editForm, setEditForm] = useState<Record<string, number>>({});
@@ -458,15 +479,37 @@ export function LedgerClient() {
     (acc, row) => ({
       salesValue: acc.salesValue + row.sales_value,
       costValue: acc.costValue + row.cost_value,
-      wastageValue: acc.wastageValue + row.wastage_value,
     }),
-    { salesValue: 0, costValue: 0, wastageValue: 0 }
+    { salesValue: 0, costValue: 0 }
   );
 
-  // Staff meal value is deliberately its own total, never merged into
-  // totals.wastageValue above — a distinct bucket (§3.5), same reasoning
-  // as the dashboard's separate wastage/staff-meal MetricCards.
-  const staffMealTotal = (data?.staffMeals ?? []).reduce((sum, row) => sum + row.value, 0);
+  // Stock Consumption total (docs/backlog/05_stock_consumption.md) —
+  // wastage + staff meals + complimentary meals + stock adjustments,
+  // combined into one figure for the summary strip; the section below
+  // breaks it down per-category via the filter chips.
+  const stockConsumptionRows = data?.stockConsumption ?? [];
+  const stockConsumptionTotal = stockConsumptionRows.reduce((sum, row) => sum + row.value, 0);
+  const filteredConsumptionRows =
+    consumptionCategoryFilter === "all"
+      ? stockConsumptionRows
+      : stockConsumptionRows.filter((row) => row.category === consumptionCategoryFilter);
+
+  const CONSUMPTION_CATEGORY_LABELS: Record<StockConsumptionCategory, string> = {
+    wastage: "Wastage",
+    staff_meal: "Staff meal",
+    complimentary_meal: "Complimentary meal",
+    stock_adjustment: "Stock adjustment",
+  };
+
+  // Stock adjustments are signed (docs/backlog/05_stock_consumption.md,
+  // 2026-07-22): a negative quantity is a surplus (stock found, added
+  // back), positive is a shortfall (missing stock) — label each row
+  // distinctly rather than showing a bare category name that reads as
+  // always-a-loss for this one category.
+  function consumptionRowLabel(row: StockConsumptionLedgerRow): string {
+    if (row.category !== "stock_adjustment") return CONSUMPTION_CATEGORY_LABELS[row.category];
+    return row.quantity < 0 ? "Stock adjustment (surplus)" : "Stock adjustment (shortfall)";
+  }
 
   return (
     <div className={`${styles.page} ${styles.pageFullBleed}`}>
@@ -540,8 +583,7 @@ export function LedgerClient() {
           <div className={styles.summaryStrip}>
             <MetricCard label="Total sales value" value={money(totals.salesValue)} />
             <MetricCard label="Total cost value" value={money(totals.costValue)} />
-            <MetricCard label="Total wastage value" value={money(totals.wastageValue)} />
-            <MetricCard label="Staff meals value" value={money(staffMealTotal)} />
+            <MetricCard label="Non-sales stock consumption value" value={money(stockConsumptionTotal)} />
             <MetricCard label="Rows" value={String(data.items.length)} />
           </div>
 
@@ -1072,17 +1114,32 @@ export function LedgerClient() {
             </section>
           )}
 
-          {/* Staff meals (docs/01_DATA_MODEL.md §3.5, docs/backlog/02_staff_meals.md)
-              — itemized who/what/how much/value, read-only here (claims
-              are logged by staff themselves on /expenses, not editable
-              from the admin ledger, per the confirmed design's scope).
-              Mirrors the Ingredients section's table/mobile-card shape,
-              minus any edit affordance. Not location-gated like
-              Ingredients (restaurant-only) — staff meals can happen at
-              either location. */}
+          {/* Stock Consumption (docs/backlog/05_stock_consumption.md,
+              replacing the old standalone "Staff meals" section) —
+              wastage + staff meals + complimentary meals + stock
+              adjustments in one unified, category-filterable list.
+              Read-only here: wastage still comes from the same admin
+              ledger-edit path as before (§3.4); the three per-claim
+              categories are logged by staff themselves on /expenses.
+              Reporting-only figures (docs/backlog/05_stock_consumption.md)
+              — no longer subtracted from net profit, see dashboard's
+              Stock Consumption section for the same figures aggregated. */}
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Staff meals</h2>
+              <h2 className={styles.sectionTitle}>Non-sales stock consumption</h2>
+            </div>
+            <div className={styles.toolbarRow}>
+              <CategoryChips
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "wastage", label: "Wastage" },
+                  { value: "staff_meal", label: "Staff meals" },
+                  { value: "complimentary_meal", label: "Complimentary meals" },
+                  { value: "stock_adjustment", label: "Stock adjustments" },
+                ]}
+                value={consumptionCategoryFilter}
+                onChange={(value) => setConsumptionCategoryFilter(value as "all" | StockConsumptionCategory)}
+              />
             </div>
             <>
                 <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
@@ -1090,8 +1147,9 @@ export function LedgerClient() {
                     <thead>
                       <tr>
                         <th>Date</th>
+                        <th>Category</th>
                         <th>Staff</th>
-                        <th>Item</th>
+                        <th>Item / Ingredient</th>
                         <th>Location</th>
                         <th className={catalogStyles.numeric}>Quantity</th>
                         <th className={catalogStyles.numeric}>Value</th>
@@ -1099,27 +1157,35 @@ export function LedgerClient() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.staffMeals.length === 0 && (
+                      {filteredConsumptionRows.length === 0 && (
                         <tr>
-                          <td colSpan={7} className={styles.emptyRow}>
+                          <td colSpan={8} className={styles.emptyRow}>
                             <EmptyState
                               icon={<Icon name="wastage" size={48} />}
-                              heading="No staff meals this period"
-                              body="Meals staff log on the Expenses screen's Staff meals tab will show up here, itemized by who and what."
+                              heading="Nothing in this category this period"
+                              body="Wastage, staff meals, complimentary meals, and stock adjustments will show up here, itemized by category."
                             />
                           </td>
                         </tr>
                       )}
-                      {data.staffMeals.map((row) => (
-                        <tr key={`${row.meal_date}-${row.item_id}-${row.staff_id}-${row.quantity}`}>
-                          <td>{row.meal_date}</td>
-                          <td>{row.staff_name}</td>
-                          <td>{row.item_name}</td>
+                      {filteredConsumptionRows.map((row, i) => (
+                        <tr key={`${row.category}-${row.entry_date}-${row.item_id ?? row.ingredient_id}-${row.staff_id}-${i}`}>
+                          <td>{row.entry_date}</td>
+                          <td>{consumptionRowLabel(row)}</td>
+                          <td>{row.staff_name ?? "—"}</td>
+                          <td>{row.item_name ?? row.ingredient_name}</td>
                           <td className={styles.locationCell}>
-                            {row.location === "restaurant" ? "Restaurant" : "Canteen"}
+                            {row.location === "restaurant" ? "Restaurant" : row.location === "canteen" ? "Canteen" : "—"}
                           </td>
-                          <td className={catalogStyles.numeric}>{qty(row.quantity)}</td>
-                          <td className={catalogStyles.numeric}>{money(row.value)}</td>
+                          <td className={catalogStyles.numeric}>
+                            {row.quantity < 0 ? "+" : ""}
+                            {qty(Math.abs(row.quantity))}
+                            {row.unit ? ` ${row.unit}` : ""}
+                          </td>
+                          <td className={catalogStyles.numeric}>
+                            {row.value < 0 ? "+" : ""}
+                            {money(Math.abs(row.value))}
+                          </td>
                           <td>{row.note ?? "—"}</td>
                         </tr>
                       ))}
@@ -1128,9 +1194,10 @@ export function LedgerClient() {
                 </Card>
 
                 <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-                  {data.staffMeals.map((row) => {
-                    const key = `${row.meal_date}-${row.item_id}-${row.staff_id}-${row.quantity}`;
+                  {filteredConsumptionRows.map((row, i) => {
+                    const key = `${row.category}-${row.entry_date}-${row.item_id ?? row.ingredient_id}-${row.staff_id}-${i}`;
                     const isOpen = expandedRows.has(key);
+                    const subjectName = row.item_name ?? row.ingredient_name ?? "—";
                     return (
                       <li key={key} className={catalogStyles.itemCard}>
                         <button
@@ -1140,13 +1207,17 @@ export function LedgerClient() {
                           onClick={() => toggleExpanded(key)}
                         >
                           <span className={catalogStyles.itemCardIdentity}>
-                            <span className={catalogStyles.itemCardName}>{row.item_name}</span>
+                            <span className={catalogStyles.itemCardName}>{subjectName}</span>
                             <span className={catalogStyles.itemCardCategory}>
-                              {row.meal_date} · {row.staff_name}
+                              {consumptionRowLabel(row)} · {row.entry_date}
+                              {row.staff_name ? ` · ${row.staff_name}` : ""}
                             </span>
                           </span>
                           <span className={catalogStyles.itemCardMetrics}>
-                            <span className={catalogStyles.itemCardPrice}>{money(row.value)}</span>
+                            <span className={catalogStyles.itemCardPrice}>
+                              {row.value < 0 ? "+" : ""}
+                              {money(Math.abs(row.value))}
+                            </span>
                           </span>
                           <span
                             className={[
@@ -1167,15 +1238,24 @@ export function LedgerClient() {
                           <div className={catalogStyles.itemCardDetailsInner}>
                             <div className={catalogStyles.itemCardDetailLine}>
                               <span>Location</span>
-                              <strong>{row.location === "restaurant" ? "Restaurant" : "Canteen"}</strong>
+                              <strong>
+                                {row.location === "restaurant" ? "Restaurant" : row.location === "canteen" ? "Canteen" : "—"}
+                              </strong>
                             </div>
                             <div className={catalogStyles.itemCardDetailLine}>
                               <span>Quantity</span>
-                              <strong>{qty(row.quantity)}</strong>
+                              <strong>
+                                {row.quantity < 0 ? "+" : ""}
+                                {qty(Math.abs(row.quantity))}
+                                {row.unit ? ` ${row.unit}` : ""}
+                              </strong>
                             </div>
                             <div className={catalogStyles.itemCardDetailLine}>
                               <span>Value</span>
-                              <strong>{money(row.value)}</strong>
+                              <strong>
+                                {row.value < 0 ? "+" : ""}
+                                {money(Math.abs(row.value))}
+                              </strong>
                             </div>
                             {row.note && (
                               <div className={catalogStyles.itemCardDetailLine}>
