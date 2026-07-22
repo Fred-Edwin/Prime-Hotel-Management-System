@@ -39,6 +39,7 @@ export function StoreClient() {
   const entryDate = useMemo(() => todayISO(), []);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [savedEntries, setSavedEntries] = useState<Record<string, IngredientEntryRow>>({});
+  const [openingStock, setOpeningStock] = useState<Record<string, number>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [fieldStates, setFieldStates] = useState<Record<string, Record<FieldKey, IngredientFieldSaveState>>>(
     {},
@@ -82,6 +83,7 @@ export function StoreClient() {
 
     setIngredients(fetchedIngredients);
     setSavedEntries(entriesById);
+    setOpeningStock(body.opening_stock ?? {});
     setLines(nextLines);
     setLoading(false);
   }, [entryDate]);
@@ -96,8 +98,12 @@ export function StoreClient() {
     };
   }, [load]);
 
+  // A saved row's own opening_stock is authoritative once it exists;
+  // before that, fall back to the carry-forward figure the GET route
+  // computed from yesterday's closing_stock (see route's doc comment) —
+  // never a bare 0, which would misrepresent real stock on a fresh day.
   function openingStockFor(ingredientId: string): number {
-    return savedEntries[ingredientId]?.opening_stock ?? 0;
+    return savedEntries[ingredientId]?.opening_stock ?? openingStock[ingredientId] ?? 0;
   }
 
   function setFieldState(ingredientId: string, field: FieldKey, state: IngredientFieldSaveState) {

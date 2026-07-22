@@ -58,6 +58,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   const entryDate = useMemo(() => todayISO(), []);
   const [items, setItems] = useState<Item[]>([]);
   const [savedEntries, setSavedEntries] = useState<Record<string, StockEntryRow>>({});
+  const [openingStock, setOpeningStock] = useState<Record<string, number>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -109,6 +110,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
 
       setItems(fetchedItems);
       setSavedEntries(entriesByItemId);
+      setOpeningStock(body.opening_stock ?? {});
       setLines(nextLines);
       setLoading(false);
     }
@@ -132,16 +134,25 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
     return byCategory.filter((item) => item.name.toLowerCase().includes(term));
   }, [items, activeCategory, searchTerm]);
 
+  // A saved row's own opening_stock is authoritative once it exists;
+  // before that, fall back to the carry-forward figure the GET route
+  // computed from yesterday's closing_stock (see route's doc comment) —
+  // never a bare 0, which would misrepresent real stock on a fresh day.
   function openingStockFor(itemId: string): number {
-    return savedEntries[itemId]?.opening_stock ?? 0;
+    return savedEntries[itemId]?.opening_stock ?? openingStock[itemId] ?? 0;
   }
 
   function remainingStockFor(itemId: string): number {
     const line = lines[itemId] ?? emptyLine();
     const opening = openingStockFor(itemId);
+    const wastage = savedEntries[itemId]?.wastage ?? 0;
     const total = opening + line.addedStock;
-    // How much more (sold + sent) can still be taken from total_stock.
-    return total - line.tillQuantitySold - line.sentOut;
+    // How much more (sold + sent) can still be taken from total_stock —
+    // wastage (admin-entered via the ledger edit screen, §3.3) already
+    // reduced physical stock, so it must come off "Available" too, not
+    // just closing_stock, or staff see a count that no longer matches
+    // what's actually on the shelf.
+    return total - line.tillQuantitySold - line.sentOut - wastage;
   }
 
   function setFieldState(itemId: string, field: AutosaveFieldKey, state: ItemEntryFieldSaveState) {
@@ -347,7 +358,7 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
                   numericInput: {
                     value: line.sentOut,
                     onChange: (next) => updateStoreManagerField(item.id, "sentOut", next),
-                    max: opening + line.addedStock - line.tillQuantitySold,
+                    max: remaining + line.sentOut,
                     limitMessage: `Only ${remaining} left`,
                     saveState: states.sentOut ?? "idle",
                   },

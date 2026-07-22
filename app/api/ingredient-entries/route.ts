@@ -12,6 +12,14 @@ function requireStoreManager(user: Awaited<ReturnType<typeof getCurrentUser>>) {
  * GET /api/ingredient-entries?date=YYYY-MM-DD
  * Store-manager-only (docs/01_DATA_MODEL.md §3.2) — returns the active
  * ingredient catalog plus any existing ingredient_entries rows for that date.
+ *
+ * `opening_stock` (keyed by ingredient_id) is a computed carry-forward
+ * figure for any ingredient with no row yet today — same rationale as
+ * GET /api/stock-entries's identical field: without this lookup, the
+ * store screen would show "Opening: 0" for an untouched ingredient on a
+ * fresh day even though real stock carried forward from yesterday's
+ * closing_stock, exactly like save_ingredient_entry() already derives at
+ * write time (§3.2).
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -38,7 +46,29 @@ export async function GET(request: Request) {
 
   if (entriesError) return serverErrorResponse(entriesError, "ingredient-entries");
 
-  return NextResponse.json({ ingredients, entries });
+  const entryByIngredientId = new Map((entries ?? []).map((row) => [row.ingredient_id, row]));
+  const ingredientIdsMissingToday = (ingredients ?? [])
+    .map((ingredient) => ingredient.id)
+    .filter((id) => !entryByIngredientId.has(id));
+
+  const openingStockByIngredientId: Record<string, number> = {};
+  if (ingredientIdsMissingToday.length > 0) {
+    const priorQuery = supabase
+      .from("ingredient_entries")
+      .select("ingredient_id, closing_stock, entry_date")
+      .lt("entry_date", date)
+      .in("ingredient_id", ingredientIdsMissingToday)
+      .order("entry_date", { ascending: false });
+    const { data: priorRows, error: priorError }: Awaited<typeof priorQuery> = await priorQuery;
+    if (priorError) return serverErrorResponse(priorError, "ingredient-entries");
+    for (const row of priorRows ?? []) {
+      if (!(row.ingredient_id in openingStockByIngredientId)) {
+        openingStockByIngredientId[row.ingredient_id] = row.closing_stock;
+      }
+    }
+  }
+
+  return NextResponse.json({ ingredients, entries, opening_stock: openingStockByIngredientId });
 }
 
 /**

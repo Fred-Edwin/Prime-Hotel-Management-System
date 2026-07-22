@@ -55,6 +55,7 @@ export function CanteenEntryClient() {
   const requestedDate = useMemo(() => todayISO(), []);
   const [items, setItems] = useState<Item[]>([]);
   const [savedEntries, setSavedEntries] = useState<Record<string, StockEntryRow>>({});
+  const [openingStock, setOpeningStock] = useState<Record<string, number>>({});
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [suppliedTotals, setSuppliedTotals] = useState<Record<string, number>>({});
   const [entryDate, setEntryDate] = useState<string>(() => todayISO());
@@ -111,6 +112,7 @@ export function CanteenEntryClient() {
 
       setItems(fetchedItems);
       setSavedEntries(entriesByItemId);
+      setOpeningStock(body.opening_stock ?? {});
       setLines(nextLines);
       setSuppliedTotals(body.supplied_totals ?? {});
       setEntryDate(body.entry_date ?? requestedDate);
@@ -137,15 +139,23 @@ export function CanteenEntryClient() {
     [items],
   );
 
+  // A saved row's own opening_stock is authoritative once it exists;
+  // before that, fall back to the carry-forward figure the GET route
+  // computed from yesterday's closing_stock (see route's doc comment) —
+  // never a bare 0, which would misrepresent real stock on a fresh day.
   function openingStockFor(itemId: string): number {
-    return savedEntries[itemId]?.opening_stock ?? 0;
+    return savedEntries[itemId]?.opening_stock ?? openingStock[itemId] ?? 0;
   }
 
   function remainingStockFor(item: Item): number {
     const line = lines[item.id] ?? emptyLine();
     const opening = openingStockFor(item.id);
     const addedStock = item.supply_type === "canteen_supplied" ? (suppliedTotals[item.id] ?? 0) : line.addedStock;
-    return opening + addedStock - line.tillQuantitySold;
+    const wastage = savedEntries[item.id]?.wastage ?? 0;
+    // Wastage (admin-entered via the ledger edit screen, §3.3) already
+    // reduced physical stock, so it must come off "Available" too — see
+    // the matching note in EntryClient.tsx's remainingStockFor().
+    return opening + addedStock - line.tillQuantitySold - wastage;
   }
 
   function setFieldState(itemId: string, field: CanteenFieldKey, state: ItemEntryFieldSaveState) {

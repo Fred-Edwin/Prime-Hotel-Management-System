@@ -21,6 +21,14 @@ import { describeSaveError, serverErrorResponse } from "@/lib/errors";
  * `canteen_supplied_total` figure so the screen can show the read-only
  * aggregate before the staff member has saved anything yet — now a
  * same-day figure, not a weekly sum.
+ *
+ * `opening_stock` (keyed by item_id) is a computed carry-forward figure,
+ * not a column read straight off `entries`: for an item nobody has saved
+ * a field for yet today, there's no stock_entries row at all, so its real
+ * opening stock (yesterday's closing_stock) has to be looked up
+ * separately, same as every write-path RPC already does at save time
+ * (§3.1). Without this, the entry screen would show "Opening: 0" for
+ * every untouched item on a fresh day.
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -65,8 +73,40 @@ export async function GET(request: Request) {
 
   if (entriesError) return serverErrorResponse(entriesError, "stock-entries");
 
+  // Opening stock carry-forward (§3.1): every write-path RPC derives a
+  // brand-new row's opening_stock from the prior day's closing_stock, but
+  // that only happens once someone actually saves a field. Before that
+  // first save today, there is no stock_entries row for the item at all —
+  // so without this lookup, the entry screen would show "Opening: 0" for
+  // every untouched item on a fresh day, even though real carried-forward
+  // stock exists. Mirrors the POST handler's existing itemsMissingToday
+  // logic below, applied here for GET's read-only render instead of a
+  // pre-oversell check.
+  const entryByItemId = new Map((entries ?? []).map((row) => [row.item_id, row]));
+  const itemIdsMissingToday = (items ?? [])
+    .map((item) => item.id)
+    .filter((id) => !entryByItemId.has(id));
+
+  const openingStockByItemId: Record<string, number> = {};
+  if (itemIdsMissingToday.length > 0) {
+    const priorQuery = supabase
+      .from("stock_entries")
+      .select("item_id, closing_stock, entry_date")
+      .eq("location", user.location)
+      .lt("entry_date", entryDate)
+      .in("item_id", itemIdsMissingToday)
+      .order("entry_date", { ascending: false });
+    const { data: priorRows, error: priorError }: Awaited<typeof priorQuery> = await priorQuery;
+    if (priorError) return serverErrorResponse(priorError, "stock-entries");
+    for (const row of priorRows ?? []) {
+      if (!(row.item_id in openingStockByItemId)) {
+        openingStockByItemId[row.item_id] = row.closing_stock;
+      }
+    }
+  }
+
   if (user.location !== "canteen") {
-    return NextResponse.json({ items, entries, entry_date: entryDate });
+    return NextResponse.json({ items, entries, entry_date: entryDate, opening_stock: openingStockByItemId });
   }
 
   const suppliedItems = (items ?? []).filter((item) => item.supply_type === "canteen_supplied");
@@ -95,6 +135,7 @@ export async function GET(request: Request) {
     entries,
     entry_date: entryDate,
     supplied_totals: suppliedTotals,
+    opening_stock: openingStockByItemId,
   });
 }
 
