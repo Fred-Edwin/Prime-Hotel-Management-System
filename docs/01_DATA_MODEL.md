@@ -959,6 +959,38 @@ COGS = (Opening Value_items + Opening Value_ingredients)
 
 ---
 
+## 3.9 Dashboard "Today" false-zero bug: closing stock must carry forward per item, not per location (post-launch bug fix, 2026-07-22)
+
+**Client-reported bug** (WaPrecious): the admin dashboard's "Today" period showed "Closing Stock (Restaurant)," "Closing Stock (Canteen)," and every other stock-derived figure as **KES 0**, first thing in the morning, before any staff member had saved a stock entry for that day yet. Her expectation, in her own words: "If no sales have been made, I expect the previous day's Closing Stock to automatically appear on the dashboard as the current Opening Stock, and the Closing Stock should remain unchanged until there are sales or additional stock movements." Week/Month periods (which always include days with real entries) showed correct nonzero numbers — only a period with zero rows in range was affected.
+
+### Root cause
+
+`dashboard_stock_summary(p_from, p_to)` and `dashboard_ingredient_summary(p_from, p_to)` (§3.7, §3.8) were plain `where entry_date >= p_from and entry_date <= p_to` queries, `stock_summary` additionally `group by location`. **If zero rows exist in that date range for a location (or, for ingredients, the whole table), the query returns zero ROWS for that location — not a row with `closing_stock = 0`.** `app/api/dashboard/summary/route.ts` then does `restaurantStock?.closing_stock ?? 0` (same pattern for every other field, every location) — so "no row returned" silently became a displayed `0`, visually indistinguishable from "every unit of stock genuinely sold out." This affected every value/quantity column these two functions return for an affected location: `closing_stock`, `closing_stock_value`, `opening_stock`, `opening_stock_value`, `sales_value`, `cost_value`, etc.
+
+This was a real correctness bug, not a client misunderstanding of what "closing stock" means — §3.1 already establishes that `opening_stock` carries forward from the prior period's `closing_stock` at the row-write level; this aggregation-layer bug just never carried that same idea into the dashboard's summary queries.
+
+### The fix must be per item, not per location
+
+A location can have some items entered for today and others not yet — each item needs its own independent fallback, not a location-wide "does anything exist in range" check. `20260722060000_dashboard_carry_forward_closing_stock.sql` rewrites both functions around a **per-item universe**: every `(item_id, location)` pair (ingredients: every `ingredient_id`) that has **ever** appeared in `stock_entries`/`ingredient_entries` — a plain `distinct`, not date-bounded. An item genuinely never entered at all correctly still contributes nothing (there is no "last known value" for it to carry forward, and it was never included in range under the old logic either).
+
+For each item/location in that universe:
+
+- **`closing_stock`/`closing_stock_value`** (point-in-time, period-end): the latest row **at or before `p_to`** — the `p_from` lower bound is dropped for this lookup specifically. An item with no row inside `[p_from, p_to]` now carries forward its last known closing stock instead of vanishing from the sum.
+- **`opening_stock`/`opening_stock_value`** (point-in-time, period-start): the **closing** stock of the latest row **strictly before `p_from`** when one exists — falling back to the same "latest at or before `p_to`" lookup `closing_stock` uses when no earlier row exists at all (an item first touched mid-period has no prior balance, so its earliest known state is correctly both its opening and current figure — it had no stock before it existed).
+- **Genuine period-sum columns** (`added_stock`, `added_stock_value`, `sent_out`, `quantity_sold`, `sales_value`, `cost_value`, `wastage_value` for stock; `received`, `received_value`, `quantity_used`, `wastage_value` for ingredients) are **unchanged** — real flows that occurred inside `[p_from, p_to]`, correctly zero for an item with no activity that period. Only the point-in-time balance columns needed the carry-forward fix; summing a genuine flow across a range an item had no activity in was never the bug.
+
+This preserves §3.7's/§3.8's existing point-in-time-vs-period-sum distinction exactly — it extends the *carry-forward reach* of the point-in-time lookups (no longer bounded below by `p_from`), it does not change which columns are point-in-time vs. summed.
+
+**Correction found in review, before this reached either hosted project:** the migration's first draft read the prior row's own `opening_stock` column for the `opening_stock` fallback (a same-name, wrong-column mistake) instead of that row's `closing_stock`. The prior row's `opening_stock` is what was on the shelf when *that* day started, before *that* day's own sales/wastage/etc. — reading it re-derives the prior day's cost movement instead of representing "nothing has moved since the last known close." Concretely, this made `costValue` compute a nonzero, sometimes **negative**, figure on a genuinely quiet "Today" (opening_stock_value ≠ closing_stock_value for the same fallback item, purely due to the wrong column, even though nothing had actually moved). Caught by comparing a live "Today" API response against expected values before deployment — fixed in the same migration file prior to being handed to the human to apply, so `prosper-hotel-dev`/`prime-hotel-demo` only ever received the corrected version.
+
+### Why this doesn't touch COGS or the trend chart
+
+`periodicCogs()` (`lib/calculations.ts`, §3.8) is unchanged — it already just combines whatever `opening_stock_value`/`added_stock_value`/`closing_stock_value` the aggregation functions hand it. Because the "Today" bug meant those inputs were false zeros, `combined.costValue` on a fresh morning was *also* silently wrong before this fix (a real `periodicCogs()` computed against three zeros collapses to zero) — this fix corrects that as a side effect, without changing the formula itself. `dashboard_daily_trend()` (the trend chart, §3.8) is untouched — it never had this bug, since it already returns one row per calendar day with activity and was never expected to backfill a day with none.
+
+**Carried forward:** read-side/aggregation-only change — no write path, no RLS policy, no `stock_entries`/`ingredient_entries` schema change, no change to either function's returned column set (`lib/supabase/types.ts` needed no update). If a future column is added to either function, the same per-item-universe CTE structure (`universe` → `closing`/`opening_before` → `opening` → `period_sums` → final combine) should be extended rather than reverting to the old flat `group by` shape, or this bug class will resurface for that new column.
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.
