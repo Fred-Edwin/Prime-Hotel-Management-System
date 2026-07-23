@@ -145,14 +145,40 @@ export function EntryClient({ isStoreManager }: { isStoreManager: boolean }) {
   function remainingStockFor(itemId: string): number {
     const line = lines[itemId] ?? emptyLine();
     const opening = openingStockFor(itemId);
-    const wastage = savedEntries[itemId]?.wastage ?? 0;
+    const saved = savedEntries[itemId];
+    const wastage = saved?.wastage ?? 0;
     const total = opening + line.addedStock;
-    // How much more (sold + sent) can still be taken from total_stock —
-    // wastage (admin-entered via the ledger edit screen, §3.3) already
-    // reduced physical stock, so it must come off "Available" too, not
-    // just closing_stock, or staff see a count that no longer matches
-    // what's actually on the shelf.
-    return total - line.tillQuantitySold - line.sentOut - wastage;
+    // staff_meals/complimentary_meals/stock_adjustments (§3.5, §3.10)
+    // already reduced physical stock server-side (they're folded into
+    // closing_stock at write time — see save_stock_entry() etc.), but
+    // none of them are stock_entries COLUMNS this screen can read
+    // directly the way wastage is (they live in their own per-claim
+    // tables). Bug found live-testing, 2026-07-23: staff logging a
+    // staff meal via /expenses saw the admin ledger's Closing figure
+    // correctly drop, but THIS screen's "Available" stayed unchanged —
+    // remainingStockFor() only ever subtracted wastage, never those
+    // three. Fixed by reconstructing their combined total from the
+    // saved row's own fields, algebraically: since
+    //   closing_stock = total_stock - sent_out - quantity_sold - wastage
+    //                    - staff_meals - complimentary_meals - stock_adjustments
+    // (lib/calculations.ts calculateStockEntryTotals()), rearranging gives
+    //   otherConsumption = savedTotal - savedSentOut - savedQuantitySold
+    //                       - savedWastage - savedClosingStock
+    // using only fields already present on the saved stock_entries row —
+    // no new API call needed. Applied on top of the LIVE (possibly
+    // unsaved) addedStock/tillQuantitySold/sentOut below, same as wastage
+    // already was, so a cashier's in-progress typing is still reflected
+    // immediately, not just what's been autosaved so far.
+    const otherConsumption = saved
+      ? saved.opening_stock +
+        saved.added_stock -
+        saved.sent_out -
+        saved.quantity_sold -
+        saved.wastage -
+        saved.closing_stock
+      : 0;
+    // How much more (sold + sent) can still be taken from total_stock.
+    return total - line.tillQuantitySold - line.sentOut - wastage - otherConsumption;
   }
 
   function setFieldState(itemId: string, field: AutosaveFieldKey, state: ItemEntryFieldSaveState) {

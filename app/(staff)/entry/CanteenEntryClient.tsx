@@ -151,11 +151,21 @@ export function CanteenEntryClient() {
     const line = lines[item.id] ?? emptyLine();
     const opening = openingStockFor(item.id);
     const addedStock = item.supply_type === "canteen_supplied" ? (suppliedTotals[item.id] ?? 0) : line.addedStock;
-    const wastage = savedEntries[item.id]?.wastage ?? 0;
+    const saved = savedEntries[item.id];
+    const wastage = saved?.wastage ?? 0;
     // Wastage (admin-entered via the ledger edit screen, §3.3) already
     // reduced physical stock, so it must come off "Available" too — see
-    // the matching note in EntryClient.tsx's remainingStockFor().
-    return opening + addedStock - line.tillQuantitySold - wastage;
+    // the matching note and fuller explanation in EntryClient.tsx's
+    // remainingStockFor() (bug found live-testing, 2026-07-23:
+    // staff_meals/complimentary_meals/stock_adjustments were never
+    // subtracted here either, only wastage). Same algebraic
+    // reconstruction from the saved row's own fields — canteen has no
+    // sent_out (canteen never sends stock onward, §3.1), so it's omitted
+    // from this version of the formula.
+    const otherConsumption = saved
+      ? saved.opening_stock + saved.added_stock - saved.quantity_sold - saved.wastage - saved.closing_stock
+      : 0;
+    return opening + addedStock - line.tillQuantitySold - wastage - otherConsumption;
   }
 
   function setFieldState(itemId: string, field: CanteenFieldKey, state: ItemEntryFieldSaveState) {
