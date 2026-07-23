@@ -3,6 +3,7 @@ import {
   calculateIngredientEntryTotals,
   calculateStockEntryTotals,
   dashboardPeriodRange,
+  effectiveUnitCost,
   isIngredientEntryOversold,
   isLowStock,
   isStockEntryOversold,
@@ -35,6 +36,7 @@ describe("calculateStockEntryTotals", () => {
       stockAdjustments: 0,
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
+      estimatedCostRatio: 0.6,
     });
 
     // total_stock = 30, closing = 30 - 5 - 15 - 2 - 0 - 0 - 0 = 8
@@ -57,6 +59,7 @@ describe("calculateStockEntryTotals", () => {
       stockAdjustments: 0,
       sellingPriceSnapshot: 100,
       buyingPriceSnapshot: 20,
+      estimatedCostRatio: 0.6,
     });
 
     expect(result.wastageValue).toBe(80); // 4 * 20, not 4 * 100
@@ -74,6 +77,7 @@ describe("calculateStockEntryTotals", () => {
       stockAdjustments: 0,
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
+      estimatedCostRatio: 0.6,
     });
 
     // total_stock = 30, closing = 30 - 0 - 10 - 2 - 3 - 0 - 0 = 15
@@ -94,6 +98,7 @@ describe("calculateStockEntryTotals", () => {
       stockAdjustments: 1,
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
+      estimatedCostRatio: 0.6,
     });
 
     // total_stock = 30, closing = 30 - 0 - 10 - 2 - 3 - 4 - 1 = 10
@@ -112,10 +117,61 @@ describe("calculateStockEntryTotals", () => {
       stockAdjustments: -3, // surplus: found 3 extra units
       sellingPriceSnapshot: 50,
       buyingPriceSnapshot: 30,
+      estimatedCostRatio: 0.6,
     });
 
     // total_stock = 10, closing = 10 - 0 - 5 - 0 - 0 - 0 - (-3) = 8
     expect(result.closingStock).toBe(8);
+  });
+
+  it("falls back to selling_price * estimatedCostRatio for wastageEstimatedValue when buyingPriceSnapshot is 0 (docs/01_DATA_MODEL.md §3.11 — client zeroed buying_price on ingredient-cooked items to avoid double-counting COGS, 2026-07-23)", () => {
+    const result = calculateStockEntryTotals({
+      openingStock: 10,
+      addedStock: 0,
+      sentOut: 0,
+      quantitySold: 0,
+      wastage: 2,
+      staffMeals: 0,
+      complimentaryMeals: 0,
+      stockAdjustments: 0,
+      sellingPriceSnapshot: 100,
+      buyingPriceSnapshot: 0,
+      estimatedCostRatio: 0.6,
+    });
+
+    // wastageValue stays 0 (real cost, must never touch COGS/net profit).
+    expect(result.wastageValue).toBe(0);
+    // wastageEstimatedValue is a separate, reporting-only figure:
+    // 2 * (100 * 0.6) = 120.
+    expect(result.wastageEstimatedValue).toBe(120);
+  });
+
+  it("wastageEstimatedValue equals wastageValue when buyingPriceSnapshot is already > 0 — the fallback never overrides a real price", () => {
+    const result = calculateStockEntryTotals({
+      openingStock: 10,
+      addedStock: 0,
+      sentOut: 0,
+      quantitySold: 0,
+      wastage: 2,
+      staffMeals: 0,
+      complimentaryMeals: 0,
+      stockAdjustments: 0,
+      sellingPriceSnapshot: 100,
+      buyingPriceSnapshot: 30,
+      estimatedCostRatio: 0.6,
+    });
+
+    expect(result.wastageEstimatedValue).toBe(result.wastageValue); // both 60
+  });
+});
+
+describe("effectiveUnitCost", () => {
+  it("returns buyingPrice unchanged when it's greater than 0", () => {
+    expect(effectiveUnitCost(30, 100, 0.6)).toBe(30);
+  });
+
+  it("falls back to sellingPrice * estimatedCostRatio when buyingPrice is 0", () => {
+    expect(effectiveUnitCost(0, 100, 0.6)).toBe(60);
   });
 });
 

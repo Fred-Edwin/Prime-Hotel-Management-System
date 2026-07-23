@@ -30,6 +30,7 @@ export interface StockEntryTotals {
   costValue: number;
   closingStockValue: number;
   wastageValue: number;
+  wastageEstimatedValue: number;
 }
 
 /**
@@ -38,6 +39,27 @@ export interface StockEntryTotals {
  */
 export function totalStock(openingStock: number, addedStock: number): number {
   return openingStock + addedStock;
+}
+
+/**
+ * Fallback per-unit cost used ONLY for the *_estimated_value reporting
+ * figures (docs/01_DATA_MODEL.md §3.11, client feedback 2026-07-23):
+ * WaPrecious zeroes items.buying_price for most ingredient-cooked menu
+ * items to avoid double-counting cost against ingredient-level tracking
+ * (§3.10). That's correct and stays — but it makes wastage_value/
+ * staff_meal value/etc. collapse to 0 for those items even though real
+ * stock moved. This function is the ONE place the fallback is expressed
+ * — mirrors the SQL helper public.effective_unit_cost() exactly. Used
+ * only to derive wastageEstimatedValue/estimated_value display figures,
+ * NEVER buyingPriceSnapshot/costValue/closingStockValue/periodicCogs()/
+ * netProfit() — those stay real-buying-price-only, untouched.
+ */
+export function effectiveUnitCost(
+  buyingPrice: number,
+  sellingPrice: number,
+  estimatedCostRatio: number,
+): number {
+  return buyingPrice > 0 ? buyingPrice : sellingPrice * estimatedCostRatio;
 }
 
 export function calculateStockEntryTotals(params: {
@@ -51,6 +73,7 @@ export function calculateStockEntryTotals(params: {
   stockAdjustments: number;
   sellingPriceSnapshot: number;
   buyingPriceSnapshot: number;
+  estimatedCostRatio: number;
 }): StockEntryTotals {
   const {
     openingStock,
@@ -63,6 +86,7 @@ export function calculateStockEntryTotals(params: {
     stockAdjustments,
     sellingPriceSnapshot,
     buyingPriceSnapshot,
+    estimatedCostRatio,
   } = params;
 
   const closingStock =
@@ -80,6 +104,7 @@ export function calculateStockEntryTotals(params: {
     costValue: quantitySold * buyingPriceSnapshot,
     closingStockValue: closingStock * buyingPriceSnapshot,
     wastageValue: wastage * buyingPriceSnapshot,
+    wastageEstimatedValue: wastage * effectiveUnitCost(buyingPriceSnapshot, sellingPriceSnapshot, estimatedCostRatio),
   };
 }
 

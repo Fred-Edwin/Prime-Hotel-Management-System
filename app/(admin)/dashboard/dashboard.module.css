@@ -472,6 +472,19 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Estimated-value secondary line (docs/01_DATA_MODEL.md §3.11,
+   2026-07-23) -- shown under a Non-Sales Stock Consumption cell only
+   when the estimated figure diverges from the real one (a zero-buying-
+   price item). Plain, non-italic (unlike .comparisonNote below, which
+   stands in FOR a number) since this sits alongside a real number as
+   supplementary context, not instead of one. */
+.comparisonEstimated {
+  display: block;
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
 /* .comparisonTable td (line ~231) sets color directly on the element
    selector, which otherwise beats a single class selector's specificity
    — combine with :is() so this rule reliably wins regardless of the

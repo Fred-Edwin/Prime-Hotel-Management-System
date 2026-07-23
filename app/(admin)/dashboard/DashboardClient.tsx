@@ -26,6 +26,18 @@ interface StockConsumptionFigures {
   staffMealValue: number;
   complimentaryMealValue: number;
   stockAdjustmentValue: number;
+  // Estimated equivalents (docs/01_DATA_MODEL.md §3.11, 2026-07-23):
+  // equal to the real figure above for any item with a real buying_price.
+  // Only diverge for zero-buying-price items (§3.10), where the real
+  // figure is correctly 0 (never touches costValue/netProfit) and the
+  // estimated figure substitutes selling_price * the admin-set
+  // estimated_cost_ratio, purely so this reporting section isn't a wall
+  // of zeroes for those items.
+  estimatedTotal: number;
+  wastageEstimatedValue: number;
+  staffMealEstimatedValue: number;
+  complimentaryMealEstimatedValue: number;
+  stockAdjustmentEstimatedValue: number;
 }
 
 interface LocationFigures {
@@ -130,6 +142,8 @@ const TOOLTIPS = {
   stockAdjustmentValue:
     "Physical-count corrections that adjust closing stock, valued at cost. A + means stock was found; no + means stock is missing.",
   stockConsumptionTotal: "Wastage + staff meals + complimentary meals + adjustments — non-sales stock usage, for stock control only, not subtracted from net profit (already reflected in cost of goods).",
+  estimatedValue:
+    "For items with buying price set to 0, valued at selling price × the admin-set estimated cost ratio instead of 0 — for reporting only, never subtracted from net profit.",
   closingStock: "Unsold stock on hand, valued at cost.",
   businessWideExpenses: "Costs not tied to one location — rent, salaries.",
   expenses: "Costs logged for this location.",
@@ -145,11 +159,28 @@ const COMPARISON_ROWS = [
 // Stock Consumption comparison rows (docs/backlog/05_stock_consumption.md)
 // — a separate table from COMPARISON_ROWS above, reporting-only figures
 // that no longer feed net profit. Indexes byLocation[loc].stockConsumption[key].
+// estimatedKey (§3.11, 2026-07-23) indexes the parallel estimated figure,
+// shown as a secondary line only when it diverges from the real one.
 const STOCK_CONSUMPTION_ROWS = [
-  { label: "Wastage", key: "wastageValue", tooltip: TOOLTIPS.wastageValue },
-  { label: "Staff meals", key: "staffMealValue", tooltip: TOOLTIPS.staffMealValue },
-  { label: "Complimentary meals", key: "complimentaryMealValue", tooltip: TOOLTIPS.complimentaryMealValue },
-  { label: "Stock adjustments", key: "stockAdjustmentValue", tooltip: TOOLTIPS.stockAdjustmentValue },
+  { label: "Wastage", key: "wastageValue", estimatedKey: "wastageEstimatedValue", tooltip: TOOLTIPS.wastageValue },
+  {
+    label: "Staff meals",
+    key: "staffMealValue",
+    estimatedKey: "staffMealEstimatedValue",
+    tooltip: TOOLTIPS.staffMealValue,
+  },
+  {
+    label: "Complimentary meals",
+    key: "complimentaryMealValue",
+    estimatedKey: "complimentaryMealEstimatedValue",
+    tooltip: TOOLTIPS.complimentaryMealValue,
+  },
+  {
+    label: "Stock adjustments",
+    key: "stockAdjustmentValue",
+    estimatedKey: "stockAdjustmentEstimatedValue",
+    tooltip: TOOLTIPS.stockAdjustmentValue,
+  },
 ] as const;
 
 // Quantity flows (post-launch addition, 2026-07-21) — a separate table
@@ -576,6 +607,12 @@ export function DashboardClient() {
                         {row.key === "stockAdjustmentValue"
                           ? moneySigned(data.byLocation.restaurant.stockConsumption[row.key])
                           : money(data.byLocation.restaurant.stockConsumption[row.key])}
+                        {data.byLocation.restaurant.stockConsumption[row.estimatedKey] !==
+                          data.byLocation.restaurant.stockConsumption[row.key] && (
+                          <span className={styles.comparisonEstimated}>
+                            est. {money(data.byLocation.restaurant.stockConsumption[row.estimatedKey])}
+                          </span>
+                        )}
                       </td>
                       <td
                         className={[
@@ -586,6 +623,12 @@ export function DashboardClient() {
                         {row.key === "stockAdjustmentValue"
                           ? moneySigned(data.byLocation.canteen.stockConsumption[row.key])
                           : money(data.byLocation.canteen.stockConsumption[row.key])}
+                        {data.byLocation.canteen.stockConsumption[row.estimatedKey] !==
+                          data.byLocation.canteen.stockConsumption[row.key] && (
+                          <span className={styles.comparisonEstimated}>
+                            est. {money(data.byLocation.canteen.stockConsumption[row.estimatedKey])}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -596,9 +639,21 @@ export function DashboardClient() {
                     </td>
                     <td className={styles.comparisonNumeric}>
                       {moneySigned(data.byLocation.restaurant.stockConsumption.total)}
+                      {data.byLocation.restaurant.stockConsumption.estimatedTotal !==
+                        data.byLocation.restaurant.stockConsumption.total && (
+                        <span className={styles.comparisonEstimated}>
+                          est. {moneySigned(data.byLocation.restaurant.stockConsumption.estimatedTotal)}
+                        </span>
+                      )}
                     </td>
                     <td className={styles.comparisonNumeric}>
                       {moneySigned(data.byLocation.canteen.stockConsumption.total)}
+                      {data.byLocation.canteen.stockConsumption.estimatedTotal !==
+                        data.byLocation.canteen.stockConsumption.total && (
+                        <span className={styles.comparisonEstimated}>
+                          est. {moneySigned(data.byLocation.canteen.stockConsumption.estimatedTotal)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 </tbody>

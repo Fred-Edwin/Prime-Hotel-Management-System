@@ -11,6 +11,7 @@ import { PeriodToggle } from "@/components/PeriodToggle";
 import { EmptyState } from "@/components/EmptyState";
 import { FilterBar } from "@/components/FilterBar";
 import { Icon } from "@/components/Icon";
+import { InfoTooltip } from "@/components/InfoTooltip";
 import { LowStockIndicator } from "@/components/LowStockIndicator";
 import { MetricCard } from "@/components/MetricCard";
 import { PlaceholderStat } from "@/components/PlaceholderStat";
@@ -78,6 +79,14 @@ interface StockConsumptionLedgerRow {
   location: "restaurant" | "canteen" | null;
   quantity: number;
   value: number;
+  // Estimated KES value (docs/01_DATA_MODEL.md §3.11, 2026-07-23): equal
+  // to `value` for any row whose item/ingredient has a real buying_price
+  // (the normal case). Only diverges for a menu item WaPrecious zeroed
+  // buying_price on (§3.10) — there, `value` is correctly 0 (never
+  // touches COGS/net profit) while `estimated_value` substitutes
+  // selling_price * the admin-set estimated_cost_ratio, purely so this
+  // reporting table isn't a wall of zeroes for those items.
+  estimated_value: number;
   note: string | null;
   staff_id: string | null;
   staff_name: string | null;
@@ -197,6 +206,71 @@ export function LedgerClient() {
     null
   );
   const [cascadeConfirmed, setCascadeConfirmed] = useState(false);
+
+  // Estimated-cost-ratio settings modal (docs/01_DATA_MODEL.md §3.11,
+  // 2026-07-23) — the fallback rate used for estimated_value on any
+  // zero-buying-price item's wastage/staff-meal/complimentary-meal/stock-
+  // adjustment rows. Loaded lazily when the modal opens, not on initial
+  // page load, since it's an infrequently-changed setting the ledger
+  // screen doesn't otherwise need.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsRatio, setSettingsRatio] = useState<string>("");
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSubmitting, setSettingsSubmitting] = useState(false);
+
+  async function openSettings() {
+    setSettingsOpen(true);
+    setSettingsError(null);
+    setSettingsLoading(true);
+    try {
+      const res = await fetch("/api/settings");
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSettingsRatio(String(json.settings?.estimated_cost_ratio ?? ""));
+      } else {
+        setSettingsError(json.error ?? "Failed to load settings");
+      }
+    } catch {
+      setSettingsError("Failed to load settings");
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
+  function closeSettings() {
+    setSettingsOpen(false);
+    setSettingsError(null);
+  }
+
+  async function submitSettings() {
+    const ratio = Number(settingsRatio);
+    if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+      setSettingsError("Enter a number between 0 and 1 (e.g. 0.6 for 60%)");
+      return;
+    }
+    setSettingsSubmitting(true);
+    setSettingsError(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estimated_cost_ratio: ratio }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSettingsError(json.error ?? "Failed to save");
+        return;
+      }
+      setSettingsOpen(false);
+      setToast("Estimated cost ratio updated");
+      setReloadKey((key) => key + 1);
+    } catch {
+      setSettingsError("Failed to save");
+    } finally {
+      setSettingsSubmitting(false);
+    }
+  }
 
   function openStockEntryEdit(row: ItemLedgerRow) {
     setEditError(null);
@@ -1193,6 +1267,9 @@ export function LedgerClient() {
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Non-sales stock consumption</h2>
+              <Button variant="secondary" className={styles.newEntryButton} onClick={openSettings}>
+                Estimated value settings
+              </Button>
             </div>
             <div className={styles.toolbarRow}>
               <CategoryChips
@@ -1251,13 +1328,20 @@ export function LedgerClient() {
                         <th>Location</th>
                         <th className={catalogStyles.numeric}>Quantity</th>
                         <th className={catalogStyles.numeric}>Value</th>
+                        <th className={catalogStyles.numeric}>
+                          Estimated value
+                          <InfoTooltip
+                            label="Estimated value"
+                            message="Value at cost, using the admin-set estimated cost ratio when this item's real buying price is 0. Never used in profit calculations."
+                          />
+                        </th>
                         <th>Note</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredConsumptionRows.length === 0 && (
                         <tr>
-                          <td colSpan={8} className={styles.emptyRow}>
+                          <td colSpan={9} className={styles.emptyRow}>
                             <EmptyState
                               icon={<Icon name="wastage" size={48} />}
                               heading={
@@ -1291,6 +1375,16 @@ export function LedgerClient() {
                           <td className={catalogStyles.numeric}>
                             {row.value < 0 ? "+" : ""}
                             {money(Math.abs(row.value))}
+                          </td>
+                          <td className={catalogStyles.numeric}>
+                            {row.estimated_value === row.value ? (
+                              "—"
+                            ) : (
+                              <>
+                                {row.estimated_value < 0 ? "+" : ""}
+                                {money(Math.abs(row.estimated_value))}
+                              </>
+                            )}
                           </td>
                           <td>{row.note ?? "—"}</td>
                         </tr>
@@ -1363,6 +1457,15 @@ export function LedgerClient() {
                                 {money(Math.abs(row.value))}
                               </strong>
                             </div>
+                            {row.estimated_value !== row.value && (
+                              <div className={catalogStyles.itemCardDetailLine}>
+                                <span>Estimated value</span>
+                                <strong>
+                                  {row.estimated_value < 0 ? "+" : ""}
+                                  {money(Math.abs(row.estimated_value))}
+                                </strong>
+                              </div>
+                            )}
                             {row.note && (
                               <div className={catalogStyles.itemCardDetailLine}>
                                 <span>Note</span>
@@ -1527,6 +1630,46 @@ export function LedgerClient() {
                 />
               </>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={settingsOpen}
+        onClose={closeSettings}
+        title="Estimated value settings"
+        footer={
+          <>
+            <Button variant="tertiary" onClick={closeSettings} disabled={settingsSubmitting}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={submitSettings} disabled={settingsSubmitting || settingsLoading}>
+              {settingsSubmitting ? "Saving…" : "Save"}
+            </Button>
+          </>
+        }
+      >
+        {settingsLoading ? (
+          <p>Loading…</p>
+        ) : (
+          <div className={styles.editForm}>
+            <p>
+              For items whose buying price is set to 0 (e.g. ingredient-cooked menu items, to avoid
+              double-counting cost), wastage and staff-meal/complimentary-meal/stock-adjustment quantities are
+              instead valued at this fraction of the item&apos;s selling price — for reporting only. This never
+              affects cost of goods sold or net profit.
+            </p>
+            <Input
+              label="Estimated cost ratio (0–1, e.g. 0.6 for 60%)"
+              type="number"
+              numeric
+              min={0}
+              max={1}
+              step={0.01}
+              value={settingsRatio}
+              onChange={(e) => setSettingsRatio(e.target.value)}
+              error={settingsError ?? undefined}
+            />
           </div>
         )}
       </Modal>

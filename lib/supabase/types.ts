@@ -39,6 +39,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          estimated_cost_ratio: number
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          estimated_cost_ratio?: number
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          estimated_cost_ratio?: number
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -133,6 +151,7 @@ export type Database = {
           buying_price_snapshot: number
           created_at: string
           created_by: string
+          estimated_value: number
           id: string
           item_id: string
           location: Database["public"]["Enums"]["location_type"]
@@ -146,6 +165,7 @@ export type Database = {
           buying_price_snapshot: number
           created_at?: string
           created_by: string
+          estimated_value?: number
           id?: string
           item_id: string
           location: Database["public"]["Enums"]["location_type"]
@@ -159,6 +179,7 @@ export type Database = {
           buying_price_snapshot?: number
           created_at?: string
           created_by?: string
+          estimated_value?: number
           id?: string
           item_id?: string
           location?: Database["public"]["Enums"]["location_type"]
@@ -584,6 +605,7 @@ export type Database = {
           buying_price_snapshot: number
           created_at: string
           created_by: string
+          estimated_value: number
           id: string
           item_id: string
           location: Database["public"]["Enums"]["location_type"]
@@ -597,6 +619,7 @@ export type Database = {
           buying_price_snapshot: number
           created_at?: string
           created_by: string
+          estimated_value?: number
           id?: string
           item_id: string
           location: Database["public"]["Enums"]["location_type"]
@@ -610,6 +633,7 @@ export type Database = {
           buying_price_snapshot?: number
           created_at?: string
           created_by?: string
+          estimated_value?: number
           id?: string
           item_id?: string
           location?: Database["public"]["Enums"]["location_type"]
@@ -648,6 +672,7 @@ export type Database = {
           buying_price_snapshot: number
           created_at: string
           created_by: string
+          estimated_value: number
           id: string
           item_id: string
           location: Database["public"]["Enums"]["location_type"]
@@ -661,6 +686,7 @@ export type Database = {
           buying_price_snapshot: number
           created_at?: string
           created_by: string
+          estimated_value?: number
           id?: string
           item_id: string
           location: Database["public"]["Enums"]["location_type"]
@@ -674,6 +700,7 @@ export type Database = {
           buying_price_snapshot?: number
           created_at?: string
           created_by?: string
+          estimated_value?: number
           id?: string
           item_id?: string
           location?: Database["public"]["Enums"]["location_type"]
@@ -728,6 +755,7 @@ export type Database = {
           till_quantity_sold: number
           updated_at: string
           wastage: number
+          wastage_estimated_value: number
           wastage_note: string | null
           wastage_value: number
         }
@@ -751,6 +779,7 @@ export type Database = {
           till_quantity_sold?: number
           updated_at?: string
           wastage?: number
+          wastage_estimated_value?: number
           wastage_note?: string | null
           wastage_value: number
         }
@@ -774,6 +803,7 @@ export type Database = {
           till_quantity_sold?: number
           updated_at?: string
           wastage?: number
+          wastage_estimated_value?: number
           wastage_note?: string | null
           wastage_value?: number
         }
@@ -1028,6 +1058,7 @@ export type Database = {
       dashboard_complimentary_meal_summary: {
         Args: { p_from: string; p_to: string }
         Returns: {
+          estimated_value: number
           location: Database["public"]["Enums"]["location_type"]
           value: number
         }[]
@@ -1146,6 +1177,7 @@ export type Database = {
       dashboard_staff_meal_summary: {
         Args: { p_from: string; p_to: string }
         Returns: {
+          estimated_value: number
           location: Database["public"]["Enums"]["location_type"]
           value: number
         }[]
@@ -1153,6 +1185,7 @@ export type Database = {
       dashboard_stock_adjustment_summary: {
         Args: { p_from: string; p_to: string }
         Returns: {
+          estimated_value: number
           location: Database["public"]["Enums"]["location_type"]
           value: number
         }[]
@@ -1166,6 +1199,7 @@ export type Database = {
         Returns: {
           category: string
           entry_date: string
+          estimated_value: number
           ingredient_id: string
           ingredient_name: string
           item_id: string
@@ -1193,6 +1227,7 @@ export type Database = {
           quantity_sold: number
           sales_value: number
           sent_out: number
+          wastage_estimated_value: number
           wastage_value: number
         }[]
       }

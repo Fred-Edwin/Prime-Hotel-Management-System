@@ -63,6 +63,20 @@ import { serverErrorResponse } from "@/lib/errors";
  * visible as `stockConsumption`, a combined total + per-category
  * breakdown, purely for stock-control reporting — never fed into
  * netProfit()'s inputs.
+ *
+ * estimatedTotal/estimatedValue fields (post-launch addition, 2026-07-23
+ * — see docs/01_DATA_MODEL.md §3.11): WaPrecious zeroed items.buying_price
+ * for most ingredient-cooked menu items (§3.10), which correctly zeroes
+ * their real wastageValue/staffMealValue/etc. too — but that also makes
+ * those figures uninformative for stock-control purposes ("how much are
+ * we actually losing to waste/staff meals" reads as KES 0 even when real
+ * stock moved). estimatedTotal/estimatedValue substitute
+ * selling_price * app_settings.estimated_cost_ratio ONLY when
+ * buying_price is 0 (see public.effective_unit_cost() /
+ * lib/calculations.ts's effectiveUnitCost()) — purely a parallel display
+ * figure. They are never fed into costValue/closingStockValue/
+ * periodicCogs()/netProfit() — those keep using the real, possibly-zero
+ * buying_price, exactly as before.
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -158,14 +172,25 @@ export async function GET(request: Request) {
   const businessWideExpenses = expensesByLocation.find((r) => r.location === null)?.total_amount ?? 0;
   const restaurantStaffMeals = staffMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
   const canteenStaffMeals = staffMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
+  const restaurantStaffMealsEstimated =
+    staffMealsByLocation.find((r) => r.location === "restaurant")?.estimated_value ?? 0;
+  const canteenStaffMealsEstimated = staffMealsByLocation.find((r) => r.location === "canteen")?.estimated_value ?? 0;
   const restaurantComplimentaryMeals =
     complimentaryMealsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
   const canteenComplimentaryMeals =
     complimentaryMealsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
+  const restaurantComplimentaryMealsEstimated =
+    complimentaryMealsByLocation.find((r) => r.location === "restaurant")?.estimated_value ?? 0;
+  const canteenComplimentaryMealsEstimated =
+    complimentaryMealsByLocation.find((r) => r.location === "canteen")?.estimated_value ?? 0;
   const restaurantStockAdjustments =
     stockAdjustmentsByLocation.find((r) => r.location === "restaurant")?.value ?? 0;
   const canteenStockAdjustments =
     stockAdjustmentsByLocation.find((r) => r.location === "canteen")?.value ?? 0;
+  const restaurantStockAdjustmentsEstimated =
+    stockAdjustmentsByLocation.find((r) => r.location === "restaurant")?.estimated_value ?? 0;
+  const canteenStockAdjustmentsEstimated =
+    stockAdjustmentsByLocation.find((r) => r.location === "canteen")?.estimated_value ?? 0;
 
   // Combined periodic COGS (client formula, see route doc comment above):
   // items' + ingredients' opening/added/closing VALUES all summed
@@ -189,9 +214,20 @@ export async function GET(request: Request) {
 
   const combinedWastageValue =
     (restaurantStock?.wastage_value ?? 0) + (canteenStock?.wastage_value ?? 0) + ingredientSummary.wastage_value;
+  // Ingredient wastage has no estimated variant (ingredients were never
+  // zeroed, see the ledger migration's note) — its estimated figure is
+  // just its own real wastage_value, same as the ledger function does.
+  const combinedWastageEstimatedValue =
+    (restaurantStock?.wastage_estimated_value ?? 0) +
+    (canteenStock?.wastage_estimated_value ?? 0) +
+    ingredientSummary.wastage_value;
   const combinedStaffMealValue = restaurantStaffMeals + canteenStaffMeals;
+  const combinedStaffMealEstimatedValue = restaurantStaffMealsEstimated + canteenStaffMealsEstimated;
   const combinedComplimentaryMealValue = restaurantComplimentaryMeals + canteenComplimentaryMeals;
+  const combinedComplimentaryMealEstimatedValue =
+    restaurantComplimentaryMealsEstimated + canteenComplimentaryMealsEstimated;
   const combinedStockAdjustmentValue = restaurantStockAdjustments + canteenStockAdjustments;
+  const combinedStockAdjustmentEstimatedValue = restaurantStockAdjustmentsEstimated + canteenStockAdjustmentsEstimated;
 
   const combined = {
     salesValue: (restaurantStock?.sales_value ?? 0) + (canteenStock?.sales_value ?? 0),
@@ -219,6 +255,15 @@ export async function GET(request: Request) {
     staffMealValue: combinedStaffMealValue,
     complimentaryMealValue: combinedComplimentaryMealValue,
     stockAdjustmentValue: combinedStockAdjustmentValue,
+    estimatedTotal:
+      combinedWastageEstimatedValue +
+      combinedStaffMealEstimatedValue +
+      combinedComplimentaryMealEstimatedValue +
+      combinedStockAdjustmentEstimatedValue,
+    wastageEstimatedValue: combinedWastageEstimatedValue,
+    staffMealEstimatedValue: combinedStaffMealEstimatedValue,
+    complimentaryMealEstimatedValue: combinedComplimentaryMealEstimatedValue,
+    stockAdjustmentEstimatedValue: combinedStockAdjustmentEstimatedValue,
   };
 
   // Restaurant/canteen menu-item stock, shown separately from ingredients
@@ -248,6 +293,9 @@ export async function GET(request: Request) {
 
   const restaurantWastageValue = (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value;
   const canteenWastageValue = canteenStock?.wastage_value ?? 0;
+  const restaurantWastageEstimatedValue =
+    (restaurantStock?.wastage_estimated_value ?? 0) + ingredientSummary.wastage_value;
+  const canteenWastageEstimatedValue = canteenStock?.wastage_estimated_value ?? 0;
 
   const byLocation = {
     restaurant: {
@@ -271,6 +319,15 @@ export async function GET(request: Request) {
         staffMealValue: restaurantStaffMeals,
         complimentaryMealValue: restaurantComplimentaryMeals,
         stockAdjustmentValue: restaurantStockAdjustments,
+        estimatedTotal:
+          restaurantWastageEstimatedValue +
+          restaurantStaffMealsEstimated +
+          restaurantComplimentaryMealsEstimated +
+          restaurantStockAdjustmentsEstimated,
+        wastageEstimatedValue: restaurantWastageEstimatedValue,
+        staffMealEstimatedValue: restaurantStaffMealsEstimated,
+        complimentaryMealEstimatedValue: restaurantComplimentaryMealsEstimated,
+        stockAdjustmentEstimatedValue: restaurantStockAdjustmentsEstimated,
       },
     },
     canteen: {
@@ -294,6 +351,15 @@ export async function GET(request: Request) {
         staffMealValue: canteenStaffMeals,
         complimentaryMealValue: canteenComplimentaryMeals,
         stockAdjustmentValue: canteenStockAdjustments,
+        estimatedTotal:
+          canteenWastageEstimatedValue +
+          canteenStaffMealsEstimated +
+          canteenComplimentaryMealsEstimated +
+          canteenStockAdjustmentsEstimated,
+        wastageEstimatedValue: canteenWastageEstimatedValue,
+        staffMealEstimatedValue: canteenStaffMealsEstimated,
+        complimentaryMealEstimatedValue: canteenComplimentaryMealsEstimated,
+        stockAdjustmentEstimatedValue: canteenStockAdjustmentsEstimated,
       },
     },
   };
