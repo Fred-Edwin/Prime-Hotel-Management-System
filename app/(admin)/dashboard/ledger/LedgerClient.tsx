@@ -53,6 +53,7 @@ interface IngredientLedgerRow {
   quantity_used: number;
   wastage: number;
   closing_stock: number;
+  cost_value: number;
   closing_stock_value: number;
   wastage_value: number;
   low_stock_threshold: number;
@@ -1078,6 +1079,7 @@ export function LedgerClient() {
                               <th className={catalogStyles.numeric}>Used</th>
                               <th className={catalogStyles.numeric}>Wastage</th>
                               <th className={catalogStyles.numeric}>Closing</th>
+                              <th className={catalogStyles.numeric}>Cost value</th>
                               <th className={catalogStyles.numeric}>Closing value</th>
                               <th className={catalogStyles.numeric}>Wastage value</th>
                               <th aria-label="Edit" />
@@ -1086,7 +1088,7 @@ export function LedgerClient() {
                           <tbody>
                             {filteredIngredients.length === 0 && (
                               <tr>
-                                <td colSpan={10} className={styles.emptyRow}>
+                                <td colSpan={11} className={styles.emptyRow}>
                                   <EmptyState
                                     icon={<Icon name="summary" size={48} />}
                                     heading={
@@ -1134,6 +1136,7 @@ export function LedgerClient() {
                                     {qty(row.closing_stock)} {row.unit}
                                   </span>
                                 </td>
+                                <td className={catalogStyles.numeric}>{money(row.cost_value)}</td>
                                 <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
                                 <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>
                                 <td>
@@ -1225,6 +1228,10 @@ export function LedgerClient() {
                                     <strong>
                                       {qty(row.wastage)} {row.unit}
                                     </strong>
+                                  </div>
+                                  <div className={catalogStyles.itemCardDetailLine}>
+                                    <span>Cost value</span>
+                                    <strong>{money(row.cost_value)}</strong>
                                   </div>
                                   <div className={catalogStyles.itemCardDetailLine}>
                                     <span>Closing value</span>

@@ -1071,6 +1071,7 @@ export type Database = {
         Returns: {
           closing_stock: number
           closing_stock_value: number
+          cost_value: number
           entry_date: string
           ingredient_id: string
           ingredient_name: string
