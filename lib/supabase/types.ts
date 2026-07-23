@@ -1200,11 +1200,46 @@ export type Database = {
         Args: { p_purchase_id: string }
         Returns: undefined
       }
+      delete_delivery_location: {
+        Args: { p_delivery_location_id: string }
+        Returns: undefined
+      }
+      delete_expense_category: {
+        Args: { p_expense_category_id: string }
+        Returns: undefined
+      }
+      delete_ingredient: {
+        Args: { p_ingredient_id: string }
+        Returns: undefined
+      }
       delete_ingredient_purchase: {
         Args: { p_purchase_id: string }
         Returns: undefined
       }
       delete_item: { Args: { p_item_id: string }; Returns: undefined }
+      delivery_location_delete_impact: {
+        Args: { p_delivery_location_id: string }
+        Returns: {
+          orders_affected_count: number
+          orders_delivery_fee_value: number
+        }[]
+      }
+      expense_category_delete_impact: {
+        Args: { p_expense_category_id: string }
+        Returns: {
+          expenses_count: number
+          expenses_value: number
+        }[]
+      }
+      ingredient_delete_impact: {
+        Args: { p_ingredient_id: string }
+        Returns: {
+          ingredient_entries_closing_value: number
+          ingredient_entries_count: number
+          ingredient_purchases_count: number
+          ingredient_purchases_value: number
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       item_delete_impact: {
         Args: { p_item_id: string }

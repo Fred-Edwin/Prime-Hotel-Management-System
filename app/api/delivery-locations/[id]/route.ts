@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { deliveryLocationSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { serverErrorResponse } from "@/lib/errors";
+import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 import { writeAuditLog } from "@/lib/audit";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -55,4 +55,53 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
 
   return NextResponse.json({ deliveryLocation: data });
+}
+
+/**
+ * DELETE /api/delivery-locations/[id]
+ *
+ * Admin-only, permanent — extends items' hard-delete exception
+ * (app/api/items/[id]/route.ts) to delivery_locations per direct client
+ * confirmation (2026-07-23). orders.delivery_location_id is nullable
+ * ("null for pickup"), so deleting a zone nulls out that reference on
+ * any order that used it rather than deleting or rewriting the order —
+ * a much smaller blast radius than items/ingredients, but still shown
+ * to the admin via the impact preview before confirming. See
+ * supabase/migrations/20260723090000_delivery_location_hard_delete.sql.
+ */
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { id } = await params;
+  const supabase = await createServerSupabaseClient();
+
+  const { data: existing } = await supabase
+    .from("delivery_locations")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  const { data: impact } = await supabase
+    .rpc("delivery_location_delete_impact", { p_delivery_location_id: id })
+    .maybeSingle();
+
+  const { error } = await supabase.rpc("delete_delivery_location", { p_delivery_location_id: id });
+
+  if (error) {
+    if (error.code === "P0005") {
+      return NextResponse.json({ error: "That delivery location no longer exists." }, { status: 404 });
+    }
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  await writeAuditLog(supabase, {
+    actorId: admin.id,
+    action: "delivery_location.delete",
+    targetTable: "delivery_locations",
+    targetId: id,
+    changes: { before: existing ?? null, impact: impact ?? null },
+  });
+
+  return NextResponse.json({ success: true });
 }

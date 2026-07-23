@@ -8,9 +8,16 @@ import { Drawer } from "@/components/Drawer";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
+import { ActionMenu } from "@/components/ActionMenu";
+import { Modal } from "@/components/Modal";
 import { deliveryLocationSchema, type DeliveryLocationInput } from "@/lib/validation";
 import type { Database } from "@/lib/supabase/types";
 import styles from "../catalog.module.css";
+
+interface DeleteImpact {
+  orders_affected_count: number;
+  orders_delivery_fee_value: number;
+}
 
 type DeliveryLocation = Database["public"]["Tables"]["delivery_locations"]["Row"];
 
@@ -35,6 +42,46 @@ export function DeliveryLocationsClient({
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const [deleteTarget, setDeleteTarget] = useState<DeliveryLocation | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpact | null>(null);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function openDeleteModal(location: DeliveryLocation) {
+    setDeleteTarget(location);
+    setDeleteConfirmText("");
+    setDeleteError(null);
+    setDeleteImpact(null);
+    setDeleteImpactLoading(true);
+    try {
+      const res = await fetch(`/api/delivery-locations/${location.id}/delete-impact`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setDeleteImpact(data.impact ?? null);
+    } finally {
+      setDeleteImpactLoading(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/delivery-locations/${deleteTarget.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete delivery location");
+      setLocations((prev) => prev.filter((l) => l.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setToast(`${deleteTarget.name} deleted`);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete delivery location");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -148,13 +195,17 @@ export function DeliveryLocationsClient({
                       </span>
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        className={styles.editLink}
-                        onClick={() => openEditModal(location)}
-                      >
-                        Edit
-                      </button>
+                      <ActionMenu
+                        aria-label={`Actions for ${location.name}`}
+                        items={[
+                          { label: "Edit", onClick: () => openEditModal(location) },
+                          {
+                            label: "Delete",
+                            destructive: true,
+                            onClick: () => openDeleteModal(location),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -212,6 +263,13 @@ export function DeliveryLocationsClient({
                         >
                           Edit
                         </button>
+                        <button
+                          type="button"
+                          className={`${styles.itemCardEditBtn} ${styles.itemCardDeleteBtn}`}
+                          onClick={() => openDeleteModal(location)}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -266,6 +324,65 @@ export function DeliveryLocationsClient({
           </label>
         </div>
       </Drawer>
+
+      {/* Delete — permanent, extends items' hard-delete exception to
+          delivery_locations (client request, 2026-07-23). orders.delivery_location_id
+          is nullable, so this only nulls out the zone reference on any past
+          order that used it — the order, its fee, and its total are
+          untouched. Confirmed directly with the client before this was
+          built. See
+          supabase/migrations/20260723090000_delivery_location_hard_delete.sql. */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete delivery location"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText !== deleteTarget?.name || deleting || deleteImpactLoading}
+              onClick={confirmDelete}
+            >
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.form}>
+          <p className={styles.deleteWarning}>
+            This permanently removes the delivery zone and cannot be undone.
+          </p>
+
+          {deleteImpactLoading && <p>Checking what this will affect…</p>}
+
+          {deleteImpact && (
+            <ul className={styles.deleteImpactList}>
+              {deleteImpact.orders_affected_count > 0 ? (
+                <li>
+                  <strong>{deleteImpact.orders_affected_count}</strong> past order
+                  {deleteImpact.orders_affected_count === 1 ? "" : "s"} totaling{" "}
+                  <strong>KES {deleteImpact.orders_delivery_fee_value.toFixed(2)}</strong> in
+                  delivery fees used this zone — those orders will keep their fee and total, but
+                  will no longer show which zone they were delivered to.
+                </li>
+              ) : (
+                <li>No past orders used this zone — nothing else will be affected.</li>
+              )}
+            </ul>
+          )}
+
+          {deleteError && <p className={styles.formError}>{deleteError}</p>}
+
+          <Input
+            label="Confirm name"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+          />
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>

@@ -184,3 +184,10 @@
   color: var(--color-text-secondary);
   text-decoration: line-through;
 }
+
+.categoryManageActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}

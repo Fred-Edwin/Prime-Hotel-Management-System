@@ -19,6 +19,10 @@ import styles from "./expenses.module.css";
 
 type Period = "today" | "week" | "month";
 type ExpenseCategoryRow = Database["public"]["Tables"]["expense_categories"]["Row"];
+interface CategoryDeleteImpact {
+  expenses_count: number;
+  expenses_value: number;
+}
 type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"] & {
   expense_categories: { id: string; name: string } | null;
 };
@@ -94,6 +98,13 @@ export function AdminExpensesClient() {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<ExpenseCategoryRow | null>(null);
+  const [categoryDeleteImpact, setCategoryDeleteImpact] = useState<CategoryDeleteImpact | null>(null);
+  const [categoryDeleteImpactLoading, setCategoryDeleteImpactLoading] = useState(false);
+  const [categoryDeleteConfirmText, setCategoryDeleteConfirmText] = useState("");
+  const [categoryDeleting, setCategoryDeleting] = useState(false);
+  const [categoryDeleteError, setCategoryDeleteError] = useState<string | null>(null);
 
   const [editTarget, setEditTarget] = useState<ExpenseRow | null>(null);
   const [editAmount, setEditAmount] = useState("");
@@ -236,6 +247,41 @@ export function AdminExpensesClient() {
       await load();
     } catch (err) {
       setCategoryError(err instanceof Error ? err.message : "Couldn't update category");
+    }
+  }
+
+  async function openCategoryDeleteModal(category: ExpenseCategoryRow) {
+    setCategoryDeleteTarget(category);
+    setCategoryDeleteConfirmText("");
+    setCategoryDeleteError(null);
+    setCategoryDeleteImpact(null);
+    setCategoryDeleteImpactLoading(true);
+    try {
+      const res = await fetch(`/api/expense-categories/${category.id}/delete-impact`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setCategoryDeleteImpact(data.impact ?? null);
+    } finally {
+      setCategoryDeleteImpactLoading(false);
+    }
+  }
+
+  async function confirmCategoryDelete() {
+    if (!categoryDeleteTarget) return;
+    setCategoryDeleting(true);
+    setCategoryDeleteError(null);
+    try {
+      const res = await fetch(`/api/expense-categories/${categoryDeleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete category");
+      setCategoryDeleteTarget(null);
+      setToast({ message: `${categoryDeleteTarget.name} deleted`, status: "success" });
+      await load();
+    } catch (err) {
+      setCategoryDeleteError(err instanceof Error ? err.message : "Failed to delete category");
+    } finally {
+      setCategoryDeleting(false);
     }
   }
 
@@ -482,12 +528,89 @@ export function AdminExpensesClient() {
             {categories.map((category) => (
               <li key={category.id} className={styles.categoryManageRow}>
                 <span className={category.active ? undefined : styles.categoryInactive}>{category.name}</span>
-                <button type="button" className={styles.manageLink} onClick={() => toggleCategoryActive(category)}>
-                  {category.active ? "Retire" : "Reactivate"}
-                </button>
+                <span className={styles.categoryManageActions}>
+                  <button type="button" className={styles.manageLink} onClick={() => toggleCategoryActive(category)}>
+                    {category.active ? "Retire" : "Reactivate"}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.manageLink} ${catalogStyles.itemCardDeleteBtn}`}
+                    onClick={() => openCategoryDeleteModal(category)}
+                  >
+                    Delete
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
+        </div>
+      </Modal>
+
+      {/* Category delete — permanent, extends items' hard-delete exception
+          to expense_categories (client request, 2026-07-23). expenses.category_id
+          is not null with no nullable escape, so deleting a category also
+          deletes every expense row filed under it, retroactively changing
+          past expense/profit figures — confirmed directly with the client
+          before this was built. The impact preview below shows the real
+          numbers so this isn't a surprise after the fact. See
+          supabase/migrations/20260723100000_expense_category_hard_delete.sql. */}
+      <Modal
+        open={categoryDeleteTarget !== null}
+        onClose={() => setCategoryDeleteTarget(null)}
+        title={categoryDeleteTarget ? `Delete ${categoryDeleteTarget.name}?` : "Delete category"}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setCategoryDeleteTarget(null)}
+              disabled={categoryDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                categoryDeleteConfirmText !== categoryDeleteTarget?.name ||
+                categoryDeleting ||
+                categoryDeleteImpactLoading
+              }
+              onClick={confirmCategoryDelete}
+            >
+              {categoryDeleting ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </>
+        }
+      >
+        <div className={catalogStyles.form}>
+          <p className={styles.deleteWarning}>
+            This permanently removes the category and cannot be undone.
+          </p>
+
+          {categoryDeleteImpactLoading && <p>Checking what this will affect…</p>}
+
+          {categoryDeleteImpact && (
+            <ul className={catalogStyles.deleteImpactList}>
+              {categoryDeleteImpact.expenses_count > 0 ? (
+                <li>
+                  <strong>{categoryDeleteImpact.expenses_count}</strong> expense
+                  {categoryDeleteImpact.expenses_count === 1 ? "" : "s"} totaling{" "}
+                  <strong>{money(categoryDeleteImpact.expenses_value)}</strong> filed under this
+                  category — this will change already-closed days&rsquo; expense and profit
+                  totals.
+                </li>
+              ) : (
+                <li>No expenses found under this category — nothing else will be affected.</li>
+              )}
+            </ul>
+          )}
+
+          {categoryDeleteError && <p className={catalogStyles.formError}>{categoryDeleteError}</p>}
+
+          <Input
+            label="Confirm name"
+            value={categoryDeleteConfirmText}
+            onChange={(e) => setCategoryDeleteConfirmText(e.target.value)}
+          />
         </div>
       </Modal>
 

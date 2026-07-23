@@ -130,14 +130,15 @@ create table public.users (
 -- ITEMS
 -- Single shared item master. No per-location duplication.
 --
--- Unlike ingredients/delivery_locations (§5's soft-deactivate-only
--- rule), items also support a real, permanent DELETE as of 2026-07-21
--- (post-launch client request) -- see "Item hard delete" below the
--- schema block, and delete_item()/item_delete_impact() in
+-- Items support a real, permanent DELETE as of 2026-07-21 (post-launch
+-- client request) -- see "Item hard delete" below the schema block, and
+-- delete_item()/item_delete_impact() in
 -- supabase/migrations/20260721080000_item_hard_delete.sql. Deactivate
 -- (the `active` flag below) remains available and is the safer default
 -- for most cases; delete is for when the admin genuinely wants the item
--- and its history gone.
+-- and its history gone. (ingredients/delivery_locations/expense_categories
+-- gained the same real-delete capability post-launch, 2026-07-23 -- see
+-- §5 for the full current picture across the catalog.)
 -- ============================================================
 
 create table public.items (
@@ -170,17 +171,19 @@ create trigger items_set_updated_at
 -- ============================================================
 -- ITEM HARD DELETE (post-launch, 2026-07-21)
 --
--- A deliberate, explicit exception to §5's "no hard delete" rule for
--- items only -- ingredients/delivery_locations are unchanged and stay
--- deactivate-only. Confirmed directly and twice with the client before
--- being built: deleting an item with real history also permanently
--- deletes every stock_entries/order_items (and any order left with no
+-- A deliberate, explicit exception to §5's "no hard delete" rule,
+-- confirmed directly and twice with the client before being built:
+-- deleting an item with real history also permanently deletes every
+-- stock_entries/order_items (and any order left with no
 -- items)/canteen_stock_purchases/staff_meal_entries row that references
 -- it, which changes already-closed days' Ledger/dashboard/profit
 -- figures retroactively -- the opposite of every other "never rewrite
 -- history" guarantee in this schema (price snapshots, no soft-delete on
--- stock_entries/expenses, immutable purchases). This is NOT a pattern to
--- extend to another table without the same explicit confirmation.
+-- stock_entries/expenses, immutable purchases). ingredients/
+-- delivery_locations/expense_categories were extended to the same
+-- pattern post-launch, 2026-07-23, each with its own separate explicit
+-- client confirmation (see §5) -- this was NOT assumed to extend
+-- automatically; each table required asking again.
 --
 -- DELETE RLS policies (admin-only, no equivalent for staff) added on:
 -- items, stock_entries, canteen_stock_purchases, staff_meal_entries,
@@ -228,6 +231,8 @@ create trigger items_set_updated_at
 -- Raw materials (flour, sugar, cooking oil, ...) held at the
 -- central store. Never sold directly to a customer -- only
 -- consumed in cooking to produce sellable `items`. See §3.2.
+-- Supports a real hard delete as of 2026-07-23 -- see "INGREDIENT
+-- HARD DELETE" below the ingredient_entries schema block, and §5.
 -- ============================================================
 
 create table public.ingredients (
@@ -391,9 +396,10 @@ create trigger stock_entries_set_updated_at
 -- 20260721090000_expense_categories_catalog.sql) -- replaces the fixed
 -- expense_category enum (electricity/gas/charcoal/other). WaPrecious
 -- can add/rename/retire her own categories (rent, salaries, water, ...)
--- through the UI, same deactivate-only catalog pattern as
--- ingredients/delivery_locations -- no delete route, `active` boolean
--- instead. One shared catalog: both staff's /expenses and admin's
+-- through the UI, `active` boolean for the routine case. As of
+-- 2026-07-23 it also supports a real hard delete -- see "EXPENSE
+-- CATEGORY HARD DELETE" below the schema block, and §5.
+-- One shared catalog: both staff's /expenses and admin's
 -- /dashboard/expenses category pickers read the same table, so a
 -- category WaPrecious adds shows up for staff too.
 -- ============================================================
@@ -452,6 +458,8 @@ create index expenses_category_id_idx on public.expenses (category_id);
 -- DELIVERY_LOCATIONS
 -- Admin-managed catalog of delivery zones and their fixed fees.
 -- Staff pick a zone per order rather than typing a fee -- see §6.
+-- Supports a real hard delete as of 2026-07-23 -- see "DELIVERY
+-- LOCATION HARD DELETE" below the schema block, and §5.
 -- ============================================================
 
 create table public.delivery_locations (
@@ -1258,10 +1266,9 @@ create policy "stock_update_admin_or_current_period_location" on public.stock_en
 
 -- EXPENSE_CATEGORIES: same triad as items/ingredients -- everyone
 -- (staff + admin) can read (staff need this for their own /expenses
--- category picker), only admin can write. No delete policy --
--- deactivate-only, never a hard delete (see 20260721090000_expense_categories_catalog.sql;
--- items' one-off hard-delete exception, 20260721080000_item_hard_delete.sql,
--- is explicitly NOT a pattern to extend to another table).
+-- category picker), only admin can write (20260721090000_expense_categories_catalog.sql).
+-- A DELETE policy was added post-launch, 2026-07-23 -- see
+-- 20260723100000_expense_category_hard_delete.sql and §5.
 create policy "expense_categories_select_all" on public.expense_categories
   for select using (true);
 create policy "expense_categories_admin_write" on public.expense_categories
@@ -1448,7 +1455,13 @@ RLS policies alone are not sufficient — Postgres requires baseline `GRANT` pri
 - **No debtor/credit ledger table.** Explicitly Phase 2 per the scope document. Don't add it speculatively.
 - **Wastage is V1, not Phase 2 — this reverses an earlier decision.** It was originally deferred, but client input made clear it's needed now: without it, closing stock silently doesn't reconcile with a physical count after spoilage. See §3.3 for the full column-level treatment on both `stock_entries` and `ingredient_entries`. No separate wastage table — it's columns on the existing entry tables, not its own ledger, since a wastage event is always tied to a specific item/ingredient's entry for that period.
 - **No soft-delete/delete on `stock_entries`.** Historical entries are never deleted, only correctable by admin via update (with the update itself logged via both `updated_at` and `audit_log`, see §3.4's "Admin direct ledger-row edit" note). **`expenses` is an explicit, narrower exception** (post-launch addition, 2026-07-21): admin can both edit (`expenses_update_admin_only`) and outright delete (`expenses_delete_admin_only`) an expense row, logged to `audit_log` either way — see the EXPENSES RLS section above. This diverges from `stock_entries` because an expense carries no derived value elsewhere (no weighted-average cost, no stock quantity) for a delete to leave inconsistent; don't infer from this that `stock_entries`/`ingredient_purchases`-style tables should also gain a general delete without the same reasoning applying.
-- **`items` is the one exception to the deactivate-only catalog pattern** (post-launch, 2026-07-21, direct client confirmation — see the "ITEM HARD DELETE" block above the `items` schema). `ingredients`/`delivery_locations` are unaffected and remain deactivate-only for exactly the reason stated below (past rows reference them, hard-delete would either FK-violate or orphan history) — don't extend items' hard-delete precedent to either of those tables without the same explicit client confirmation this required.
+- **`items`, `ingredients`, `delivery_locations`, and `expense_categories` all support real hard delete — the deactivate-only pattern is no longer the default for the catalog.** `items` gained this first (post-launch, 2026-07-21, direct client confirmation — see `supabase/migrations/20260721080000_item_hard_delete.sql`). `ingredients`, `delivery_locations`, and `expense_categories` followed (post-launch, 2026-07-23, separately confirmed — see `supabase/migrations/20260723080000_ingredient_hard_delete.sql`, `20260723090000_delivery_location_hard_delete.sql`, `20260723100000_expense_category_hard_delete.sql`), triggered by a real incident: an ingredient called "Smokies" was mistakenly tracked as both a menu item and a raw ingredient, and the client wanted the erroneous row gone entirely, not just deactivated. Each table's delete is admin-only, requires a real impact preview (`<table>_delete_impact()`) and type-the-name-to-confirm in the UI, and permanently removes history that references it:
+  - `items` — deletes `stock_entries`/`canteen_stock_purchases`/`staff_meal_entries` and either deletes or recomputes `orders`/`order_items` (see the "ITEM HARD DELETE" block above the `items` schema).
+  - `ingredients` — deletes `ingredient_entries`/`ingredient_purchases` (`staff_meal_entries.item_id` references `items`, not `ingredients`, so it's out of scope here).
+  - `delivery_locations` — `orders.delivery_location_id` is nullable ("null for pickup"), so deleting a zone just nulls out that reference on any order that used it; the order, its fee, and its total are untouched. Materially smaller blast radius than the other three.
+  - `expense_categories` — `expenses.category_id` is not null with no nullable escape, so deleting a category also deletes every expense filed under it.
+
+  **Staff (`users`) accounts were explicitly excluded from this round** (client asked, 2026-07-23; considered and declined — not simply unconsidered): `created_by`/`staff_id` is a not-null FK on ~9 tables (`stock_entries`, `ingredient_entries`, `orders`, `expenses`, `ingredient_purchases`, `canteen_stock_purchases`, `staff_meal_entries`, and the complimentary-meal/stock-adjustment entry tables), and `audit_log.actor_id` is `on delete restrict` — a deliberate existing guard against ever deleting a referenced user. A full cascade would delete that staff member's entire transaction history business-wide, a categorically larger blast radius than any single catalog row. If this is revisited, the shape discussed and not yet built was: block the delete entirely unless the account has zero `created_by`/`staff_id`/`audit_log` rows anywhere (i.e. it only ever succeeds for an account that was created but never actually used) — not a cascade. Staff accounts remain deactivate/reactivate/PIN-reset-only, no delete route, until a future explicit request revisits this.
 - **`items.supply_type` is deliberate, not speculative.** It exists specifically because the restaurant's central store supplies only a subset of items to canteen daily, while canteen also stocks unrelated items (cyber, some retail) entirely on its own — see §3.1. Don't remove or simplify this enum thinking it's over-engineering; it's load-bearing for the canteen `added_stock` aggregation.
 - **No formal recipe / bill-of-materials linking `ingredients` to `items`.** The client only has a rough, informal sense of ingredient-to-dish conversion, not precise recipes — see §3.2. `ingredient_entries.quantity_used` and `stock_entries.added_stock` are independent numbers with no enforced relationship. Don't build automatic yield calculation speculatively; it's a real Phase 2 candidate if the client asks, not a V1 gap to quietly fill in.
 
@@ -1469,7 +1482,7 @@ An order is a **single customer transaction** — closer to a receipt than to a 
 
 ### `delivery_locations` — admin-managed zone catalog
 
-Prosper Hotel's admin (WaPrecious) sets up named delivery zones, each with a fixed fee (e.g., "Estate A — KES 100"). Staff logging an order pick a zone from this catalog rather than typing a fee themselves — same "don't make staff re-derive a number the system already knows" principle as opening-stock carry-forward (§3.1). `delivery_locations` follows the same admin-CRUD, soft-deactivate pattern `ingredients` still uses (§2, §5's no-hard-delete rule applies here too, since past orders reference a zone) — unlike `items`, which gained a real hard delete post-launch (see §5's "the one exception" note); `delivery_locations` was not included in that exception and stays deactivate-only.
+Prosper Hotel's admin (WaPrecious) sets up named delivery zones, each with a fixed fee (e.g., "Estate A — KES 100"). Staff logging an order pick a zone from this catalog rather than typing a fee themselves — same "don't make staff re-derive a number the system already knows" principle as opening-stock carry-forward (§3.1). `delivery_locations` supports admin-CRUD, deactivate/reactivate, **and** a real hard delete (post-launch, 2026-07-23 — see §5) — deleting a zone nulls out `delivery_location_id` on any past order that used it (nullable FK, "null for pickup") rather than deleting or rewriting the order itself.
 
 - `fee` is **snapshotted onto the order** at write time (`orders.delivery_fee_snapshot`), same rationale as every other price snapshot in this schema (§3) — a later fee change at a zone must not silently alter a past order's recorded total.
 - Pickup orders have no delivery zone (`delivery_location_id` is null, `delivery_fee_snapshot` is `0`).

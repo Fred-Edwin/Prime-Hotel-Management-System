@@ -10,9 +10,18 @@ import { FilterBar } from "@/components/FilterBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { Toast } from "@/components/Toast";
+import { ActionMenu } from "@/components/ActionMenu";
+import { Modal } from "@/components/Modal";
 import { ingredientSchema, type IngredientInput } from "@/lib/validation";
 import type { Database } from "@/lib/supabase/types";
 import styles from "../catalog.module.css";
+
+interface DeleteImpact {
+  ingredient_entries_count: number;
+  ingredient_entries_closing_value: number;
+  ingredient_purchases_count: number;
+  ingredient_purchases_value: number;
+}
 
 type Ingredient = Database["public"]["Tables"]["ingredients"]["Row"];
 
@@ -38,6 +47,46 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<DeleteImpact | null>(null);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function openDeleteModal(ingredient: Ingredient) {
+    setDeleteTarget(ingredient);
+    setDeleteConfirmText("");
+    setDeleteError(null);
+    setDeleteImpact(null);
+    setDeleteImpactLoading(true);
+    try {
+      const res = await fetch(`/api/ingredients/${ingredient.id}/delete-impact`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setDeleteImpact(data.impact ?? null);
+    } finally {
+      setDeleteImpactLoading(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/ingredients/${deleteTarget.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete ingredient");
+      setIngredients((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setToast(`${deleteTarget.name} deleted`);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete ingredient");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -202,13 +251,17 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
                       </span>
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        className={styles.editLink}
-                        onClick={() => openEditDrawer(ingredient)}
-                      >
-                        Edit
-                      </button>
+                      <ActionMenu
+                        aria-label={`Actions for ${ingredient.name}`}
+                        items={[
+                          { label: "Edit", onClick: () => openEditDrawer(ingredient) },
+                          {
+                            label: "Delete",
+                            destructive: true,
+                            onClick: () => openDeleteModal(ingredient),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -272,6 +325,13 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
                           onClick={() => openEditDrawer(ingredient)}
                         >
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.itemCardEditBtn} ${styles.itemCardDeleteBtn}`}
+                          onClick={() => openDeleteModal(ingredient)}
+                        >
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -351,6 +411,77 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
           </label>
         </FormSection>
       </Drawer>
+
+      {/* Delete — permanent, extends items' hard-delete exception to
+          ingredients (client request, 2026-07-23, triggered by the
+          "Smokies" ingredient mistakenly tracked as both a menu item and
+          a raw ingredient). Also deletes every ingredient_entries/
+          ingredient_purchases row referencing this ingredient,
+          retroactively changing past Ledger/dashboard figures — confirmed
+          directly with the client before this was built. The impact
+          preview below shows the real numbers so this isn't a surprise
+          after the fact. See
+          supabase/migrations/20260723080000_ingredient_hard_delete.sql. */}
+      <Modal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete ingredient"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText !== deleteTarget?.name || deleting || deleteImpactLoading}
+              onClick={confirmDelete}
+            >
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.form}>
+          <p className={styles.deleteWarning}>
+            This permanently removes the ingredient and cannot be undone.
+          </p>
+
+          {deleteImpactLoading && <p>Checking what this will affect…</p>}
+
+          {deleteImpact && (
+            <ul className={styles.deleteImpactList}>
+              {deleteImpact.ingredient_entries_count > 0 && (
+                <li>
+                  <strong>{deleteImpact.ingredient_entries_count}</strong> ingredient ledger entr
+                  {deleteImpact.ingredient_entries_count === 1 ? "y" : "ies"} totaling{" "}
+                  <strong>KES {deleteImpact.ingredient_entries_closing_value.toFixed(2)}</strong> in
+                  closing stock value — this will change already-closed days&rsquo; Ledger and
+                  dashboard totals.
+                </li>
+              )}
+              {deleteImpact.ingredient_purchases_count > 0 && (
+                <li>
+                  <strong>{deleteImpact.ingredient_purchases_count}</strong> ingredient purchase
+                  {deleteImpact.ingredient_purchases_count === 1 ? "" : "s"} totaling{" "}
+                  <strong>KES {deleteImpact.ingredient_purchases_value.toFixed(2)}</strong>.
+                </li>
+              )}
+              {deleteImpact.ingredient_entries_count === 0 &&
+                deleteImpact.ingredient_purchases_count === 0 && (
+                  <li>No history found for this ingredient — nothing else will be affected.</li>
+                )}
+            </ul>
+          )}
+
+          {deleteError && <p className={styles.formError}>{deleteError}</p>}
+
+          <Input
+            label="Confirm name"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+          />
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast} status="success" onDismiss={() => setToast(null)} />}
     </div>
