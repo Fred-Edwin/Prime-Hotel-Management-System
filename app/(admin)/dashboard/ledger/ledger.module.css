@@ -495,6 +495,19 @@ thead .stickyColItem {
   z-index: 3;
 }
 
+/* Ingredients table's single header row — this table has no grouped
+   sub-header (.groupHeader) like the Item Ledger table above, so it just
+   needs a plain sticky top: 0 rather than the Item table's stacked
+   top: 0 / top: 29px pair. Reuses .ledgerTableCard/.ledgerTableCardMaximized
+   for scroll-containment + fullscreen, which is why the sticky offset here
+   only has one row to account for. */
+.ingredientHeaderRow th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-surface-sunken);
+}
+
 .rangePicker {
   position: relative;
 }

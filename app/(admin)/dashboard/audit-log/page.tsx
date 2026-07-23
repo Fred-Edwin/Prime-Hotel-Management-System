@@ -3,8 +3,12 @@ import { redirect } from "next/navigation";
 import { AuditLogClient } from "./AuditLogClient";
 
 /**
- * Admin audit trail (docs/backlog/03_audit_log.md). First-pass scope
- * covers Staff edit/deactivate/PIN-reset only (see lib/audit.ts callers).
+ * Admin audit trail (docs/backlog/03_audit_log.md). Covers admin edits to
+ * staff, items, ingredients, delivery locations, expenses, and admin
+ * corrections to stock/ingredient ledger entries (see lib/audit.ts
+ * callers for the full, current list — grown post-launch from the
+ * original staff-edit-only first pass, 2026-07-23, after an ingredient
+ * catalog price edit couldn't be traced through this log at all).
  * Read-only, admin-only — RLS (audit_log_select_admin_only) is the real
  * boundary, this route check is defense in depth. Reached from the Staff
  * screen rather than added as an 8th top-level sidebar item, same

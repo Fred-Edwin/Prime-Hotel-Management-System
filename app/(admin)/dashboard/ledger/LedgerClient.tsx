@@ -161,7 +161,9 @@ export function LedgerClient() {
   const [data, setData] = useState<LedgerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [itemSearch, setItemSearch] = useState("");
   const [ingredientSearch, setIngredientSearch] = useState("");
+  const [consumptionSearch, setConsumptionSearch] = useState("");
   // Stock Consumption category filter (docs/backlog/05_stock_consumption.md)
   // — "all" shows every category in one list, matching the confirmed
   // "one section, filter chips" UI direction.
@@ -175,7 +177,15 @@ export function LedgerClient() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [isTableMaximized, setIsTableMaximized] = useState(false);
+  // Which of the three ledger tables (if any) is currently maximized — one
+  // shared piece of state rather than a separate boolean per table, since
+  // only one table can sensibly be fullscreen at a time. Was a single
+  // `isTableMaximized` boolean scoped to just the Item Ledger table before
+  // the Ingredients/Non-Sales Stock Consumption tables gained the same
+  // maximize affordance.
+  const [maximizedTable, setMaximizedTable] = useState<"items" | "ingredients" | "consumption" | null>(
+    null
+  );
   const [ingredientCatalog, setIngredientCatalog] = useState<IngredientCatalogRow[]>([]);
   // Historical-edit cascade preview (docs/00_ARCHITECTURE.md's admin
   // ledger-edit cascade) — null while loading/not yet fetched, { count: 0 }
@@ -393,13 +403,13 @@ export function LedgerClient() {
   // table" ask), matching how Modal (components/Modal) already handles
   // Escape elsewhere in this app rather than inventing a new convention.
   useEffect(() => {
-    if (!isTableMaximized) return;
+    if (!maximizedTable) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setIsTableMaximized(false);
+      if (e.key === "Escape") setMaximizedTable(null);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isTableMaximized]);
+  }, [maximizedTable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -466,6 +476,11 @@ export function LedgerClient() {
     setRangePickerOpen(false);
   }
 
+  const filteredItems =
+    data?.items.filter((row) =>
+      row.item_name.toLowerCase().includes(itemSearch.trim().toLowerCase())
+    ) ?? [];
+
   const filteredIngredients =
     data?.ingredients.filter((row) =>
       row.ingredient_name.toLowerCase().includes(ingredientSearch.trim().toLowerCase())
@@ -489,10 +504,12 @@ export function LedgerClient() {
   // breaks it down per-category via the filter chips.
   const stockConsumptionRows = data?.stockConsumption ?? [];
   const stockConsumptionTotal = stockConsumptionRows.reduce((sum, row) => sum + row.value, 0);
-  const filteredConsumptionRows =
-    consumptionCategoryFilter === "all"
-      ? stockConsumptionRows
-      : stockConsumptionRows.filter((row) => row.category === consumptionCategoryFilter);
+  const filteredConsumptionRows = stockConsumptionRows
+    .filter((row) => consumptionCategoryFilter === "all" || row.category === consumptionCategoryFilter)
+    .filter((row) => {
+      const subject = (row.item_name ?? row.ingredient_name ?? "").toLowerCase();
+      return subject.includes(consumptionSearch.trim().toLowerCase());
+    });
 
   const CONSUMPTION_CATEGORY_LABELS: Record<StockConsumptionCategory, string> = {
     wastage: "Wastage",
@@ -588,15 +605,22 @@ export function LedgerClient() {
           </div>
 
           <section className={styles.section}>
+            <div className={styles.toolbarRow}>
+              <FilterBar
+                searchValue={itemSearch}
+                onSearchChange={setItemSearch}
+                searchPlaceholder="Search items…"
+              />
+            </div>
             <>
-                {isTableMaximized && (
-                  <div className={styles.maximizeBackdrop} onClick={() => setIsTableMaximized(false)} />
+                {maximizedTable === "items" && (
+                  <div className={styles.maximizeBackdrop} onClick={() => setMaximizedTable(null)} />
                 )}
                 <Card
                   className={[
                     catalogStyles.tableCard,
                     styles.ledgerTableCard,
-                    isTableMaximized ? styles.ledgerTableCardMaximized : "",
+                    maximizedTable === "items" ? styles.ledgerTableCardMaximized : "",
                     catalogStyles.desktopOnly,
                   ].join(" ")}
                 >
@@ -615,18 +639,18 @@ export function LedgerClient() {
                     <button
                       type="button"
                       className={styles.maximizeButton}
-                      onClick={() => setIsTableMaximized((prev) => !prev)}
-                      aria-label={isTableMaximized ? "Restore table size" : "Maximize table"}
-                      title={isTableMaximized ? "Restore table size (Esc)" : "Maximize table"}
+                      onClick={() => setMaximizedTable((prev) => (prev === "items" ? null : "items"))}
+                      aria-label={maximizedTable === "items" ? "Restore table size" : "Maximize table"}
+                      title={maximizedTable === "items" ? "Restore table size (Esc)" : "Maximize table"}
                     >
-                      <Icon name={isTableMaximized ? "collapse" : "expand"} size={16} />
+                      <Icon name={maximizedTable === "items" ? "collapse" : "expand"} size={16} />
                     </button>
                   </div>
                 <table
                   className={[
                     catalogStyles.table,
                     styles.ledgerTable,
-                    data.items.length <= 3 ? styles.ledgerTableSparse : "",
+                    filteredItems.length <= 3 ? styles.ledgerTableSparse : "",
                   ].join(" ")}
                 >
                   <thead>
@@ -669,18 +693,24 @@ export function LedgerClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.items.length === 0 && (
+                    {filteredItems.length === 0 && (
                       <tr>
                         <td colSpan={16} className={styles.emptyRow}>
                           <EmptyState
                             icon={<Icon name="summary" size={48} />}
-                            heading="No item entries this period"
-                            body="Once staff save till or canteen entries, they'll show up here row by row."
+                            heading={
+                              data.items.length === 0 ? "No item entries this period" : "No matching items"
+                            }
+                            body={
+                              data.items.length === 0
+                                ? "Once staff save till or canteen entries, they'll show up here row by row."
+                                : "Try a different search term."
+                            }
                           />
                         </td>
                       </tr>
                     )}
-                    {data.items.map((row) => {
+                    {filteredItems.map((row) => {
                       const canteenSignedQty =
                         row.location === "canteen" ? row.added_stock : -row.sent_out;
                       return (
@@ -796,9 +826,9 @@ export function LedgerClient() {
                 Closing (the figure most worth a glance) with the rest
                 behind a tap, same interaction as Items' price/margin
                 summary row. */}
-            {data.items.length > 0 && (
+            {filteredItems.length > 0 && (
               <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-                {data.items.map((row) => {
+                {filteredItems.map((row) => {
                   const key = `${row.entry_date}-${row.item_id}-${row.location}`;
                   const isOpen = expandedRows.has(key);
                   const canteenSignedQty =
@@ -929,10 +959,46 @@ export function LedgerClient() {
                 />
               </div>
               <>
-                      <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
-                        <table className={catalogStyles.table}>
+                      {maximizedTable === "ingredients" && (
+                        <div className={styles.maximizeBackdrop} onClick={() => setMaximizedTable(null)} />
+                      )}
+                      <Card
+                        className={[
+                          catalogStyles.tableCard,
+                          styles.ledgerTableCard,
+                          maximizedTable === "ingredients" ? styles.ledgerTableCardMaximized : "",
+                          catalogStyles.desktopOnly,
+                        ].join(" ")}
+                      >
+                        {/* Maximize toggle + sticky header, same mechanism as
+                            the Item Ledger table above — this table
+                            previously used a plain, unbounded Card, which is
+                            why its <thead> scrolled away with the page
+                            instead of staying pinned (the reported "can't
+                            tell the columns" bug: a plain catalogStyles.table
+                            has no sticky positioning of its own). */}
+                        <div className={styles.maximizeButtonShell}>
+                          <button
+                            type="button"
+                            className={styles.maximizeButton}
+                            onClick={() =>
+                              setMaximizedTable((prev) => (prev === "ingredients" ? null : "ingredients"))
+                            }
+                            aria-label={
+                              maximizedTable === "ingredients" ? "Restore table size" : "Maximize table"
+                            }
+                            title={
+                              maximizedTable === "ingredients"
+                                ? "Restore table size (Esc)"
+                                : "Maximize table"
+                            }
+                          >
+                            <Icon name={maximizedTable === "ingredients" ? "collapse" : "expand"} size={16} />
+                          </button>
+                        </div>
+                        <table className={[catalogStyles.table, styles.ledgerTable, styles.ledgerTableSparse].join(" ")}>
                           <thead>
-                            <tr>
+                            <tr className={styles.ingredientHeaderRow}>
                               <th>Date</th>
                               <th>Ingredient</th>
                               <th className={catalogStyles.numeric}>Opening</th>
@@ -1141,11 +1207,43 @@ export function LedgerClient() {
                 onChange={(value) => setConsumptionCategoryFilter(value as "all" | StockConsumptionCategory)}
               />
             </div>
+            <div className={styles.toolbarRow}>
+              <FilterBar
+                searchValue={consumptionSearch}
+                onSearchChange={setConsumptionSearch}
+                searchPlaceholder="Search items / ingredients…"
+              />
+            </div>
             <>
-                <Card className={`${catalogStyles.tableCard} ${catalogStyles.desktopOnly}`}>
-                  <table className={catalogStyles.table}>
+                {maximizedTable === "consumption" && (
+                  <div className={styles.maximizeBackdrop} onClick={() => setMaximizedTable(null)} />
+                )}
+                <Card
+                  className={[
+                    catalogStyles.tableCard,
+                    styles.ledgerTableCard,
+                    maximizedTable === "consumption" ? styles.ledgerTableCardMaximized : "",
+                    catalogStyles.desktopOnly,
+                  ].join(" ")}
+                >
+                  <div className={styles.maximizeButtonShell}>
+                    <button
+                      type="button"
+                      className={styles.maximizeButton}
+                      onClick={() =>
+                        setMaximizedTable((prev) => (prev === "consumption" ? null : "consumption"))
+                      }
+                      aria-label={maximizedTable === "consumption" ? "Restore table size" : "Maximize table"}
+                      title={
+                        maximizedTable === "consumption" ? "Restore table size (Esc)" : "Maximize table"
+                      }
+                    >
+                      <Icon name={maximizedTable === "consumption" ? "collapse" : "expand"} size={16} />
+                    </button>
+                  </div>
+                  <table className={[catalogStyles.table, styles.ledgerTable, styles.ledgerTableSparse].join(" ")}>
                     <thead>
-                      <tr>
+                      <tr className={styles.ingredientHeaderRow}>
                         <th>Date</th>
                         <th>Category</th>
                         <th>Staff</th>
@@ -1162,8 +1260,16 @@ export function LedgerClient() {
                           <td colSpan={8} className={styles.emptyRow}>
                             <EmptyState
                               icon={<Icon name="wastage" size={48} />}
-                              heading="Nothing in this category this period"
-                              body="Wastage, staff meals, complimentary meals, and stock adjustments will show up here, itemized by category."
+                              heading={
+                                stockConsumptionRows.length === 0
+                                  ? "Nothing in this category this period"
+                                  : "No matching entries"
+                              }
+                              body={
+                                stockConsumptionRows.length === 0
+                                  ? "Wastage, staff meals, complimentary meals, and stock adjustments will show up here, itemized by category."
+                                  : "Try a different search term or category."
+                              }
                             />
                           </td>
                         </tr>

@@ -31,8 +31,192 @@
   margin-bottom: var(--space-1);
 }
 
-.targetCell {
+/* Row click opens the detail Drawer — same "whole row is a target"
+   convention Ledger's editableRow already established, so this table
+   reads consistently with the rest of the admin surface rather than
+   requiring the small info-icon button to be hit precisely. */
+.row {
+  cursor: pointer;
+}
+
+.row:hover td {
+  background: var(--color-surface-sunken);
+}
+
+.whenCell {
+  font-family: var(--font-family-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Action cell: a small entity icon + two-line label (action verb over
+   the resolved subject name) — this is the core scanability fix. The
+   old table's four columns (When/Admin/Action/Target) were all equal
+   weight prose; a real audit trail needs the entity type to register
+   before the eye even reads text, the way a git log's colored status
+   markers or an inbox's sender-avatar does. */
+.actionCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.actionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+}
+
+.actionLabel {
+  display: block;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.subjectName {
+  display: block;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+/* The "what changed" column — a single before → after line is the exact
+   piece of information the Smokies ingredient investigation needed and
+   couldn't get without raw SQL. Data font + tabular nums since these are
+   frequently numeric (prices, quantities). */
+.summaryCell {
   font-family: var(--font-family-data);
   font-size: var(--font-size-caption);
+  color: var(--color-text-primary);
+}
+
+.noSummary {
+  color: var(--color-text-placeholder);
+}
+
+.detailsButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.detailsButton:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-brand-primary);
+}
+
+/* Mobile card row wrapper — catalogStyles.itemCardIdentity is itself a
+   column flex (name stacked over category text), so the entity icon
+   needs its own row wrapper alongside it rather than being a third
+   direct child of that column container. */
+.mobileIdentityRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Drawer detail body */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.detailMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.detailMeta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-primary);
+}
+
+.detailMetaLabel {
+  color: var(--color-text-secondary);
+}
+
+.detailMetaMono {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+}
+
+/* Field-level before/after grid — the full diff behind the row summary's
+   single headline field. Changed rows get a highlighted background so a
+   9-field entity edit (e.g. Items' full form) doesn't force the admin to
+   manually compare every row when only one or two actually changed. */
+.diffTable {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.diffHeaderRow,
+.diffRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-caption);
+}
+
+.diffHeaderRow {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-sunken);
+}
+
+.diffRow {
+  font-family: var(--font-family-data);
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border-default);
+}
+
+.diffRowChanged {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-status-warning) 8%, transparent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.diffField {
+  font-family: var(--font-family-structural);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.noDetail {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
 }

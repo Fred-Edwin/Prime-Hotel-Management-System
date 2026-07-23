@@ -21,6 +21,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const supabase = await createServerSupabaseClient();
+
+  const { data: before } = await supabase
+    .from("items")
+    .select("name, category, supply_type, buying_price, selling_price, low_stock_threshold, active")
+    .eq("id", id)
+    .single();
+
   const { data, error } = await supabase
     .from("items")
     .update(parsed.data)
@@ -29,6 +36,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .single();
 
   if (error) return serverErrorResponse(error, "items/[id]");
+
+  // Same gap-closing rationale as ingredients (app/api/ingredients/[id]/
+  // route.ts) — a silent buying/selling price edit here directly drives
+  // sales/margin/COGS figures, the same class of "who changed this and
+  // when" question the Smokies ingredient incident hit a dead end on.
+  const action =
+    before && before.active !== parsed.data.active
+      ? parsed.data.active
+        ? "item.reactivate"
+        : "item.deactivate"
+      : "item.edit";
+
+  await writeAuditLog(supabase, {
+    actorId: admin.id,
+    action,
+    targetTable: "items",
+    targetId: id,
+    changes: { before, after: parsed.data },
+  });
+
   return NextResponse.json({ item: data });
 }
 
