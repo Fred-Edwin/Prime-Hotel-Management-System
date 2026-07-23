@@ -7,12 +7,19 @@ import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/expenses?date=YYYY-MM-DD
- * Staff: returns their own location's expenses for the given date.
- * Admin: returns every expense for the given date, across both locations
- * plus business-wide (location = null) rows — RLS (expenses_select_scoped)
- * already grants admin unrestricted select, so no location filter is
- * applied for that role. Most recent first — the running list shown below
- * the log form on /expenses (staff) or /dashboard/expenses (admin).
+ * GET /api/expenses?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Staff: returns their own location's expenses for the given date/range.
+ * Admin: returns every expense for the given date/range, across both
+ * locations plus business-wide (location = null) rows — RLS
+ * (expenses_select_scoped) already grants admin unrestricted select, so no
+ * location filter is applied for that role. Most recent first — the
+ * running list shown below the log form on /expenses (staff) or
+ * /dashboard/expenses (admin).
+ *
+ * `from`/`to` (Admin Expenses' custom date range picker, same pattern as
+ * /api/dashboard/ledger) is an inclusive range query — one request instead
+ * of the admin client's old per-day fan-out for Week/Month. `date` still
+ * works standalone for the staff screen's single-day lookup.
  *
  * Also bundles the active expense_categories catalog in the response —
  * same pattern GET /api/orders already uses for delivery_locations
@@ -27,8 +34,24 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return NextResponse.json({ error: "A valid date is required" }, { status: 400 });
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+
+  let from: string;
+  let to: string;
+  if (fromParam || toParam) {
+    if (!fromParam || !toParam || !isoDate.test(fromParam) || !isoDate.test(toParam) || fromParam > toParam) {
+      return NextResponse.json({ error: "A valid date range is required" }, { status: 400 });
+    }
+    from = fromParam;
+    to = toParam;
+  } else {
+    if (!date || !isoDate.test(date)) {
+      return NextResponse.json({ error: "A valid date is required" }, { status: 400 });
+    }
+    from = date;
+    to = date;
   }
 
   const supabase = await createServerSupabaseClient();
@@ -38,13 +61,15 @@ export async function GET(request: Request) {
     ? supabase
         .from("expenses")
         .select("*, expense_categories(id, name)")
-        .eq("expense_date", date)
+        .gte("expense_date", from)
+        .lte("expense_date", to)
         .eq("location", staffLocation)
         .order("created_at", { ascending: false })
     : supabase
         .from("expenses")
         .select("*, expense_categories(id, name)")
-        .eq("expense_date", date)
+        .gte("expense_date", from)
+        .lte("expense_date", to)
         .order("created_at", { ascending: false });
 
   const categoriesQuery = supabase

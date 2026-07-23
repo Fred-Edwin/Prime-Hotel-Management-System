@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/Card";
+import { FilterBar } from "@/components/FilterBar";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
@@ -69,6 +70,10 @@ function fulfillmentLabel(order: OrderRow): string {
 export function OrdersClient() {
   const [period, setPeriod] = useState<Period>("today");
   const [location, setLocation] = useState<Location>("");
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
+  const [rangeDraft, setRangeDraft] = useState({ from: "", to: "" });
+  const [rangePickerOpen, setRangePickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [data, setData] = useState<OrdersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +88,10 @@ export function OrdersClient() {
       try {
         const params = new URLSearchParams({ period });
         if (location) params.set("location", location);
+        if (customRange) {
+          params.set("from", customRange.from);
+          params.set("to", customRange.to);
+        }
 
         const res = await fetch(`/api/admin/orders?${params.toString()}`);
         const json = await res.json().catch(() => ({}));
@@ -99,7 +108,25 @@ export function OrdersClient() {
     return () => {
       cancelled = true;
     };
-  }, [period, location]);
+  }, [period, location, customRange]);
+
+  function selectPeriod(value: Period) {
+    setCustomRange(null);
+    setPeriod(value);
+  }
+
+  function applyCustomRange() {
+    if (!rangeDraft.from || !rangeDraft.to || rangeDraft.from > rangeDraft.to) return;
+    setCustomRange({ from: rangeDraft.from, to: rangeDraft.to });
+    setRangePickerOpen(false);
+  }
+
+  const filteredOrders =
+    data?.orders.filter((order) => {
+      const term = search.trim().toLowerCase();
+      if (!term) return true;
+      return order.customer_name.toLowerCase().includes(term);
+    }) ?? [];
 
   return (
     <div className={styles.page}>
@@ -111,7 +138,47 @@ export function OrdersClient() {
           </Link>
         </div>
         <div className={styles.controls}>
-          <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
+          <PeriodToggle
+            options={PERIOD_OPTIONS}
+            value={customRange ? "" : period}
+            onChange={(v) => selectPeriod(v as Period)}
+          />
+          <div className={styles.rangePicker}>
+            <button
+              type="button"
+              className={styles.rangeButton}
+              onClick={() => {
+                setRangeDraft(customRange ?? { from: "", to: "" });
+                setRangePickerOpen((open) => !open);
+              }}
+            >
+              <Icon name="summary" size={16} />
+              {customRange ? `${customRange.from} → ${customRange.to}` : "Select range"}
+            </button>
+            {rangePickerOpen && (
+              <div className={styles.rangePopover}>
+                <label className={styles.rangeField}>
+                  <span>From</span>
+                  <input
+                    type="date"
+                    value={rangeDraft.from}
+                    onChange={(e) => setRangeDraft({ ...rangeDraft, from: e.target.value })}
+                  />
+                </label>
+                <label className={styles.rangeField}>
+                  <span>To</span>
+                  <input
+                    type="date"
+                    value={rangeDraft.to}
+                    onChange={(e) => setRangeDraft({ ...rangeDraft, to: e.target.value })}
+                  />
+                </label>
+                <button type="button" className={styles.rangeApply} onClick={applyCustomRange}>
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
           <label className={styles.locationSelect}>
             <select value={location} onChange={(e) => setLocation(e.target.value as Location)}>
               {LOCATION_OPTIONS.map((opt) => (
@@ -126,6 +193,16 @@ export function OrdersClient() {
 
       {error && <p className={catalogStyles.formError}>{error}</p>}
 
+      {data && data.orders.length > 0 && (
+        <div className={styles.toolbarRow}>
+          <FilterBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search customer name…"
+          />
+        </div>
+      )}
+
       {loading && !data ? (
         <p>Loading…</p>
       ) : data && data.orders.length === 0 ? (
@@ -133,6 +210,12 @@ export function OrdersClient() {
           icon={<Icon name="orders" size={48} />}
           heading="No orders this period"
           body="Once staff log a delivery or pickup order, it'll show up here."
+        />
+      ) : data && filteredOrders.length === 0 ? (
+        <EmptyState
+          icon={<Icon name="orders" size={48} />}
+          heading="No matching orders"
+          body="Try a different search term or date range."
         />
       ) : data ? (
         <>
@@ -150,7 +233,7 @@ export function OrdersClient() {
                 </tr>
               </thead>
               <tbody>
-                {data.orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <tr key={order.id}>
                     <td>
                       {new Date(order.created_at).toLocaleString("en-KE", {
@@ -183,7 +266,7 @@ export function OrdersClient() {
           </Card>
 
           <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-            {data.orders.map((order) => (
+            {filteredOrders.map((order) => (
               <li key={order.id} className={catalogStyles.itemCard}>
                 <button
                   type="button"

@@ -6,6 +6,7 @@ import { serverErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/admin/orders?period=today|week|month&location=restaurant|canteen
+ * GET /api/admin/orders?from=YYYY-MM-DD&to=YYYY-MM-DD&location=restaurant|canteen
  *
  * Admin-only order list with line-item detail (Phase 9 — the admin
  * dashboard/ledger only ever showed aggregate stock_entries figures;
@@ -15,6 +16,10 @@ import { serverErrorResponse } from "@/lib/errors";
  * location boundary — docs/01_DATA_MODEL.md §4) — this route just adds
  * the period filter and joins order_items + the delivery zone name in
  * one round trip, same "no N+1" discipline as every other admin list.
+ *
+ * `from`/`to` (post-launch: custom date range picker, same pattern as
+ * /api/dashboard/ledger and /api/expenses) overrides the period-derived
+ * range when both are present.
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -30,7 +35,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid location" }, { status: 400 });
   }
 
-  const { from, to } = dashboardPeriodRange(period as DashboardPeriod);
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+
+  let from: string;
+  let to: string;
+  if (fromParam || toParam) {
+    if (!fromParam || !toParam || !isoDate.test(fromParam) || !isoDate.test(toParam) || fromParam > toParam) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+    from = fromParam;
+    to = toParam;
+  } else {
+    ({ from, to } = dashboardPeriodRange(period as DashboardPeriod));
+  }
 
   const supabase = await createServerSupabaseClient();
 

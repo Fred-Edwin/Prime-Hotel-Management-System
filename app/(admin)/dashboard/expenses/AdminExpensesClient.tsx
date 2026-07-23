@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 import { CategoryChips } from "@/components/CategoryChips";
+import { FilterBar } from "@/components/FilterBar";
 import { Input } from "@/components/Input";
 import { PeriodToggle } from "@/components/PeriodToggle";
 import { Toast } from "@/components/Toast";
@@ -82,6 +83,10 @@ function money(value: number): string {
  */
 export function AdminExpensesClient() {
   const [period, setPeriod] = useState<Period>("today");
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
+  const [rangeDraft, setRangeDraft] = useState({ from: "", to: "" });
+  const [rangePickerOpen, setRangePickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [categories, setCategories] = useState<ExpenseCategoryRow[]>([]);
   const [categoryId, setCategoryId] = useState<string>("");
   const [businessWide, setBusinessWide] = useState(false);
@@ -117,38 +122,34 @@ export function AdminExpensesClient() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const dateRange = useCallback((): string[] => {
+  // Inclusive from/to range derived from the period toggle, unless a
+  // custom range (Select range popover) overrides it — same precedence
+  // rule as the Ledger screen's date-range picker.
+  const dateRange = useCallback((): { from: string; to: string } => {
+    if (customRange) return customRange;
+
     const today = nairobiToday();
-    if (period === "today") return [today];
+    if (period === "today") return { from: today, to: today };
 
     const days = period === "week" ? 7 : 30;
-    const dates: string[] = [];
     const cursor = new Date(`${today}T00:00:00Z`);
-    for (let i = 0; i < days; i++) {
-      dates.push(cursor.toISOString().slice(0, 10));
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
-    }
-    return dates;
-  }, [period]);
+    cursor.setUTCDate(cursor.getUTCDate() - (days - 1));
+    return { from: cursor.toISOString().slice(0, 10), to: today };
+  }, [period, customRange]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const dates = dateRange();
-      const results = await Promise.all(
-        dates.map(async (date) => {
-          const res = await fetch(`/api/expenses?date=${date}`);
-          const body = await res.json();
-          if (!res.ok) throw new Error(body.error ?? "Couldn't load expenses");
-          return body as { expenses: ExpenseRow[]; expenseCategories: ExpenseCategoryRow[] };
-        }),
-      );
-      const allExpenses = results.flatMap((r) => r.expenses ?? []);
-      allExpenses.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      const { from, to } = dateRange();
+      const res = await fetch(`/api/expenses?from=${from}&to=${to}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Couldn't load expenses");
+
+      const allExpenses = (body.expenses ?? []) as ExpenseRow[];
       setExpenses(allExpenses);
 
-      const fetchedCategories = results[0]?.expenseCategories ?? [];
+      const fetchedCategories = (body.expenseCategories ?? []) as ExpenseCategoryRow[];
       setCategories(fetchedCategories);
       setCategoryId((current) => current || fetchedCategories[0]?.id || "");
     } catch (err) {
@@ -157,6 +158,17 @@ export function AdminExpensesClient() {
       setLoading(false);
     }
   }, [dateRange]);
+
+  function selectPeriod(value: Period) {
+    setCustomRange(null);
+    setPeriod(value);
+  }
+
+  function applyCustomRange() {
+    if (!rangeDraft.from || !rangeDraft.to || rangeDraft.from > rangeDraft.to) return;
+    setCustomRange({ from: rangeDraft.from, to: rangeDraft.to });
+    setRangePickerOpen(false);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -342,8 +354,27 @@ export function AdminExpensesClient() {
     }
   }
 
-  const periodTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const periodLabel = period === "today" ? "Today's expenses" : period === "week" ? "This week's expenses" : "This month's expenses";
+  const filteredExpenses = expenses.filter((expense) => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    const haystack = [
+      expense.expense_categories?.name ?? "",
+      expense.note ?? "",
+      locationLabel(expense.location),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(term);
+  });
+
+  const periodTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const periodLabel = customRange
+    ? `${customRange.from} → ${customRange.to}`
+    : period === "today"
+      ? "Today's expenses"
+      : period === "week"
+        ? "This week's expenses"
+        : "This month's expenses";
 
   return (
     <div className={styles.page}>
@@ -354,7 +385,49 @@ export function AdminExpensesClient() {
             ← Back to dashboard
           </Link>
         </div>
-        <PeriodToggle options={PERIOD_OPTIONS} value={period} onChange={(v) => setPeriod(v as Period)} />
+        <div className={styles.controls}>
+          <PeriodToggle
+            options={PERIOD_OPTIONS}
+            value={customRange ? "" : period}
+            onChange={(v) => selectPeriod(v as Period)}
+          />
+          <div className={styles.rangePicker}>
+            <button
+              type="button"
+              className={styles.rangeButton}
+              onClick={() => {
+                setRangeDraft(customRange ?? { from: "", to: "" });
+                setRangePickerOpen((open) => !open);
+              }}
+            >
+              <Icon name="summary" size={16} />
+              {customRange ? `${customRange.from} → ${customRange.to}` : "Select range"}
+            </button>
+            {rangePickerOpen && (
+              <div className={styles.rangePopover}>
+                <label className={styles.rangeField}>
+                  <span>From</span>
+                  <input
+                    type="date"
+                    value={rangeDraft.from}
+                    onChange={(e) => setRangeDraft({ ...rangeDraft, from: e.target.value })}
+                  />
+                </label>
+                <label className={styles.rangeField}>
+                  <span>To</span>
+                  <input
+                    type="date"
+                    value={rangeDraft.to}
+                    onChange={(e) => setRangeDraft({ ...rangeDraft, to: e.target.value })}
+                  />
+                </label>
+                <button type="button" className={styles.rangeApply} onClick={applyCustomRange}>
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <form className={styles.form} onSubmit={handleSubmit}>
@@ -420,8 +493,18 @@ export function AdminExpensesClient() {
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>{periodLabel}</h2>
-          {expenses.length > 0 && <span className={styles.sectionTotal}>{money(periodTotal)}</span>}
+          {filteredExpenses.length > 0 && <span className={styles.sectionTotal}>{money(periodTotal)}</span>}
         </div>
+
+        {expenses.length > 0 && (
+          <div className={styles.toolbarRow}>
+            <FilterBar
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Search category, note, or location…"
+            />
+          </div>
+        )}
 
         {loading ? (
           <p className={styles.loading}>Loading…</p>
@@ -430,6 +513,12 @@ export function AdminExpensesClient() {
             icon={<Icon name="expenses" size={48} />}
             heading="No expenses logged yet"
             body="Costs logged here or by staff on their own /expenses screen will show up in this list."
+          />
+        ) : filteredExpenses.length === 0 ? (
+          <EmptyState
+            icon={<Icon name="expenses" size={48} />}
+            heading="No matching expenses"
+            body="Try a different search term or date range."
           />
         ) : (
           <>
@@ -446,7 +535,7 @@ export function AdminExpensesClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.map((expense) => (
+                  {filteredExpenses.map((expense) => (
                     <tr key={expense.id}>
                       <td>{expense.expense_date}</td>
                       <td>{locationLabel(expense.location)}</td>
@@ -469,7 +558,7 @@ export function AdminExpensesClient() {
             </Card>
 
             <ul className={`${catalogStyles.cardList} ${catalogStyles.mobileOnly}`}>
-              {expenses.map((expense) => (
+              {filteredExpenses.map((expense) => (
                 <li key={expense.id} className={catalogStyles.itemCard}>
                   <div className={catalogStyles.itemCardRow}>
                     <span className={catalogStyles.itemCardIdentity}>
