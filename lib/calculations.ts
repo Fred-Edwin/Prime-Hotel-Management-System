@@ -30,7 +30,6 @@ export interface StockEntryTotals {
   costValue: number;
   closingStockValue: number;
   wastageValue: number;
-  wastageEstimatedValue: number;
 }
 
 /**
@@ -42,26 +41,13 @@ export function totalStock(openingStock: number, addedStock: number): number {
 }
 
 /**
- * Fallback per-unit cost used ONLY for the *_estimated_value reporting
- * figures (docs/01_DATA_MODEL.md §3.11, client feedback 2026-07-23):
- * WaPrecious zeroes items.buying_price for most ingredient-cooked menu
- * items to avoid double-counting cost against ingredient-level tracking
- * (§3.10). That's correct and stays — but it makes wastage_value/
- * staff_meal value/etc. collapse to 0 for those items even though real
- * stock moved. This function is the ONE place the fallback is expressed
- * — mirrors the SQL helper public.effective_unit_cost() exactly. Used
- * only to derive wastageEstimatedValue/estimated_value display figures,
- * NEVER buyingPriceSnapshot/costValue/closingStockValue/periodicCogs()/
- * netProfit() — those stay real-buying-price-only, untouched.
+ * wastageValue (docs/01_DATA_MODEL.md §3.11, simplified 2026-07-23):
+ * quantity * sellingPriceSnapshot * estimatedCostRatio — unconditional,
+ * regardless of buyingPriceSnapshot. Snapshotted at entry time, same as
+ * every other price in this schema. buyingPriceSnapshot/costValue/
+ * closingStockValue/periodicCogs()/netProfit() are untouched by this —
+ * they keep using the real buying price exactly as before.
  */
-export function effectiveUnitCost(
-  buyingPrice: number,
-  sellingPrice: number,
-  estimatedCostRatio: number,
-): number {
-  return buyingPrice > 0 ? buyingPrice : sellingPrice * estimatedCostRatio;
-}
-
 export function calculateStockEntryTotals(params: {
   openingStock: number;
   addedStock: number;
@@ -103,8 +89,7 @@ export function calculateStockEntryTotals(params: {
     salesValue: quantitySold * sellingPriceSnapshot,
     costValue: quantitySold * buyingPriceSnapshot,
     closingStockValue: closingStock * buyingPriceSnapshot,
-    wastageValue: wastage * buyingPriceSnapshot,
-    wastageEstimatedValue: wastage * effectiveUnitCost(buyingPriceSnapshot, sellingPriceSnapshot, estimatedCostRatio),
+    wastageValue: wastage * sellingPriceSnapshot * estimatedCostRatio,
   };
 }
 

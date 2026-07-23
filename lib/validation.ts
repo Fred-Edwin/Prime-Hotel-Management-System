@@ -521,12 +521,12 @@ export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
 
 /**
  * App settings (docs/01_DATA_MODEL.md §3.11, post-launch addition
- * 2026-07-23): a single business-wide, admin-editable ratio used ONLY as
- * the fallback cost-per-unit for wastage_estimated_value/estimated_value
- * reporting figures when an item's real buying_price is 0 — see
- * lib/calculations.ts's effectiveUnitCost(). Stored as a 0–1 fraction
- * (0.60 = 60% of selling price), matching app_settings.estimated_cost_ratio's
- * numeric(4,3) check constraint.
+ * 2026-07-23, simplified to an unconditional rule same day): a single
+ * business-wide, admin-editable ratio applied to selling_price to value
+ * every wastage/staff-meal/complimentary-meal/stock-adjustment entry —
+ * see lib/calculations.ts's calculateStockEntryTotals(). Stored as a 0–1
+ * fraction (0.60 = 60% of selling price), matching
+ * app_settings.estimated_cost_ratio's numeric(4,3) check constraint.
  */
 export const appSettingsSchema = z.object({
   estimated_cost_ratio: z
