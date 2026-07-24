@@ -1228,6 +1228,23 @@ This function runs on **every** admin Ledger edit to a `stock_entries` row that 
 
 ---
 
+## 3.15 Fix: `recompute_stock_entry_chain()` never subtracted staff meals/complimentary meals/stock adjustments from closing stock (found auditing §3.14's own fix, 2026-07-24)
+
+**How this was found.** While investigating a client-reported canteen carry-forward issue (§3.1's mirror-sync fix, same day), a closer read of `recompute_stock_entry_chain()` — the same cascade function §3.14 above had just been patched — showed its `closing_stock` formula only subtracted `sent_out + quantity_sold + wastage`. Every ordinary write path (`save_stock_entry()`, `save_stock_entry_store_manager_fields()`, `save_stock_entry_cashier_field()`, `save_stock_entry_canteen_field()`, `apply_order_to_stock_entry()`, since §3.5/§3.10's complimentary-meal/stock-adjustment additions) has subtracted `staff_meals + complimentary_meals + stock_adjustments` as well, ever since those categories were added. This cascade function was never updated to match — the same "audit every writer, not just the obvious ones" failure class §3.14 just documented, recurring in the same function via a different column.
+
+**Impact.** Any admin historical edit that ripples forward (via `recompute_stock_entry_cascade()` → `recompute_stock_entry_chain()`) through a later row for an item/location that has any staff meal, complimentary meal, or stock adjustment claim logged against it would recompute that row's `closing_stock` too **high** — silently ignoring stock that had genuinely already left via one of those three categories. Confirmed via direct query against `prime-hotel-demo` that **no data was actually corrupted by this**: as of the fix, zero `staff_meal_entries`/`complimentary_meal_entries`/`stock_adjustment_entries` rows exist for `location = 'canteen'` at all, and the only two `staff_meal_entries` rows in the system (both restaurant, both for Chapati) never happened to fall inside a cascaded date range. A landmine that had not yet been stepped on, not an active data problem.
+
+**The fix (`20260724160000_fix_cascade_missing_consumption_subtraction.sql`):** `recompute_stock_entry_chain()` now calls the same `staff_meals_total()` / `complimentary_meals_total()` / `stock_adjustments_total()` helpers the ordinary write paths already use (each scoped to `(item_id, location, entry_date, entry_date)`, matching `save_stock_entry_canteen_field()`'s own pattern exactly), subtracts all three from `closing_stock` alongside `wastage`, and includes them in the oversell check the same way the ordinary write paths do. No other line changed — `sales_value`/`cost_value`/`closing_stock_value`/`wastage_value` formulas are untouched (the latter was already corrected by §3.14).
+
+**Audit of every other ripple/cascade function, done as part of this fix (human explicitly asked for this, not just the one-off patch):**
+- **`recompute_ingredient_entry_chain()`** — confirmed **not buggy**. Ingredients have no staff-meal/complimentary-meal/stock-adjustment concept at all (§3.2 — those are menu-item-only categories; ingredients only ever have `wastage`), so there is nothing missing to subtract. Its `wastage_value = wastage * buying_price_snapshot` formula was also re-confirmed correct and intentionally different from `stock_entries`' formula — see §3.14's own note on this, unchanged here.
+- **`recompute_stock_entry_cascade()`** — not a second recompute formula; it's an orchestrator that calls `recompute_stock_entry_chain()` (and, for a `canteen_supplied` item, the canteen mirror-sync from §3.1) — inherits this fix automatically via that call, nothing to patch directly.
+- No other "walk forward and re-derive" function exists in the schema — `save_stock_entry()` / `save_stock_entry_store_manager_fields()` / `save_stock_entry_cashier_field()` / `save_stock_entry_canteen_field()` / `apply_order_to_stock_entry()` are single-row writers, already correct, not cascades.
+
+**No backfill** — same posture as §3.14: nothing retroactively sweeps the database, and per the confirmed-empty query above there was nothing to backfill regardless.
+
+---
+
 ## 3.15 Item Ledger's first table shows combined "Non-sales consumption" instead of standalone Wastage (client feedback, 2026-07-24)
 
 **The request.** After §3.12 added the ability to log staff meal/complimentary meal/stock adjustment claims from the Ledger's edit modal, WaPrecious asked whether the Ledger's main Item Ledger table (the row-per-`stock_entries`-entry table, not the separate Non-Sales Stock Consumption section further down the page) should also surface these three categories somewhere, since it previously only showed `wastage`/`wastage_value`.
