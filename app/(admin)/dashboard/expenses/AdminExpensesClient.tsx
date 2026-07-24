@@ -93,6 +93,7 @@ export function AdminExpensesClient() {
   const [location, setLocation] = useState<LocationChoice>("restaurant");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [expenseDate, setExpenseDate] = useState(() => nairobiToday());
   const [submitting, setSubmitting] = useState(false);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,6 +205,7 @@ export function AdminExpensesClient() {
           amount: parsedAmount,
           note: note.trim() ? note.trim() : null,
           location: businessWide ? null : location,
+          expense_date: expenseDate,
         }),
       });
       const body = await res.json();
@@ -215,6 +217,7 @@ export function AdminExpensesClient() {
 
       setAmount("");
       setNote("");
+      setExpenseDate(nairobiToday());
       setToast({ message: "Expense logged", status: "success" });
       await load();
     } catch {
@@ -481,6 +484,19 @@ export function AdminExpensesClient() {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="e.g. July rent, KPLC token top-up"
+        />
+
+        {/* Admin-only backdating (client feedback, 2026-07-24): defaults to
+            today so the common case is unchanged, but lets WaPrecious log a
+            missed expense against the day it actually happened instead of
+            today. Staff have no equivalent field on their own /expenses
+            form — they can only ever log "today". */}
+        <Input
+          label="Date"
+          type="date"
+          max={nairobiToday()}
+          value={expenseDate}
+          onChange={(e) => setExpenseDate(e.target.value)}
         />
 
         <Button type="submit" variant="primary" fullWidth disabled={submitting || !amountValid}>

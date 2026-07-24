@@ -4,6 +4,7 @@ import { nairobiToday } from "@/lib/calculations";
 import { expenseSchema, adminExpenseSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { serverErrorResponse } from "@/lib/errors";
+import { writeAuditLog } from "@/lib/audit";
 
 /**
  * GET /api/expenses?date=YYYY-MM-DD
@@ -109,6 +110,15 @@ export async function GET(request: Request) {
  * `category_id` references the admin-managed expense_categories catalog
  * (20260721090000_expense_categories_catalog.sql) — both roles pick from
  * the same shared list, no hardcoded category set.
+ *
+ * Admin backdating (client feedback, 2026-07-24): admin may also supply
+ * `expense_date` to log a missed expense against a past date (e.g. staff
+ * forgot to log it on the day it happened) — defaults to today when
+ * omitted. Staff's expenseSchema has no such field, so their POSTs always
+ * use today's date, unaffected. A backdated write (date != today) is
+ * audit-logged, same "non-obvious admin correction" bar the Ledger's own
+ * admin-authored stock-consumption claims already use — an ordinary
+ * same-day log stays unlogged, matching this route's existing behavior.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -128,12 +138,12 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const { category_id, amount, note, location } = parsed.data;
+    const { category_id, amount, note, location, expense_date } = parsed.data;
     insertResult = await supabase
       .from("expenses")
       .insert({
         location,
-        expense_date: nairobiToday(),
+        expense_date: expense_date ?? nairobiToday(),
         category_id,
         amount,
         note: note ?? null,
@@ -168,6 +178,16 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: "Couldn't save the expense — please try again." }, { status: 500 });
+  }
+
+  if (user.role === "admin" && data.expense_date !== nairobiToday()) {
+    await writeAuditLog(supabase, {
+      actorId: user.id,
+      action: "expense.admin_backdated_create",
+      targetTable: "expenses",
+      targetId: data.id,
+      changes: { after: data },
+    });
   }
 
   return NextResponse.json({ expense: data });

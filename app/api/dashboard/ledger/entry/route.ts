@@ -65,7 +65,103 @@ export async function PATCH(request: Request) {
   if (parsed.data.table === "stock_entries") {
     return editStockEntry(parsed.data, supabase, admin.id);
   }
+  if (parsed.data.table === "stock_consumption") {
+    return createStockConsumptionEntry(parsed.data, supabase, admin.id);
+  }
   return editIngredientEntry(parsed.data, supabase, admin.id);
+}
+
+const STOCK_CONSUMPTION_RPC = {
+  staff_meal: "create_staff_meal_entry",
+  complimentary_meal: "create_complimentary_meal_entry",
+  stock_adjustment: "create_stock_adjustment_entry",
+} as const;
+
+/**
+ * Admin-authored staff meal / complimentary meal / stock adjustment claim
+ * from the Item Ledger's edit-row modal (client feedback, 2026-07-24 — see
+ * stockConsumptionAdminEntrySchema's doc comment). Calls the exact same
+ * create_*_entry() RPC the matching /expenses tab's POST route calls.
+ * Admin picks who the claim is for (staff_id) — a same-location active
+ * staff member, or the admin's own account for something she personally
+ * consumed/gave away; the admin herself is always created_by. Requires
+ * the widened staff_meal_entries_insert_scoped-family RLS policies
+ * (20260724100000_admin_pick_staff_for_consumption_claims.sql) — without
+ * them, an insert where staff_id != auth.uid() is rejected even for
+ * admin. The picked staff_id is re-checked below, since the RLS policy
+ * itself only enforces "any user" for admin, not "a real, active,
+ * eligible person" — that's this route's job, same division of
+ * responsibility as the item/supply_type checks the /expenses-tab routes
+ * already do. Unlike
+ * editStockEntry, this is always a fresh claim row (insert-only, no
+ * existing row to update) — the same "New entry" shape already used for
+ * admin-created ingredient entries, not an edit-in-place. No
+ * historical-edit cascade call: these RPCs already force a
+ * same-transaction stock_entries recompute for the affected item/
+ * location/date themselves (§3.5/§3.10), same as when a staff member
+ * submits one from /expenses.
+ */
+async function createStockConsumptionEntry(
+  input: Extract<ReturnType<typeof ledgerEntryAdminEditSchema.parse>, { table: "stock_consumption" }>,
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  adminId: string,
+) {
+  const { category, item_id, location, entry_date, quantity, note, staff_id } = input;
+
+  const staffQuery = supabase
+    .from("users")
+    .select("id, active, location, role")
+    .eq("id", staff_id)
+    .single();
+  const { data: staffMember, error: staffError }: Awaited<typeof staffQuery> = await staffQuery;
+  // Valid picks: an active staff member at this claim's own location, or
+  // the admin's own account (client feedback, 2026-07-24 — she may
+  // personally consume/give away stock too, not just attribute claims to
+  // staff; admin has no `location` of its own, so that check is skipped
+  // for that branch).
+  const isValidPick =
+    staffMember?.active &&
+    ((staffMember.role === "staff" && staffMember.location === location) ||
+      staffMember.role === "admin");
+  if (staffError || !staffMember || !isValidPick) {
+    return NextResponse.json(
+      { error: "Choose an active staff member at this location." },
+      { status: 400 },
+    );
+  }
+
+  const { data, error } = await supabase.rpc(STOCK_CONSUMPTION_RPC[category], {
+    p_item_id: item_id,
+    p_location: location,
+    p_meal_date: entry_date,
+    p_quantity: quantity,
+    p_note: note ?? undefined,
+    p_staff_id: staff_id,
+    p_created_by: adminId,
+  });
+
+  if (error) {
+    console.error("[dashboard/ledger/entry stock_consumption]", error);
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  const targetTable =
+    category === "staff_meal"
+      ? "staff_meal_entries"
+      : category === "complimentary_meal"
+        ? "complimentary_meal_entries"
+        : "stock_adjustment_entries";
+
+  await writeAuditLog(supabase, {
+    actorId: adminId,
+    action: `${targetTable}.admin_create`,
+    targetTable,
+    targetId: data.id,
+    changes: { after: { item_id, location, entry_date, quantity, note: note ?? null, staff_id } },
+  });
+
+  return NextResponse.json({ entry: data }, { status: 201 });
 }
 
 async function editStockEntry(

@@ -1104,6 +1104,48 @@ applied **unconditionally** to every wastage/staff-meal/complimentary-meal/stock
 
 ---
 
+## 3.12 Admin can log staff meal / complimentary meal / stock adjustment claims directly from the Item Ledger (client feedback, 2026-07-24)
+
+**The request.** WaPrecious wanted to log a non-sales stock consumption claim herself, from her admin account, without asking a staff member to do it via `/expenses` — originally phrased as "replace the Wastage option [on the Item Ledger's edit-row modal] with a Non-Sales Stock Consumption dropdown."
+
+**What this is, and isn't.** This is a **second, admin-facing write path** into the same three tables §3.5/§3.10 already established (`staff_meal_entries`, `complimentary_meal_entries`, `stock_adjustment_entries`), not a schema change and not a replacement for the staff-facing `/expenses` tabs, which are unchanged. `stock_entries.wastage` also keeps its existing single-column edit behavior unchanged — it was never actually replaced, despite the client's phrasing; see below.
+
+**Why wastage couldn't literally be "replaced" by the dropdown.** Wastage is one `numeric` column on the `stock_entries` row itself (§3.3) — there's no separate claim row to redirect. The other three categories are separate tables with their own per-claim shape (item + quantity + optional note + **required staff attribution**, §3.5). Collapsing wastage into the same claim-row shape would have meant either giving wastage a fabricated per-claim identity it doesn't have, or giving the three claim tables a nullable-staff column they don't need — both rejected in favor of the existing split. The shipped UI instead gives the *dropdown itself* four options (Wastage / Staff meal / Complimentary meal / Stock adjustment): picking "Wastage" edits `stock_entries.wastage` exactly as before; picking any of the other three creates a brand-new claim row via the mechanism below. This satisfies the client's actual goal (one dropdown, one place to log any of the four categories) without pretending wastage is something it isn't.
+
+**Attribution: admin picks the real staff member (corrected same day, 2026-07-24).** `staff_meal_entries`/`complimentary_meal_entries`/`stock_adjustment_entries` all require `staff_id` (§3.5: "the admin sees who ate what, not just a total"). This section originally hardcoded `staff_id = created_by = the admin's own user id` for every admin-entered claim, reasoning there was no other person to attribute it to — client feedback the same day corrected this: attribution should be a real, picked staff member, since that's the entire reason these are separate per-claim tables rather than a `stock_entries` column (§3.5). `created_by` still always stays the admin's own id (who actually made the entry); only `staff_id` (who the claim is *for*) is now picked.
+
+This required a real RLS change, not just a route/UI change: `staff_meal_entries_insert_scoped` and its two siblings originally hard-required `staff_id = auth.uid()` at the database layer, rejecting any insert where the caller wasn't also the claimed staff member — admin could not have set a different `staff_id` no matter what the route sent. `20260724100000_admin_pick_staff_for_consumption_claims.sql` widens all three to `staff_id = auth.uid() or is_admin()`, so a staff member's own self-service claim (the `/expenses` tabs) is unchanged, while admin may insert with any `staff_id`. `app/api/dashboard/ledger/entry/route.ts`'s `createStockConsumptionEntry()` narrows this further at the application layer: the picked `staff_id` must be an active `staff`-role user at the claim's own location, **or the admin's own account** (client feedback, same day — she may personally consume/give away stock too, not just attribute claims to staff), re-checked server-side rather than trusted from the RLS boundary alone. `LedgerClient.tsx`'s claim form gained a required "Who is this for?" picker (that location's active staff, plus the admin), replacing the form copy that previously said the claim would be "attributed to your admin account."
+
+**Implementation — no new SQL function.** The admin write calls the exact same `create_staff_meal_entry()` / `create_complimentary_meal_entry()` / `create_stock_adjustment_entry()` RPCs (§3.5, §3.10) the `/expenses` tabs already call — same server-side value derivation (§3.11's unconditional `quantity * selling_price_snapshot * estimated_cost_ratio()`), same atomic same-transaction `stock_entries` recompute and oversell re-check, same signed convention for stock adjustments (positive = shortfall, negative = surplus, §3.10).
+
+- `lib/validation.ts`: new `stockConsumptionAdminEntrySchema` (`table: "stock_consumption"`), added as a third member of the existing `ledgerEntryAdminEditSchema` discriminated union alongside `stockEntryAdminEditSchema`/`ingredientEntryAdminEditSchema`. Quantity is `refine`d non-zero at the schema level (matching `stockAdjustmentSchema`'s shape) with a further `refine` requiring `quantity > 0` unless `category === "stock_adjustment"` — a discriminated union can't vary a field's sign constraint per category on the type itself, so the positive-only rule for staff_meal/complimentary_meal is enforced by this second refinement instead.
+- `app/api/dashboard/ledger/entry/route.ts`: `PATCH` gained a `table === "stock_consumption"` branch (`createStockConsumptionEntry()`), dispatching to the right RPC via a small `category → rpc name` lookup. Always an insert (no existing row to fetch/preserve, unlike `editStockEntry`/`editIngredientEntry`) — mirrors the "New entry" (admin-created ingredient row) shape more than the edit-in-place shape. No historical-edit cascade call: the RPC already forces its own same-transaction `stock_entries` recompute for the affected item/location/date, identical to what happens when a staff member submits the same claim from `/expenses` — there is nothing downstream this needs to walk forward, unlike an edit to an existing `stock_entries` row's own columns.
+- `app/(admin)/dashboard/ledger/LedgerClient.tsx`: the stock-entry edit modal's plain "Wastage" `Input` became a `Select` (`CONSUMPTION_CATEGORY_OPTIONS`) plus a conditional quantity/note form (and a Remove/Add `Select` for stock adjustments, mirroring `StockConsumptionClient.tsx`'s existing toggle copy). Selecting "Wastage" shows the original Wastage `Input` unchanged, still part of the normal `stock_entries` save payload. Selecting any other category swaps in a quantity + note form that submits as a separate `stock_consumption`-table PATCH payload — a fresh claim, not a modification of the row's own `wastage`/other columns. The cascade-impact check (`isCreateMode`) is extended to also treat "a non-wastage category is selected" as create-mode, since (as above) there's no cascade to preview for a brand-new claim row.
+
+**Explicitly not in scope:** editing or deleting an existing claim row from the Ledger (this is create-only, same as the existing "New entry" ingredient flow); any change to the staff-facing `/expenses` tabs, RLS policies, or the three RPCs' signatures; any change to how wastage itself is stored or calculated.
+
+**Carried forward:** if a future request asks to let the admin *edit* an already-created claim row (not just create new ones) from the Ledger, that needs its own update-capable RPC/route — `create_staff_meal_entry()` and its siblings are insert-only by design (§3.5), so this would be new surface area, not a reuse of the mechanism described here.
+
+---
+
+## 3.13 Admin can log a new expense against a past date (client feedback, 2026-07-24)
+
+**The request.** WaPrecious wanted to be able to backdate transactions when a staff member forgets to log something on the day it happened — e.g. Janiffer forgetting to record staff meals — so the correction lands on the correct historical day's records instead of today's.
+
+**Most of this already existed.** §3.4's admin Ledger direct-edit path (`PATCH /api/dashboard/ledger/entry`) already lets admin create or edit a `stock_entries`/`ingredient_entries` row for **any** date, with full cascade recompute forward. §3.12 (also 2026-07-24) already lets admin log a new staff-meal/complimentary-meal/stock-adjustment claim from that same screen against any `entry_date` — the underlying `create_staff_meal_entry()`/`create_complimentary_meal_entry()`/`create_stock_adjustment_entry()` RPCs have always taken a real date parameter, never hardcoded "today" at the database layer.
+
+**The one real gap: expenses.** Unlike the above, `POST /api/expenses` had no path to *create* a new expense against a past date at all — only `PATCH /api/expenses/[id]` (editing an already-logged expense) accepted `expense_date`, via `expenseUpdateSchema`. There was no way to log a *missed* expense straight onto the day it actually happened; admin would have had to log it today, then immediately edit the date.
+
+**Fix — no schema/migration change, `expenses` already had no cadence assumption baked in anywhere below the route layer:**
+- `adminExpenseSchema` (`lib/validation.ts`) gained an optional `expense_date` field (same `YYYY-MM-DD` shape `expenseUpdateSchema` already validates). Staff's plain `expenseSchema` was **not** touched — staff have no way to backdate, matching every other write path in this section.
+- `POST /api/expenses`'s admin branch (`app/api/expenses/route.ts`) uses the supplied date when present, defaulting to `nairobiToday()` exactly as before when omitted — so the common case (logging today's expense) is byte-for-byte unchanged.
+- A backdated create (`expense_date != today`) is now audit-logged (`expense.admin_backdated_create`) — this route previously logged nothing at all on creation (only `PATCH`/`DELETE` did). An ordinary same-day log stays unlogged, matching the route's existing behavior and keeping the audit trail focused on the genuinely non-obvious action.
+- `AdminExpensesClient.tsx`'s quick-log form gained a `Date` field, defaulting to today, capped at today (`max`) so admin can backdate but not postdate.
+
+**Explicitly not in scope:** any change to the staff-facing `/expenses` form (staff still only ever log "today"); any change to `expenseUpdateSchema`'s existing after-the-fact edit path, which already supported this for corrections to an already-logged expense.
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.
@@ -1340,9 +1382,16 @@ create policy "expenses_update_admin_only" on public.expenses
 create policy "expenses_delete_admin_only" on public.expenses
   for delete using (public.is_admin());
 
--- STAFF_MEAL_ENTRIES: same location-scoped pattern as expenses, plus
--- self-attribution (a staff member can only log a claim as themselves --
--- see §3.5)
+-- STAFF_MEAL_ENTRIES / COMPLIMENTARY_MEAL_ENTRIES / STOCK_ADJUSTMENT_ENTRIES:
+-- same location-scoped pattern as expenses, plus staff attribution -- a
+-- staff member can only log a claim as themselves; admin may log a claim
+-- attributed to any active staff member at that location (§3.12,
+-- corrected 2026-07-24 -- see 20260724100000_admin_pick_staff_for_consumption_claims.sql).
+-- All three tables share this identical policy shape. (This block only
+-- ever documented staff_meal_entries explicitly; complimentary_meal_entries/
+-- stock_adjustment_entries carry the same three policies under their own
+-- names -- see 20260722070000_complimentary_meal_and_stock_adjustment_entries.sql
+-- -- a pre-existing doc gap noted and fixed here, not a new omission.)
 alter table public.staff_meal_entries enable row level security;
 
 create policy "staff_meal_entries_select_scoped" on public.staff_meal_entries
@@ -1352,7 +1401,7 @@ create policy "staff_meal_entries_select_scoped" on public.staff_meal_entries
 create policy "staff_meal_entries_insert_scoped" on public.staff_meal_entries
   for insert with check (
     created_by = auth.uid()
-    and staff_id = auth.uid()
+    and (staff_id = auth.uid() or public.is_admin())
     and (public.is_admin() or location = public.my_location())
   );
 create policy "staff_meal_entries_update_admin_only" on public.staff_meal_entries

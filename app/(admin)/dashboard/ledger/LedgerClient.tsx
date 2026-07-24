@@ -134,6 +134,26 @@ type StockEntryEditTarget = {
   wastage: number;
 };
 
+/**
+ * Admin-authored non-sales stock consumption dropdown (client feedback,
+ * 2026-07-24) — the item-row edit modal's old bare "Wastage" input is now
+ * a category picker. "wastage" still edits stock_entries.wastage via the
+ * existing StockEntryEditTarget/submit path unchanged; the other three
+ * categories create a brand-new staff_meal_entries/complimentary_meal_
+ * entries/stock_adjustment_entries row via PATCH /api/dashboard/ledger/entry's
+ * "stock_consumption" table variant — see stockConsumptionAdminEntrySchema.
+ * Admin picks the staff member the claim is attributed to (staff_id); the
+ * admin herself is always created_by.
+ */
+type NonSalesConsumptionCategory = "wastage" | "staff_meal" | "complimentary_meal" | "stock_adjustment";
+
+const CONSUMPTION_CATEGORY_OPTIONS: { value: NonSalesConsumptionCategory; label: string }[] = [
+  { value: "wastage", label: "Wastage" },
+  { value: "staff_meal", label: "Staff meal" },
+  { value: "complimentary_meal", label: "Complimentary meal" },
+  { value: "stock_adjustment", label: "Stock adjustment" },
+];
+
 type IngredientEntryEditTarget = {
   kind: "ingredient_entries";
   mode: "edit" | "create";
@@ -152,6 +172,15 @@ interface IngredientCatalogRow {
   id: string;
   name: string;
   unit: string;
+}
+
+interface StaffRosterRow {
+  id: string;
+  name: string;
+  staff_code: string;
+  role: "admin" | "staff";
+  location: "restaurant" | "canteen" | null;
+  active: boolean;
 }
 
 export function LedgerClient() {
@@ -175,6 +204,23 @@ export function LedgerClient() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [editForm, setEditForm] = useState<Record<string, number>>({});
+  // Non-sales stock consumption dropdown state (stock_entries edit target
+  // only — ingredient_entries keeps its own plain Wastage input, since
+  // staff_meal/complimentary_meal/stock_adjustment are items-only
+  // concepts, §3.5). consumptionQuantity/consumptionNote back the form
+  // whenever consumptionCategory !== "wastage"; "wastage" keeps using
+  // editForm.wastage exactly as before.
+  const [consumptionCategory, setConsumptionCategory] = useState<NonSalesConsumptionCategory>("wastage");
+  const [consumptionQuantity, setConsumptionQuantity] = useState(0);
+  const [consumptionDirection, setConsumptionDirection] = useState<"shortfall" | "surplus">("shortfall");
+  const [consumptionNote, setConsumptionNote] = useState("");
+  // Who a Ledger-authored staff meal/complimentary meal/stock adjustment
+  // claim is attributed to (client feedback, 2026-07-24 — admin picks a
+  // real staff member rather than this always defaulting to her own
+  // account; see docs/01_DATA_MODEL.md §3.12). Reset whenever the edit
+  // modal opens a new row, same as consumptionQuantity/consumptionNote.
+  const [consumptionStaffId, setConsumptionStaffId] = useState("");
+  const [staffRoster, setStaffRoster] = useState<StaffRosterRow[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -284,6 +330,14 @@ export function LedgerClient() {
       sent_out: row.sent_out,
       wastage: row.wastage,
     });
+    // Non-sales consumption dropdown always reopens on "Wastage" — it's a
+    // one-shot "log a new claim" action for the other three categories,
+    // not a persisted field on the row, so there's nothing to restore.
+    setConsumptionCategory("wastage");
+    setConsumptionQuantity(0);
+    setConsumptionDirection("shortfall");
+    setConsumptionNote("");
+    setConsumptionStaffId("");
   }
 
   function openIngredientEntryEdit(row: IngredientLedgerRow) {
@@ -344,7 +398,9 @@ export function LedgerClient() {
   // exist yet. Re-fetches whenever a different row is opened; does not
   // re-fetch on every keystroke inside the form, since which rows exist
   // later doesn't depend on the quantities being typed.
-  const isCreateMode = editTarget?.kind === "ingredient_entries" && editTarget.mode === "create";
+  const isCreateMode =
+    (editTarget?.kind === "ingredient_entries" && editTarget.mode === "create") ||
+    (editTarget?.kind === "stock_entries" && consumptionCategory !== "wastage");
 
   useEffect(() => {
     if (!editTarget || isCreateMode) return;
@@ -384,6 +440,7 @@ export function LedgerClient() {
     editTarget?.kind,
     editTarget?.entry_date,
     isCreateMode,
+    consumptionCategory,
     editTarget?.kind === "stock_entries" ? editTarget.item_id : undefined,
     editTarget?.kind === "stock_entries" ? editTarget.location : undefined,
     editTarget?.kind === "ingredient_entries" ? editTarget.ingredient_id : undefined,
@@ -401,6 +458,18 @@ export function LedgerClient() {
       setEditError("Select an ingredient first.");
       return;
     }
+    if (
+      editTarget.kind === "stock_entries" &&
+      consumptionCategory !== "wastage" &&
+      consumptionQuantity <= 0
+    ) {
+      setEditError("Enter a quantity greater than 0.");
+      return;
+    }
+    if (editTarget.kind === "stock_entries" && consumptionCategory !== "wastage" && !consumptionStaffId) {
+      setEditError("Choose who this claim is for.");
+      return;
+    }
     // First click on a historical row (cascade impact > 0) just reveals
     // the confirmation copy in the modal instead of submitting — the
     // second click (cascadeConfirmed already true) proceeds for real.
@@ -412,25 +481,44 @@ export function LedgerClient() {
     setEditError(null);
 
     const payload =
-      editTarget.kind === "stock_entries"
+      editTarget.kind === "stock_entries" && consumptionCategory !== "wastage"
         ? {
-            table: "stock_entries" as const,
+            table: "stock_consumption" as const,
+            category: consumptionCategory,
             item_id: editTarget.item_id,
             location: editTarget.location,
             entry_date: editTarget.entry_date,
-            till_quantity_sold: editForm.till_quantity_sold,
-            added_stock: editForm.added_stock,
-            sent_out: editForm.sent_out,
-            wastage: editForm.wastage,
+            staff_id: consumptionStaffId,
+            // Stock adjustment is the one signed category (§3.10): "Add"
+            // (surplus) negates the quantity before sending, same
+            // convention StockConsumptionClient.tsx already uses on
+            // /expenses so the server-side sign meaning is set once, not
+            // re-derived per caller.
+            quantity:
+              consumptionCategory === "stock_adjustment" && consumptionDirection === "surplus"
+                ? -consumptionQuantity
+                : consumptionQuantity,
+            note: consumptionNote.trim() || null,
           }
-        : {
-            table: "ingredient_entries" as const,
-            ingredient_id: editTarget.ingredient_id,
-            entry_date: editTarget.entry_date,
-            received: editForm.received,
-            quantity_used: editForm.quantity_used,
-            wastage: editForm.wastage,
-          };
+        : editTarget.kind === "stock_entries"
+          ? {
+              table: "stock_entries" as const,
+              item_id: editTarget.item_id,
+              location: editTarget.location,
+              entry_date: editTarget.entry_date,
+              till_quantity_sold: editForm.till_quantity_sold,
+              added_stock: editForm.added_stock,
+              sent_out: editForm.sent_out,
+              wastage: editForm.wastage,
+            }
+          : {
+              table: "ingredient_entries" as const,
+              ingredient_id: editTarget.ingredient_id,
+              entry_date: editTarget.entry_date,
+              received: editForm.received,
+              quantity_used: editForm.quantity_used,
+              wastage: editForm.wastage,
+            };
 
     try {
       const res = await fetch("/api/dashboard/ledger/entry", {
@@ -443,7 +531,9 @@ export function LedgerClient() {
         setEditError(json.error ?? "Couldn't save — please try again.");
         return;
       }
-      const wasCreate = editTarget.kind === "ingredient_entries" && editTarget.mode === "create";
+      const wasCreate =
+        (editTarget.kind === "ingredient_entries" && editTarget.mode === "create") ||
+        (editTarget.kind === "stock_entries" && consumptionCategory !== "wastage");
       setEditTarget(null);
       setCascadeImpact(null);
       setCascadeConfirmed(false);
@@ -527,6 +617,28 @@ export function LedgerClient() {
       }
     }
     loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Staff roster for the "who is this claim for" picker (client feedback,
+  // 2026-07-24) — admin-only, loaded once like the ingredient catalog
+  // above, then filtered per-row to the edited item's location + active
+  // staff at submit time (the route re-checks this server-side too).
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRoster() {
+      try {
+        const res = await fetch("/api/staff");
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        if (!cancelled) setStaffRoster(json.staff ?? []);
+      } catch {
+        // Non-fatal — the staff picker just starts empty.
+      }
+    }
+    loadRoster();
     return () => {
       cancelled = true;
     };
@@ -1583,13 +1695,78 @@ export function LedgerClient() {
                     onChange={(e) => setEditForm({ ...editForm, sent_out: Number(e.target.value) })}
                   />
                 )}
-                <Input
-                  label="Wastage"
-                  type="number"
-                  numeric
-                  value={editForm.wastage}
-                  onChange={(e) => setEditForm({ ...editForm, wastage: Number(e.target.value) })}
+                <Select
+                  label="Non-sales stock consumption"
+                  value={consumptionCategory}
+                  options={CONSUMPTION_CATEGORY_OPTIONS}
+                  onChange={(e) => setConsumptionCategory(e.target.value as NonSalesConsumptionCategory)}
                 />
+                {consumptionCategory === "wastage" ? (
+                  <Input
+                    label="Wastage"
+                    type="number"
+                    numeric
+                    value={editForm.wastage}
+                    onChange={(e) => setEditForm({ ...editForm, wastage: Number(e.target.value) })}
+                  />
+                ) : (
+                  <>
+                    <p className={styles.editFormMeta}>
+                      Logs a new{" "}
+                      {consumptionCategory === "staff_meal"
+                        ? "staff meal"
+                        : consumptionCategory === "complimentary_meal"
+                          ? "complimentary meal"
+                          : "stock adjustment"}{" "}
+                      claim for {editTarget.item_name} on {editTarget.entry_date}.
+                    </p>
+                    <Select
+                      label="Who is this for?"
+                      placeholder="Choose who this is for…"
+                      value={consumptionStaffId}
+                      options={staffRoster
+                        .filter(
+                          (person) =>
+                            person.active &&
+                            // Location-scoped staff at this claim's own
+                            // location, plus the admin's own account
+                            // (client feedback, 2026-07-24 — she may
+                            // personally consume/give away stock too,
+                            // not just attribute claims to staff).
+                            ((person.role === "staff" && person.location === editTarget.location) ||
+                              person.role === "admin"),
+                        )
+                        .map((person) => ({ value: person.id, label: person.name }))}
+                      onChange={(e) => setConsumptionStaffId(e.target.value)}
+                    />
+                    {consumptionCategory === "stock_adjustment" && (
+                      <Select
+                        label="Direction"
+                        value={consumptionDirection}
+                        options={[
+                          { value: "shortfall", label: "Remove (missing stock)" },
+                          { value: "surplus", label: "Add (found extra)" },
+                        ]}
+                        onChange={(e) =>
+                          setConsumptionDirection(e.target.value as "shortfall" | "surplus")
+                        }
+                      />
+                    )}
+                    <Input
+                      label="Quantity"
+                      type="number"
+                      numeric
+                      min={0}
+                      value={consumptionQuantity}
+                      onChange={(e) => setConsumptionQuantity(Number(e.target.value))}
+                    />
+                    <Input
+                      label="Note (optional)"
+                      value={consumptionNote}
+                      onChange={(e) => setConsumptionNote(e.target.value)}
+                    />
+                  </>
+                )}
               </>
             ) : (
               <>

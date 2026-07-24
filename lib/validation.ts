@@ -368,9 +368,61 @@ export const ingredientEntryAdminEditSchema = z.object({
 
 export type IngredientEntryAdminEditInput = z.infer<typeof ingredientEntryAdminEditSchema>;
 
+/**
+ * Admin-authored non-sales stock consumption claim (client feedback,
+ * 2026-07-24: "replace the Wastage option with a Non-Sales Stock
+ * Consumption dropdown" on the Item Ledger's edit-row modal) — lets
+ * WaPrecious log a staff meal / complimentary meal / stock adjustment
+ * claim herself from the ledger, not just wastage. Mirrors
+ * staffMealSchema/complimentaryMealSchema/stockAdjustmentSchema exactly
+ * (item + quantity + optional note); the server attributes the claim to
+ * the admin (staff_id = created_by = admin.id — same "log today's entry
+ * as admin" convention stockEntryAdminEditSchema's no-existing-row case
+ * already established), and calls the same create_staff_meal_entry()/
+ * create_complimentary_meal_entry()/create_stock_adjustment_entry() RPCs
+ * the staff-facing /expenses tabs use — no new SQL function. `wastage`
+ * is deliberately NOT one of this schema's categories: wastage is a
+ * stock_entries column edited via the existing "table": "stock_entries"
+ * path above, not a per-claim row — the ledger UI's dropdown offers it
+ * as an option but routes a "Wastage" selection through that existing
+ * path unchanged.
+ */
+export const stockConsumptionAdminEntrySchema = z
+  .object({
+    table: z.literal("stock_consumption"),
+    category: z.enum(["staff_meal", "complimentary_meal", "stock_adjustment"]),
+    item_id: z.string().uuid(),
+    location: z.enum(["restaurant", "canteen"]),
+    entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+    // Which staff member the claim is attributed to (client feedback,
+    // 2026-07-24 — see docs/01_DATA_MODEL.md §3.12). Required: the whole
+    // point of a per-claim staff_id (§3.5) is real attribution, so the
+    // admin must pick someone rather than this silently defaulting to
+    // herself. app/api/dashboard/ledger/entry/route.ts and the widened
+    // staff_meal_entries_insert_scoped-family RLS policies are what
+    // actually allow this to differ from the admin's own id.
+    staff_id: z.string().uuid("Choose who this claim is for"),
+    // Signed only for stock_adjustment (§3.10's shortfall/surplus
+    // convention); staff_meal/complimentary_meal must stay strictly
+    // positive, same as their /expenses-tab schemas above — enforced by
+    // the refine below since a discriminated union can't vary this per
+    // category on the field type itself.
+    quantity: z
+      .number({ error: "Enter a valid quantity" })
+      .refine((n) => n !== 0, "Quantity can't be zero"),
+    note: z.string().trim().min(1).nullable().optional(),
+  })
+  .refine((data) => data.category === "stock_adjustment" || data.quantity > 0, {
+    message: "Quantity must be greater than 0",
+    path: ["quantity"],
+  });
+
+export type StockConsumptionAdminEntryInput = z.infer<typeof stockConsumptionAdminEntrySchema>;
+
 export const ledgerEntryAdminEditSchema = z.discriminatedUnion("table", [
   stockEntryAdminEditSchema,
   ingredientEntryAdminEditSchema,
+  stockConsumptionAdminEntrySchema,
 ]);
 
 export type LedgerEntryAdminEditInput = z.infer<typeof ledgerEntryAdminEditSchema>;
@@ -430,12 +482,21 @@ export type ExpenseInput = z.infer<typeof expenseSchema>;
  * location choice: 'restaurant' | 'canteen' | null (business-wide, e.g.
  * rent, salaries — see 20260721070000_admin_business_wide_expenses.sql).
  * Staff never send `location`; it stays server-derived from their session.
+ *
+ * `expense_date` (optional, admin-only — client feedback, 2026-07-24, see
+ * docs/01_DATA_MODEL.md's expenses backdating note): lets admin log a
+ * missed expense against a past date instead of always today, mirroring
+ * expenseUpdateSchema's existing after-the-fact date correction below, now
+ * available at creation time too. Omitted defaults to today server-side
+ * (app/api/expenses/route.ts) — staff's plain expenseSchema has no such
+ * field at all, so their POSTs are unaffected.
  */
 export const adminExpenseSchema = z.object({
   category_id: z.string().uuid("Choose a category"),
   amount: nonNegativeAmount,
   note: z.string().trim().min(1).nullable().optional(),
   location: z.enum(["restaurant", "canteen"]).nullable(),
+  expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date").optional(),
 });
 
 export type AdminExpenseInput = z.infer<typeof adminExpenseSchema>;
