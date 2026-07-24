@@ -1164,6 +1164,26 @@ This function runs on **every** admin Ledger edit to a `stock_entries` row that 
 
 ---
 
+## 3.15 Item Ledger's first table shows combined "Non-sales consumption" instead of standalone Wastage (client feedback, 2026-07-24)
+
+**The request.** After §3.12 added the ability to log staff meal/complimentary meal/stock adjustment claims from the Ledger's edit modal, WaPrecious asked whether the Ledger's main Item Ledger table (the row-per-`stock_entries`-entry table, not the separate Non-Sales Stock Consumption section further down the page) should also surface these three categories somewhere, since it previously only showed `wastage`/`wastage_value`.
+
+**Decision (confirmed with the human): replace, not add alongside.** Rather than adding four more columns (quantity + value × 3 categories) to an already-15-column table, the existing `Wastage`/`Wastage value` columns are replaced with one combined pair — **`Non-sales consumption`** / **`Non-sales consumption value`** — summing all four categories (wastage + staff meal + complimentary meal + stock adjustment) for that item/location/date. Column count in this table is unchanged (still 16, including the trailing Edit column). Matches §3.10's "unified presentation" precedent already established by the separate Non-Sales Stock Consumption section; per-category breakdown remains available there, untouched by this change — this table only ever shows the combined total, by design, same as its own "unified ledger presentation, not a unified table" framing.
+
+**Sign convention:** follows `stock_adjustment_entries`' own signed convention (§3.10) — positive = net consumption/shortfall (the normal case), negative = net surplus, which only happens when a surplus stock adjustment outweighs the other three non-negative categories for that item/location/date. Displayed with an explicit `+` prefix on a negative combined figure (`{value < 0 ? "+" : ""}{money/qty(Math.abs(value))}`), the same local convention `LedgerClient.tsx`'s Non-Sales Stock Consumption section already used for signed stock-adjustment rows — never a bare negative number that would misread as an error.
+
+**Implementation:**
+- `public.dashboard_item_ledger(p_from, p_to, p_location)` (`20260724120000_item_ledger_non_sales_consumption_columns.sql`) gained two output columns — `non_sales_consumption`, `non_sales_consumption_value` — each `stock_entries.wastage`/`wastage_value` plus a `left join lateral` sum against `staff_meal_entries`/`complimentary_meal_entries`/`stock_adjustment_entries` for that exact `item_id`/`location`/date (`meal_date = se.entry_date`). Required a `drop function` first — adding output columns changes the return type (Postgres `42P13`, per §3.9's documented lesson) — the body was copied forward from the function's current, correct state, not an older snapshot. A `left join lateral` was used instead of calling `staff_meals_total()`/`complimentary_meals_total()`/`stock_adjustments_total()` (§3.5/§3.10) per row: those three helpers take a period range and were built for the six `stock_entries` writer functions' single-item/single-day call pattern, not for aggregating across every row a whole Ledger date range returns — a join keeps this one set-based query, consistent with this function's own "not N+1 fetches" comment.
+- `lib/supabase/types.ts` — `dashboard_item_ledger`'s `Returns` shape updated to match (hand-edited, since there's no live-DB type generation step in this workflow — see CLAUDE.md's Supabase-cloud-only note).
+- `app/(admin)/dashboard/ledger/LedgerClient.tsx` — `ItemLedgerRow` gained `non_sales_consumption`/`non_sales_consumption_value`, replacing `wastage`/`wastage_value`'s two table columns (desktop table header + body, and the mobile card view) with the combined pair. **`row.wastage` itself is still read elsewhere in this same file** — the edit modal's `openStockEntryEdit()` still populates the Wastage input from `row.wastage` unchanged (§3.12's dropdown still edits the real `stock_entries.wastage` column when "Wastage" is selected) — only the two *display* columns in the read-only table changed; nothing about how wastage is edited or stored changed.
+- The Ingredients table (`dashboard_ingredient_ledger()`, second section on the same page) is **unaffected** — ingredients have no staff-meal/complimentary-meal/stock-adjustment equivalent (§3.2/§3.5: those are items-only concepts), so its own `Wastage`/`Wastage value` columns stay exactly as they were.
+
+**Explicitly not in scope:** any change to `closing_stock`'s formula, the oversell check, `netProfit()`/`periodicCogs()`, or the separate Non-Sales Stock Consumption section — this is a read-side-only column change to one existing SQL function's output shape.
+
+**Carried forward:** if a future column is ever added to `dashboard_item_ledger()`, this migration's `left join lateral` pattern (three per-category lateral joins keyed on `item_id`/`location`/`entry_date = meal_date`) should be extended rather than reverted to a flat query — the same "extend the CTE/join structure, don't drop back to something simpler" lesson §3.9 already documented for the dashboard summary functions.
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.

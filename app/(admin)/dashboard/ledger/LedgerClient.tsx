@@ -40,6 +40,15 @@ interface ItemLedgerRow {
   cost_value: number;
   closing_stock_value: number;
   wastage_value: number;
+  // Combined wastage + staff meal + complimentary meal + stock adjustment
+  // for this item/location/date (client feedback, 2026-07-24) — replaces
+  // the standalone Wastage/Wastage value columns in this table. Can be
+  // negative when a surplus stock adjustment outweighs the other three,
+  // same sign convention stock_adjustment_entries itself uses (§3.10).
+  // Per-category detail is still in the separate Non-Sales Stock
+  // Consumption section below, unaffected by this column.
+  non_sales_consumption: number;
+  non_sales_consumption_value: number;
   low_stock_threshold: number;
 }
 
@@ -862,12 +871,12 @@ export function LedgerClient() {
                       <th className={catalogStyles.numeric}>Canteen (S/R)</th>
                       <th className={catalogStyles.numeric}>Sold (Hotel)</th>
                       <th className={catalogStyles.numeric}>Sold (total)</th>
-                      <th className={catalogStyles.numeric}>Wastage</th>
+                      <th className={catalogStyles.numeric}>Non-sales consumption</th>
                       <th className={catalogStyles.numeric}>Closing</th>
                       <th className={[catalogStyles.numeric, styles.groupDividerStart].join(" ")}>Sales value</th>
                       <th className={catalogStyles.numeric}>Cost value</th>
                       <th className={catalogStyles.numeric}>Closing stock value</th>
-                      <th className={catalogStyles.numeric}>Wastage value</th>
+                      <th className={catalogStyles.numeric}>Non-sales consumption value</th>
                       <th aria-label="Edit" />
                     </tr>
                   </thead>
@@ -929,7 +938,10 @@ export function LedgerClient() {
                           </td>
                           <td className={catalogStyles.numeric}>{qty(row.till_quantity_sold)}</td>
                           <td className={catalogStyles.numeric}>{qty(row.quantity_sold)}</td>
-                          <td className={catalogStyles.numeric}>{qty(row.wastage)}</td>
+                          <td className={catalogStyles.numeric}>
+                            {row.non_sales_consumption < 0 ? "+" : ""}
+                            {qty(Math.abs(row.non_sales_consumption))}
+                          </td>
                           <td className={catalogStyles.numeric}>
                             <span
                               className={
@@ -972,8 +984,9 @@ export function LedgerClient() {
                               " "
                             )}
                           >
-                            <span className={row.wastage_value > 0 ? styles.wastageValueNotable : undefined}>
-                              {money(row.wastage_value)}
+                            <span className={row.non_sales_consumption_value > 0 ? styles.wastageValueNotable : undefined}>
+                              {row.non_sales_consumption_value < 0 ? "+" : ""}
+                              {money(Math.abs(row.non_sales_consumption_value))}
                             </span>
                           </td>
                           <td>
@@ -1080,8 +1093,11 @@ export function LedgerClient() {
                             <strong>{qty(row.quantity_sold)}</strong>
                           </div>
                           <div className={catalogStyles.itemCardDetailLine}>
-                            <span>Wastage</span>
-                            <strong>{qty(row.wastage)}</strong>
+                            <span>Non-sales consumption</span>
+                            <strong>
+                              {row.non_sales_consumption < 0 ? "+" : ""}
+                              {qty(Math.abs(row.non_sales_consumption))}
+                            </strong>
                           </div>
                           <div className={catalogStyles.itemCardDetailLine}>
                             <span>Sales value</span>
@@ -1096,8 +1112,11 @@ export function LedgerClient() {
                             <strong>{money(row.closing_stock_value)}</strong>
                           </div>
                           <div className={catalogStyles.itemCardDetailLine}>
-                            <span>Wastage value</span>
-                            <strong>{money(row.wastage_value)}</strong>
+                            <span>Non-sales consumption value</span>
+                            <strong>
+                              {row.non_sales_consumption_value < 0 ? "+" : ""}
+                              {money(Math.abs(row.non_sales_consumption_value))}
+                            </strong>
                           </div>
                           <button
                             type="button"

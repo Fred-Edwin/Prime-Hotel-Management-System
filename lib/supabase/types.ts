@@ -1113,6 +1113,8 @@ export type Database = {
           item_name: string
           location: Database["public"]["Enums"]["location_type"]
           low_stock_threshold: number
+          non_sales_consumption: number
+          non_sales_consumption_value: number
           opening_stock: number
           quantity_sold: number
           sales_value: number
