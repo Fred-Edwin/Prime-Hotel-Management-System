@@ -52,6 +52,23 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // /api/* only needs the auth.getUser() call above for its cookie-refresh
+  // side effect (see lib/supabase/server.ts's createServerSupabaseClient()
+  // doc comment: it relies on the proxy refreshing the session on every
+  // request). None of the page-routing logic below applies to an API
+  // call — an expired/missing session on a route handler must stay a JSON
+  // 401/403 the route itself returns, not a redirect to /login, which
+  // would hand fetch() callers an HTML response instead of JSON. Bug
+  // found 2026-07-24: /api was previously excluded from the matcher
+  // entirely, so API route sessions were never refreshed at all — every
+  // staff write silently started failing with a bare "Forbidden" once the
+  // 1-hour JWT (supabase/config.toml's jwt_expiry) expired mid-session,
+  // regardless of location; canteen surfaced it first only because Anne's
+  // /entry autosave keeps a session open longest.
+  if (pathname.startsWith("/api")) {
+    return response;
+  }
+
   if (!authUser) {
     if (!isPublicPath) {
       const loginUrl = new URL("/login", request.url);
@@ -97,6 +114,6 @@ const STAFF_ROUTE_PREFIXES = ["/entry", "/store", "/expenses", "/orders", "/summ
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
