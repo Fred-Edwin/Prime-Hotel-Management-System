@@ -27,6 +27,9 @@ Context handoff between phases (what was built, problems hit, instructions for n
 | 6 | **Delivery Orders** | Phases 3, 5 | Order entry screen, `orders`/`order_items` write path, the `recalculate_stock_entry()` mechanism and idempotency key from `01_DATA_MODEL.md` §3.4 — tested specifically for the concurrent-write scenario it exists to prevent |
 | 7 | **Admin Dashboard & Reporting** | Phases 4–6 | Profit dashboard, item/ingredient ledgers, wastage and order figures — needs real data flowing from prior phases to test against |
 | 8 | **Polish, Hardening & Production Deploy** | Phases 1–7 | Empty states, error handling, RLS re-verification, mobile responsiveness pass, design-system conformance audit across every screen, production Supabase + Vercel deploy |
+| 9 | **Post-Launch Fixes & Operational Gaps** | Phase 8 | Batch-save performance fix, admin order-detail view, staff account management (edit/deactivate/PIN-reset) — see `docs/phases/phase9_context.md` |
+| 10 | **Admin Screen Redesign** | Phase 9 | Desktop-first sidebar shell, `Drawer`/`FormSection`/`FilterBar`/`PlaceholderStat` components, per-screen visual redesign across all 7 admin routes — presentation only, no RLS/calculation changes |
+| 11 | **Credit/Debtor Ledger** | Phases 6, 10 | Customer catalog, credit sales (counter/delivery/pickup orders linked to a named customer), an append-only payments ledger, admin debtor reporting — a genuine V1-scope reversal per direct client request, see below |
 
 **Why this order:** Design has to exist before any UI gets built against it, or every later phase risks inventing its own styling that then needs retrofitting. Foundation (schema, auth, CI) has to exist before anything else can be built or tested meaningfully. Admin management comes before entry screens because entry screens need real items/ingredients/delivery-zones to select from. Restaurant (daily) comes before canteen (weekly) because it's the higher-frequency, higher-stakes flow — get it right once, then adapt the pattern. Orders comes after both entry flows and the delivery-locations catalog because it depends on all three and carries its own nontrivial correctness work (§3.4). Dashboard comes last among features because it has nothing real to display until entry/order flows exist and produce data. Polish is its own phase, not sprinkled throughout, so "make it feel good and correct" gets dedicated attention.
 
@@ -330,10 +333,44 @@ Two real product facts drove this beyond a pure reskin:
 
 ---
 
+### Phase 11 — Credit/Debtor Ledger
+
+**Depends on:** Phase 6 (orders/order_items and the §3.4 concurrency mechanism this phase extends, not replaces), Phase 10 (admin shell, `Drawer`/`FormSection`/`FilterBar` components this phase's screens reuse)
+
+**Goal:** Let WaPrecious track customers who take goods or services on credit, and what each one still owes, until it's paid. This directly reverses a deliberate, explicitly-documented V1 exclusion ("No debtor/credit ledger" — `docs/PRD.md` §2, `01_DATA_MODEL.md` §5, this file's own "What's explicitly NOT in this phase plan" list) — the client asked for it directly, so it's real scope now, not scope creep.
+
+**Design decisions confirmed before this phase's code was written (not re-litigated here):**
+1. Credit applies to both delivery/pickup orders **and** walk-in counter sales — but the existing anonymous stepper-based till flow (`till_quantity_sold`, `/entry`) has no per-transaction identity to attach a customer or payment history to, and is **not** changed by this phase in any way.
+2. Instead, a credit sale — from either channel — is modeled as an `orders` row. `order_fulfillment_type` gains a third value, `'counter'`, for a walk-in sale a cashier chooses to log through this new order-style flow instead of the stepper (typically because it's credit, but a `'counter'` order can also be paid in full immediately).
+3. A new `customers` table (lightweight catalog — name, optional phone, optional location; not a login/account system) — both staff and admin can create one.
+4. `orders` gains a nullable `customer_id`. The existing free-text `customer_name` is unchanged and remains the display/fallback label.
+5. A new append-only `order_payments` ledger (not a boolean/status column) — an order's outstanding balance is always derived (`total_amount - sum(order_payments.amount)`), never stored, to avoid a second source of truth. A payment that would exceed the remaining balance is rejected server-side.
+6. A credit sale counts toward sales/COGS/profit **immediately** when logged — exactly like a cash sale — via the existing `orders` → `apply_order_to_stock_entry()` path (§3.4), unchanged. Outstanding credit is a separate reporting figure ("Total Outstanding" on the dashboard), never a delay or adjustment to profit itself.
+
+**Scope:**
+1. **Migrations** — `supabase/migrations/20260724130000_credit_ledger_enum.sql` (the new `order_fulfillment_type` enum value, alone in its own migration/transaction per Postgres's `ALTER TYPE ... ADD VALUE` constraint — same pattern as the existing `20260713120000_add_item_categories.sql` precedent) and `20260724140000_credit_ledger.sql` (`customers` table + RLS, `orders.customer_id`, `order_payments` table + RLS, `record_order_payment()` with its own advisory-lock discipline mirroring `lock_stock_entry_row()`/`lock_ingredient_entry_row()`, `create_order()` extended with a trailing optional `p_customer_id` parameter, and two new read-only aggregation functions — `dashboard_outstanding_total()`, `dashboard_debtors()`).
+2. **`lib/validation.ts`** — Zod schemas for creating a customer, creating a counter/credit order, and recording a payment.
+3. **Routes** — `app/api/customers/route.ts` (GET/POST), `app/api/orders/route.ts`'s POST extended to accept `customer_id`/`'counter'` fulfillment, `app/api/orders/[id]/payments/route.ts` (GET/POST), `app/api/admin/debtors/route.ts` (admin-only, period-filterable).
+4. **Staff-facing UI** — the existing `/orders` screen (`OrdersClient.tsx`) extended with a customer picker (pick-existing or create-new) and a credit-vs-paid-now choice, plus a `'counter'` fulfillment option for walk-in credit/named sales, reusing the existing item-picker/cart pattern rather than a new screen.
+5. **Admin-facing UI** — new `/dashboard/debtors` screen (outstanding balance per customer, drill into unpaid/partial orders, record a payment), added to `AdminShell`'s nav; a new "Total Outstanding" metric card on the existing admin dashboard summary.
+
+**Explicitly not in scope:** Formal customer accounts/login, repeat-customer order-history UI beyond the debtors screen's own drill-in, payment reversal/refund UI (a mistaken payment is an operational admin problem for now, same posture as `ingredient_purchases`' immutability), interest/late fees, SMS/WhatsApp payment reminders, any change to the existing stepper-based till flow.
+
+**Acceptance criteria (in addition to the standard gating checklist):**
+- [ ] A cashier can create a new customer inline while logging an order, or pick an existing one.
+- [ ] A `'counter'` fulfillment order behaves identically to a pickup order for stock-deduction purposes (verified against `apply_order_to_stock_entry()`), differing only in carrying a `customer_id`/credit intent.
+- [ ] Recording a partial payment reduces the order's derived outstanding balance correctly; a payment attempt exceeding the remaining balance is rejected with a clear `409`, not silently clamped or allowed.
+- [ ] Concurrent payment inserts against the same order can't both pass an overpayment check computed from the same stale snapshot (mirrors the existing row-locking test pattern from `01_DATA_MODEL.md` §3.4).
+- [ ] The admin debtors list's outstanding-balance-per-customer figures match a manual calculation exactly.
+- [ ] `GET /api/admin/debtors` and the payments routes are admin/RLS-scoped correctly — a non-admin gets `403` from the debtors route; a staff member can only record/view payments for orders at their own location (admin sees both).
+- [ ] Net profit is unaffected by outstanding credit — a credit sale's sales/COGS impact is identical to an equivalent cash sale, confirmed against the dashboard summary.
+- [ ] `docs/01_DATA_MODEL.md` updated for `customers`, `order_payments`, `orders.customer_id`, the extended `order_fulfillment_type` enum, and the RLS/function additions, in the same phase.
+
+---
+
 ## What's explicitly NOT in this phase plan
 
 Per `01_DATA_MODEL.md` §5 and prior client scope discussions, the following remain out of scope for this build and have no phase allocated:
-- Debtor/credit ledger
 - Historical trend charts beyond basic period toggles
 - Separate margin logic for business-center items vs. food
 - Formal recipe/bill-of-materials linking ingredients to menu items

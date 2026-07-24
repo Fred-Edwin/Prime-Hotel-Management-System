@@ -441,7 +441,12 @@ export const orderItemLineSchema = z.object({
   quantity: z.number({ error: "Enter a valid quantity" }).positive("Quantity must be greater than 0"),
 });
 
-export const orderFulfillmentTypeSchema = z.enum(["delivery", "pickup"]);
+// 'counter' added Phase 11 (docs/01_DATA_MODEL.md §6's "Credit sales
+// and customer payments" subsection) — a walk-in till/counter sale a
+// cashier chooses to log through this order-style flow instead of the
+// anonymous stepper, typically because it's on credit. Behaves like
+// 'pickup' for stock-deduction purposes (no delivery zone/fee).
+export const orderFulfillmentTypeSchema = z.enum(["delivery", "pickup", "counter"]);
 
 export const orderSchema = z
   .object({
@@ -450,6 +455,13 @@ export const orderSchema = z
     delivery_location_id: z.string().uuid().nullable(),
     items: z.array(orderItemLineSchema).min(1, "Add at least one item"),
     client_request_id: z.string().uuid(),
+    // Added Phase 11 — nullable, links an order to the new customers
+    // catalog (docs/01_DATA_MODEL.md §6). Optional even for a 'counter'
+    // order: a counter sale paid in full immediately doesn't strictly
+    // need a customer record, only a credit one really does, but the
+    // route/UI don't force the distinction at the schema layer — the
+    // route handler's own logic decides what's sensible to require.
+    customer_id: z.string().uuid().nullable().optional(),
   })
   .refine((data) => data.fulfillment_type !== "delivery" || data.delivery_location_id !== null, {
     message: "Select a delivery zone",
@@ -457,6 +469,44 @@ export const orderSchema = z
   });
 
 export type OrderInput = z.infer<typeof orderSchema>;
+
+/**
+ * New customer (docs/01_DATA_MODEL.md §6's "Credit sales and customer
+ * payments" subsection) — a lightweight catalog entry, not a login
+ * account. Both staff and admin can create one (see
+ * app/api/customers/route.ts) — a cashier meeting a new credit customer
+ * at the till shouldn't need to find an admin first.
+ */
+export const customerSchema = z.object({
+  name: z.string().trim().min(1, "Customer name is required"),
+  phone: z
+    .string()
+    .trim()
+    .min(1)
+    .nullable()
+    .optional(),
+  location: z.enum(["restaurant", "canteen"]).nullable().optional(),
+});
+
+export type CustomerInput = z.infer<typeof customerSchema>;
+
+/**
+ * Record a payment against an order (docs/01_DATA_MODEL.md §6) —
+ * POST /api/orders/[id]/payments. `amount` is validated positive here
+ * (shape only); whether it exceeds the order's actual remaining
+ * balance can only be checked server-side against current DB state
+ * (concurrent payments can change that balance between page-load and
+ * submit) — record_order_payment()'s own P0005 'overpayment' check is
+ * the authoritative one, this schema is just the first, cheap line of
+ * defense against an obviously-wrong request (negative/zero amount).
+ */
+export const orderPaymentSchema = z.object({
+  amount: z.number({ error: "Enter a valid amount" }).positive("Amount must be greater than 0"),
+  note: z.string().trim().min(1).nullable().optional(),
+  paid_at: z.string().datetime().nullable().optional(),
+});
+
+export type OrderPaymentInput = z.infer<typeof orderPaymentSchema>;
 
 /**
  * Expense log entry — see docs/01_DATA_MODEL.md §2 `expenses`. Submitted

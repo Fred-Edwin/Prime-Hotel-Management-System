@@ -28,7 +28,7 @@ Real staff roster:
 
 ## Project status: phased build is complete — this is now post-launch maintenance
 
-**Phases 1–9 are done and shipped** (`docs/04_PHASE_PLAN.md`, `docs/phases/phase9_context.md`). The app is live and in real use by the client. There is no Phase 10, and new work should **not** default to being organized as a phase — phases existed to sequence dependent, multi-day chunks of *new* functionality with their own gating checklists; day-to-day fixes and small updates don't have that dependency shape and the phase-context-file overhead is disproportionate to them. See **"Post-launch maintenance work"** below for how to approach a typical incoming request now.
+**Phases 1–9 are done and shipped** (`docs/04_PHASE_PLAN.md`, `docs/phases/phase9_context.md`). The app is live and in real use by the client. **Phase 10 (Admin Screen Redesign) is real and in progress** (`04_PHASE_PLAN.md`'s Phase 10 section, commits landed — see git history for "Phase 10 (part 1)" and later admin-redesign commits; no `docs/phases/phase10_context.md` yet since it isn't finished) — corrected 2026-07-24, an earlier version of this file incorrectly claimed no Phase 10 existed. New work should still **not** default to being organized as a phase — phases existed to sequence dependent, multi-day chunks of *new* functionality with their own gating checklists; day-to-day fixes and small updates don't have that dependency shape and the phase-context-file overhead is disproportionate to them. See **"Post-launch maintenance work"** below for how to approach a typical incoming request now.
 
 The one exception: if a request is genuinely large — a new feature area comparable in scope to an original phase, not a fix — flag that explicitly and ask whether it warrants a phase-style approach (its own plan, its own context file) rather than silently either over- or under-structuring it.
 
@@ -209,7 +209,7 @@ prosper-hotel-management-system/
 | `docs/01_DATA_MODEL.md` | You're touching the database — full SQL schema, RLS policies, calculation formulas, the §3.4 concurrency mechanism |
 | `docs/04_PHASE_PLAN.md` | You need the history of the original build sequence, or are scoping a genuinely phase-scale new addition (see "Post-launch maintenance work") |
 | `docs/design/*.md` | You're building or touching any UI — see the Design System section above for which of the three files to read |
-| `docs/phases/phase9_context.md` | Once per session (if not already read this session), for current repo state — this is the last phase file and stays the required baseline read even though there's no Phase 10 |
+| `docs/phases/phase9_context.md` | Once per session (if not already read this session), for current repo state — the last *completed* phase's context file; Phase 10 is in progress but has no context file yet (see "Project status" above) |
 | `scripts/seed-staff.ts` | You need the real roster's name/PIN pairs to log in via `curl` for an RLS/data-correctness check — see "Verifying data/logic/RLS correctness" above |
 | `scripts/acceptance/README.md` | Historical/phase-scale work only (see "Verifying data/logic/RLS correctness" above — post-launch fixes use a one-off `curl` check instead, no acceptance script). If a future request is explicitly phase-scale, run or extend the existing `scripts/acceptance/phaseX-*.mjs` script rather than writing a one-off check that gets discarded; run its HTTP-only checks yourself and hand its raw-SQL fixture/assertion queries to the human for the SQL Editor. |
 

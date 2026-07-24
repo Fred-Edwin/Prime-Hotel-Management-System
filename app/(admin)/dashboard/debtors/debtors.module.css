@@ -1,0 +1,116 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.backLink {
+  display: inline-block;
+  margin-top: var(--space-1);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+/* Summary card -- a single "Total outstanding" figure above the table,
+   same visual weight as a MetricCard but not using that component
+   directly since this is a plain light-surface Card (not the dashboard
+   hero band's dark surface MetricCard is designed for) -- one figure
+   doesn't warrant its own component variant here. */
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  width: fit-content;
+}
+
+.summaryLabel {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.summaryValue {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-heading-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Outstanding balances read as "money still owed" -- a mild warning
+   tone (not error, this is normal business activity, not a failure
+   state), matching --color-status-warning's existing use elsewhere for
+   "worth the admin's attention, not urgent/broken." */
+.outstandingCell {
+  color: var(--color-status-warning);
+  font-weight: 600;
+}
+
+.debtorDetail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.emptyNote {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.orderList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.orderRow {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.orderRowHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.orderAmount {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.orderRowFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.paymentForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

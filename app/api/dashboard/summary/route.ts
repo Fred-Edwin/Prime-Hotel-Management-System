@@ -72,6 +72,18 @@ import { serverErrorResponse } from "@/lib/errors";
  * branched on whether buying_price is 0. This never touches costValue/
  * closingStockValue/periodicCogs()/netProfit() anywhere in this route —
  * those keep using the real buying_price exactly as before.
+ *
+ * outstandingTotal (Phase 11, docs/01_DATA_MODEL.md §6's "Credit sales
+ * and customer payments" subsection): sum of every credit order's
+ * outstanding balance (total_amount - payments), across both locations,
+ * via dashboard_outstanding_total(). Deliberately NOT period-scoped —
+ * an old unpaid balance doesn't stop being owed just because it falls
+ * outside the selected period, so this figure is the same regardless
+ * of `period`/`from`/`to`. A credit sale already counted toward
+ * sales/costValue/netProfit the moment it was logged, via the existing
+ * orders -> apply_order_to_stock_entry() path (§3.4), completely
+ * unchanged by this phase — outstandingTotal is purely an additional
+ * reporting figure, never subtracted from or added to netProfit.
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -114,6 +126,7 @@ export async function GET(request: Request) {
     trendRes,
     lowStockItemsRes,
     lowStockIngredientsRes,
+    outstandingTotalRes,
   ] = await Promise.all([
     supabase.rpc("dashboard_stock_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_ingredient_summary", { p_from: from, p_to: to }),
@@ -124,6 +137,14 @@ export async function GET(request: Request) {
     supabase.rpc("dashboard_daily_trend", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_low_stock_items"),
     supabase.rpc("dashboard_low_stock_ingredients"),
+    // Phase 11 (docs/01_DATA_MODEL.md §6) -- "Total Outstanding" credit
+    // figure. Deliberately NOT period-scoped (no p_from/p_to) — see
+    // dashboard_outstanding_total()'s own comment: this is a
+    // point-in-time balance figure (what's owed right now), not a
+    // period flow like sales/cost/expenses, so it doesn't change when
+    // the period toggle changes. Never fed into netProfit() — see the
+    // route's own doc comment above and lib/calculations.ts's netProfit().
+    supabase.rpc("dashboard_outstanding_total"),
   ]);
 
   for (const res of [
@@ -136,6 +157,7 @@ export async function GET(request: Request) {
     trendRes,
     lowStockItemsRes,
     lowStockIngredientsRes,
+    outstandingTotalRes,
   ]) {
     if (res.error) return serverErrorResponse(res.error, "dashboard/summary");
   }
@@ -331,5 +353,6 @@ export async function GET(request: Request) {
     trend: trendRes.data ?? [],
     lowStockItems: lowStockItemsRes.data ?? [],
     lowStockIngredients: lowStockIngredientsRes.data ?? [],
+    outstandingTotal: outstandingTotalRes.data ?? 0,
   });
 }

@@ -104,6 +104,11 @@ interface SummaryResponse {
   trend: TrendPoint[];
   lowStockItems: LowStockItem[];
   lowStockIngredients: LowStockIngredient[];
+  // Phase 11 (docs/01_DATA_MODEL.md §6) -- sum of every credit order's
+  // outstanding balance, both locations, NOT period-scoped (see the
+  // route's own doc comment -- an old unpaid balance is still owed
+  // regardless of the selected period). Never fed into netProfit.
+  outstandingTotal: number;
 }
 
 const PERIOD_OPTIONS = [
@@ -133,6 +138,8 @@ const TOOLTIPS = {
   closingStock: "Unsold stock on hand, valued at cost.",
   businessWideExpenses: "Costs not tied to one location — rent, salaries.",
   expenses: "Costs logged for this location.",
+  outstandingTotal:
+    "Total still owed by customers on credit sales, both locations — not tied to the period toggle. Already counted in sales/profit above; this is what hasn't been collected yet. See Debtors for who owes what.",
 } as const;
 
 const COMPARISON_ROWS = [
@@ -441,6 +448,25 @@ export function DashboardClient() {
                   value={money(data.combined.businessWideExpenses)}
                   onDark
                   tooltip={TOOLTIPS.businessWideExpenses}
+                />
+              )}
+              {/* Total Outstanding (Phase 11, docs/01_DATA_MODEL.md §6) --
+                  a credit sale already counts toward sales/cost/profit
+                  above the moment it's logged (unchanged §3.4 mechanism);
+                  this is the SEPARATE "what hasn't been collected yet"
+                  figure, alongside — never blended into — net profit. Not
+                  period-scoped (see the route's own doc comment), so it
+                  doesn't change when the period toggle above does. See
+                  /dashboard/debtors (sidebar nav) for the per-customer
+                  breakdown. Only shown when there's something outstanding
+                  to avoid a permanent "KES 0" tile for a business that
+                  never runs credit sales. */}
+              {data.outstandingTotal > 0 && (
+                <MetricCard
+                  label="Total outstanding"
+                  value={money(data.outstandingTotal)}
+                  onDark
+                  tooltip={TOOLTIPS.outstandingTotal}
                 />
               )}
             </div>

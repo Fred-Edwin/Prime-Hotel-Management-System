@@ -11,6 +11,8 @@ import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { InfoTooltip } from "@/components/InfoTooltip";
+import { Modal } from "@/components/Modal";
+import { Button } from "@/components/Button";
 import { nairobiToday, orderTotal } from "@/lib/calculations";
 import { useTillStripSlot } from "@/app/(staff)/TillStripSlot";
 import type { Database } from "@/lib/supabase/types";
@@ -22,6 +24,10 @@ type OrderItemRow = Database["public"]["Tables"]["order_items"]["Row"];
 type OrderRow = Database["public"]["Tables"]["orders"]["Row"] & { order_items: OrderItemRow[] };
 type StockEntryRow = Database["public"]["Tables"]["stock_entries"]["Row"];
 type FulfillmentType = Database["public"]["Enums"]["order_fulfillment_type"];
+// Phase 11 (docs/01_DATA_MODEL.md §6) — lightweight customer catalog,
+// not a login/account system. Read from the same GET /api/orders
+// response as everything else on this screen.
+type Customer = Database["public"]["Tables"]["customers"]["Row"];
 
 function todayISO(): string {
   return nairobiToday();
@@ -42,6 +48,7 @@ export function OrdersClient() {
   const [deliveryLocations, setDeliveryLocations] = useState<DeliveryLocation[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [stockEntries, setStockEntries] = useState<StockEntryRow[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [customerName, setCustomerName] = useState("");
@@ -52,6 +59,23 @@ export function OrdersClient() {
   const [clientRequestId, setClientRequestId] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; status: "success" | "error" } | null>(null);
+
+  // Phase 11 (docs/01_DATA_MODEL.md §6) -- credit sale state. "" means
+  // no customer picked (a normal cash order, unchanged from before this
+  // phase); a real id means the order will carry customer_id. isCredit
+  // is UI-only -- it doesn't change what's submitted beyond selecting
+  // 'counter' as the fulfillment type for a walk-in credit sale (a
+  // delivery/pickup order can ALSO be marked credit without changing
+  // its fulfillment_type -- credit is about payment timing, not how
+  // the order is fulfilled). "Paid now" vs "On credit" only changes
+  // whether the UI nudges the cashier to also record a payment
+  // immediately after saving -- see handleSave's isCredit branch below.
+  const [customerId, setCustomerId] = useState("");
+  const [isCredit, setIsCredit] = useState(false);
+  const [newCustomerModalOpen, setNewCustomerModalOpen] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +96,7 @@ export function OrdersClient() {
       setDeliveryLocations(body.deliveryLocations ?? []);
       setOrders(body.orders ?? []);
       setStockEntries(body.stockEntries ?? []);
+      setCustomers(body.customers ?? []);
       setLoading(false);
     }
 
@@ -128,11 +153,15 @@ export function OrdersClient() {
     deliveryFeeSnapshot: deliveryFee,
   });
 
+  // A credit sale needs a real customer on file (there has to be
+  // someone to collect the debt from later) -- a plain cash order
+  // still only needs the free-text name, same as before this phase.
   const canSave =
     !submitting &&
     customerName.trim().length > 0 &&
     cartLines.length > 0 &&
-    (fulfillmentType === "pickup" || deliveryLocationId.length > 0);
+    (fulfillmentType === "pickup" || fulfillmentType === "counter" || deliveryLocationId.length > 0) &&
+    (!isCredit || customerId.length > 0);
 
   function updateCartQuantity(itemId: string, quantity: number) {
     setCart((prev) => ({ ...prev, [itemId]: quantity }));
@@ -145,6 +174,8 @@ export function OrdersClient() {
     setCart({});
     setSearchTerm("");
     setClientRequestId(crypto.randomUUID());
+    setCustomerId("");
+    setIsCredit(false);
   }
 
   async function handleSave() {
@@ -161,6 +192,7 @@ export function OrdersClient() {
           delivery_location_id: fulfillmentType === "delivery" ? deliveryLocationId : null,
           items: cartLines.map((line) => ({ item_id: line.item.id, quantity: line.quantity })),
           client_request_id: clientRequestId,
+          customer_id: customerId || null,
         }),
       });
       const body = await res.json();
@@ -171,13 +203,64 @@ export function OrdersClient() {
       }
 
       setOrders((prev) => [body.order as OrderRow, ...prev]);
-      setToast({ message: "Order saved", status: "success" });
+      setToast({
+        message: isCredit ? "Order saved — logged on credit" : "Order saved",
+        status: "success",
+      });
       resetForm();
     } catch {
       setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /**
+   * Inline "+ New customer" (Phase 11) -- lets a cashier register a
+   * new credit customer without leaving the order form, mirroring how
+   * PurchaseModal's inline "+ Add new ingredient" already avoids
+   * sending staff to a separate admin screen mid-task
+   * (docs/01_DATA_MODEL.md §3.2). Created customer is immediately
+   * selected so the cashier doesn't have to find it again in the list.
+   */
+  async function handleCreateCustomer() {
+    if (!newCustomerName.trim()) return;
+    setCreatingCustomer(true);
+    try {
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCustomerName.trim(),
+          phone: newCustomerPhone.trim() || null,
+        }),
+      });
+      const body = await res.json();
+
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't add customer", status: "error" });
+        return;
+      }
+
+      const customer = body.customer as Customer;
+      setCustomers((prev) => [...prev, customer].sort((a, b) => a.name.localeCompare(b.name)));
+      setCustomerId(customer.id);
+      setCustomerName(customer.name);
+      setNewCustomerModalOpen(false);
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setToast({ message: "Customer added", status: "success" });
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setCreatingCustomer(false);
+    }
+  }
+
+  function handlePickCustomer(id: string) {
+    setCustomerId(id);
+    const customer = customers.find((c) => c.id === id);
+    if (customer) setCustomerName(customer.name);
   }
 
   useTillStripSlot(
@@ -219,9 +302,73 @@ export function OrdersClient() {
         <Input
           label="Customer name"
           value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
+          onChange={(e) => {
+            setCustomerName(e.target.value);
+            // Typing a fresh name after picking an existing customer
+            // means they've moved on from that selection -- don't
+            // silently keep submitting the old customer_id against a
+            // now-different-looking name.
+            if (customerId) setCustomerId("");
+          }}
           placeholder="e.g. Mary Wambui"
         />
+
+        {/* Phase 11 (docs/01_DATA_MODEL.md §6) -- pick an existing
+            customer record (or add a new one inline) so the order can
+            carry customer_id, which credit tracking needs. Purely
+            additive to the free-text name above -- picking a customer
+            here also fills the name field for convenience, but typing
+            a name alone (no pick) still works exactly as before this
+            phase for a normal cash order. */}
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Customer on file (optional for cash, required for credit)</span>
+          <div className={styles.zoneRow}>
+            <Select
+              placeholder="No customer selected"
+              value={customerId}
+              onChange={(e) => handlePickCustomer(e.target.value)}
+              options={customers.map((c) => ({ value: c.id, label: c.phone ? `${c.name} (${c.phone})` : c.name }))}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setNewCustomerName(customerName.trim());
+                setNewCustomerModalOpen(true);
+              }}
+            >
+              + New customer
+            </Button>
+          </div>
+        </div>
+
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>
+            Payment
+            <InfoTooltip
+              label="Payment"
+              message="On credit logs this sale immediately (stock and profit are unaffected) but tracks it as owed until a payment is recorded against it on the admin debtors screen."
+            />
+          </span>
+          <CategoryChips
+            options={[
+              { value: "paid", label: "Paid now" },
+              { value: "credit", label: "On credit" },
+            ]}
+            value={isCredit ? "credit" : "paid"}
+            onChange={(value) => {
+              const credit = value === "credit";
+              setIsCredit(credit);
+              // A credit sale with no delivery/pickup context defaults
+              // to the new 'counter' fulfillment type (a walk-in
+              // named-customer sale) -- switching back to "Paid now"
+              // returns to the original pickup default rather than
+              // leaving 'counter' selected for a plain cash order.
+              if (credit && fulfillmentType !== "delivery") setFulfillmentType("counter");
+              if (!credit && fulfillmentType === "counter") setFulfillmentType("pickup");
+            }}
+          />
+        </div>
 
         <div className={styles.field}>
           <span className={styles.fieldLabel}>Fulfillment</span>
@@ -229,6 +376,7 @@ export function OrdersClient() {
             options={[
               { value: "pickup", label: "Pickup" },
               { value: "delivery", label: "Delivery" },
+              { value: "counter", label: "Counter" },
             ]}
             value={fulfillmentType}
             onChange={(value) => setFulfillmentType(value as FulfillmentType)}
@@ -330,7 +478,7 @@ export function OrdersClient() {
           <EmptyState
             icon={<Icon name="orders" size={48} />}
             heading="No orders logged yet"
-            body="Delivery and pickup orders you log today will show up here."
+            body="Delivery, pickup and counter orders you log today will show up here."
           />
         ) : (
           <ul className={styles.orderList}>
@@ -341,14 +489,65 @@ export function OrdersClient() {
                   <span className={styles.orderAmount}>KES {order.total_amount.toFixed(2)}</span>
                 </div>
                 <p className={styles.orderMeta}>
-                  {order.fulfillment_type === "delivery" ? "Delivery" : "Pickup"} ·{" "}
-                  {order.order_items.length} {order.order_items.length === 1 ? "item" : "items"}
+                  {order.fulfillment_type === "delivery"
+                    ? "Delivery"
+                    : order.fulfillment_type === "counter"
+                      ? "Counter"
+                      : "Pickup"}{" "}
+                  · {order.order_items.length} {order.order_items.length === 1 ? "item" : "items"}
+                  {/* customer_id (Phase 11) is the signal this order may
+                      be a credit sale -- there's no dedicated flag, so
+                      this reads as "has a customer on file," which is
+                      the closest the staff-facing list needs to get.
+                      The admin debtors screen is the real source of
+                      truth for what's actually still owed. */}
+                  {order.customer_id && (
+                    <>
+                      {" "}
+                      · <span className={styles.creditBadge}>Customer on file</span>
+                    </>
+                  )}
                 </p>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      <Modal
+        open={newCustomerModalOpen}
+        onClose={() => setNewCustomerModalOpen(false)}
+        title="New customer"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setNewCustomerModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateCustomer}
+              disabled={creatingCustomer || !newCustomerName.trim()}
+            >
+              {creatingCustomer ? "Adding…" : "Add customer"}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.form}>
+          <Input
+            label="Name"
+            value={newCustomerName}
+            onChange={(e) => setNewCustomerName(e.target.value)}
+            placeholder="e.g. Mary Wambui"
+          />
+          <Input
+            label="Phone (optional)"
+            value={newCustomerPhone}
+            onChange={(e) => setNewCustomerPhone(e.target.value)}
+            placeholder="e.g. 0712 345 678"
+          />
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
     </div>

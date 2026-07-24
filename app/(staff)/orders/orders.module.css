@@ -195,3 +195,15 @@
   font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
 }
+
+/* Phase 11 (docs/01_DATA_MODEL.md §6) -- a lightweight inline signal
+   that an order carries a customer_id (may be a credit sale), on the
+   staff-facing list. Uses --color-status-info (neutral, not
+   success/warning/error -- this is metadata, not a status judgment)
+   rather than the gold brand-accent token, which is reserved for
+   dark surfaces only per docs/design/02_PATTERNS_AND_CHECKLIST.md §6.
+   No new badge component for a single word of inline metadata. */
+.creditBadge {
+  color: var(--color-status-info);
+  font-weight: 600;
+}

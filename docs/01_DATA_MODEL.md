@@ -21,6 +21,8 @@ orders              — customer delivery/pickup orders, replaces the client's W
 order_items         — line items per order (see §6)
 audit_log           — admin-read-only trail of sensitive admin actions; first pass covers Staff edit/deactivate/reactivate/PIN-reset only (see §2's audit_log section)
 app_settings        — single-row, admin-editable business-wide settings; currently just estimated_cost_ratio (see §3.11)
+customers           — lightweight customer catalog for credit sales, added Phase 11 (see §6's "Credit sales and customer payments" subsection)
+order_payments      — append-only ledger of payments against a credit order, added Phase 11 (see §6)
 ```
 
 Do not add tables speculatively beyond what's listed here (e.g., a generic `locations` table for restaurant/canteen — see §5 for why). `delivery_locations`/`orders`/`order_items` were added deliberately, after initial planning, per direct client input (see §6) — not a speculative addition.
@@ -493,7 +495,15 @@ create trigger delivery_locations_set_updated_at
 -- must not create two orders and double-deduct stock.
 -- ============================================================
 
-create type order_fulfillment_type as enum ('delivery', 'pickup');
+-- 'counter' added Phase 11 (20260724130000_credit_ledger_enum.sql) --
+-- a walk-in till/counter sale a cashier chooses to log through this
+-- order-style flow instead of the anonymous stepper, typically because
+-- it's on credit -- see §6's "Credit sales and customer payments"
+-- subsection. Added in its own migration/transaction, per Postgres's
+-- requirement that ALTER TYPE ... ADD VALUE commit before the new
+-- value can be referenced elsewhere (same pattern as the pre-existing
+-- 20260713120000_add_item_categories.sql).
+create type order_fulfillment_type as enum ('delivery', 'pickup', 'counter');
 
 create table public.orders (
   id uuid primary key default gen_random_uuid(),
@@ -501,17 +511,27 @@ create table public.orders (
   order_date date not null,
   customer_name text not null,
   fulfillment_type order_fulfillment_type not null,
-  delivery_location_id uuid references public.delivery_locations(id),  -- null for pickup
+  delivery_location_id uuid references public.delivery_locations(id),  -- null for pickup/counter
   delivery_fee_snapshot numeric(10,2) not null default 0,  -- snapshotted from delivery_locations.fee at write time, same rationale as price snapshots elsewhere
   total_amount numeric(10,2) not null,  -- sum(order_items) + delivery_fee_snapshot, calculated in lib/calculations.ts
   client_request_id uuid not null,  -- generated once by the client per submit attempt; same value resent on retry -- see §3.4
   created_by uuid not null references public.users(id),
   created_at timestamptz not null default now(),
 
+  -- Added Phase 11 (20260724140000_credit_ledger.sql): nullable FK to
+  -- the new customers table below. Cash/till-derived orders don't need
+  -- one; linking a cash-paid order to a customer is still allowed if
+  -- useful, not restricted to credit orders only. customer_name (free
+  -- text, above) is UNCHANGED and remains the display/fallback label
+  -- on every existing screen -- this is additive, not a replacement.
+  -- See §6.
+  customer_id uuid references public.customers(id),
+
   unique (created_by, client_request_id)  -- makes retried submissions a no-op, see §3.4
 );
 
 create index orders_location_date_idx on public.orders (location, order_date);
+create index orders_customer_id_idx on public.orders (customer_id);
 
 create table public.order_items (
   id uuid primary key default gen_random_uuid(),
@@ -523,6 +543,44 @@ create table public.order_items (
 
 create index order_items_order_idx on public.order_items (order_id);
 create index order_items_item_idx on public.order_items (item_id);
+
+-- ============================================================
+-- CUSTOMERS / ORDER_PAYMENTS (Phase 11, 20260724140000_credit_ledger.sql)
+-- Full rationale in §6's "Credit sales and customer payments"
+-- subsection. customers is defined ahead of orders.customer_id above
+-- in migration-application order (the FK needs the table to exist
+-- first) -- shown here after orders/order_items purely for
+-- documentation-reading order, matching how order_items already reads
+-- after orders despite orders.customer_id referencing it forward.
+-- ============================================================
+
+create table public.customers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  location location_type,  -- nullable -- a customer isn't tied to one location, don't force it
+  created_by uuid not null references public.users(id),
+  created_at timestamptz not null default now()
+);
+
+create index customers_name_idx on public.customers (name);
+create index customers_location_idx on public.customers (location);
+
+create table public.order_payments (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.orders(id) on delete cascade,
+  amount numeric(10,2) not null check (amount > 0),
+  paid_at timestamptz not null default now(),
+  recorded_by uuid not null references public.users(id),
+  note text,
+  created_at timestamptz not null default now()
+
+  -- No updated_at/update trigger, no update/delete RLS policy --
+  -- payments are immutable once logged, same posture as
+  -- ingredient_purchases. See §6.
+);
+
+create index order_payments_order_id_idx on public.order_payments (order_id);
 
 -- ============================================================
 -- AUDIT LOG
@@ -1494,6 +1552,59 @@ create policy "order_items_insert_scoped" on public.order_items
   );
 
 -- ============================================================
+-- CUSTOMERS (Phase 11): everyone (staff + admin) reads the full
+-- catalog -- a customer/debtor isn't confidential to one location the
+-- way stock_entries/expenses are, and a cashier at either location may
+-- need to find an existing customer record rather than create a
+-- duplicate. INSERT is open to any authenticated staff member, not
+-- just admin (a cashier meets a new credit customer at the till) --
+-- same widened-beyond-admin-only shape as
+-- ingredients_admin_or_restaurant_insert. Admin-only UPDATE (correcting
+-- a typo/relocated customer after the fact); no DELETE policy -- not
+-- requested for this phase, see §5.
+-- ============================================================
+alter table public.customers enable row level security;
+
+create policy "customers_select_all" on public.customers
+  for select using (true);
+create policy "customers_insert_any_authenticated" on public.customers
+  for insert with check (created_by = auth.uid());
+create policy "customers_update_admin_only" on public.customers
+  for update using (public.is_admin());
+
+-- ============================================================
+-- ORDER_PAYMENTS (Phase 11): scoped via a join back to the parent
+-- order's location, same principle order_items already uses above --
+-- order_payments has no location column of its own. Deliberately NO
+-- insert policy -- record_order_payment() (§6) is the only supported
+-- write path (it must run the overpayment recheck + advisory lock
+-- atomically inside one transaction, which a bare RLS-gated client
+-- insert can't enforce), so without an insert policy a direct
+-- `insert into order_payments` is rejected outright, forcing every
+-- write through the function. No update/delete policy either --
+-- payments are immutable once logged, same posture as
+-- ingredient_purchases. Because there's no insert policy at all,
+-- record_order_payment() must be `security definer` (not `security
+-- invoker`) to actually perform its own insert -- a `security invoker`
+-- version would be blocked by RLS exactly like a bare client insert,
+-- which is what an initial version of this migration got wrong and
+-- direct curl testing against prosper-hotel-dev caught (every payment
+-- attempt returned a 403 "row-level security policy" rejection even
+-- though the overpayment check itself worked correctly). Fixed same
+-- day; see §6.
+-- ============================================================
+alter table public.order_payments enable row level security;
+
+create policy "order_payments_select_scoped" on public.order_payments
+  for select using (
+    exists (
+      select 1 from public.orders
+      where orders.id = order_payments.order_id
+        and (public.is_admin() or orders.location = public.my_location())
+    )
+  );
+
+-- ============================================================
 -- AUDIT LOG: admin-read-only, and -- unlike every other table above --
 -- no role can write to it directly, including admin. Writes only
 -- happen through write_audit_log() below, a security definer function
@@ -1577,7 +1688,7 @@ RLS policies alone are not sufficient — Postgres requires baseline `GRANT` pri
 ## 5. Deliberate omissions (don't "fix" these without checking the immediately-previous phase's `docs/phases/phaseX_context.md` first — see `CLAUDE.md`)
 
 - **No `locations` table.** Only two locations will ever exist for this business (per discovery); a `location_type` enum is simpler and sufficient. If a third location is ever added, that's a deliberate future migration, not an oversight.
-- **No debtor/credit ledger table.** Explicitly Phase 2 per the scope document. Don't add it speculatively.
+- **Debtor/credit ledger — reversed, Phase 11 (2026-07-24).** This bullet previously read "No debtor/credit ledger table. Explicitly Phase 2 per the scope document. Don't add it speculatively." The client (WaPrecious) directly requested this, so it's now real V1 scope — see §6's "Credit sales and customer payments" subsection for the full shape (`customers`, `order_payments`, `orders.customer_id`, `order_fulfillment_type`'s new `'counter'` value). Kept here, corrected rather than deleted, per `CLAUDE.md`'s "don't silently rewrite a settled decision, note the reversal" rule — the same treatment §3.3 (wastage) and this file's own §6 (orders) already got when client input reversed an earlier V1 exclusion.
 - **Wastage is V1, not Phase 2 — this reverses an earlier decision.** It was originally deferred, but client input made clear it's needed now: without it, closing stock silently doesn't reconcile with a physical count after spoilage. See §3.3 for the full column-level treatment on both `stock_entries` and `ingredient_entries`. No separate wastage table — it's columns on the existing entry tables, not its own ledger, since a wastage event is always tied to a specific item/ingredient's entry for that period.
 - **No soft-delete/delete on `stock_entries`.** Historical entries are never deleted, only correctable by admin via update (with the update itself logged via both `updated_at` and `audit_log`, see §3.4's "Admin direct ledger-row edit" note). **`expenses` is an explicit, narrower exception** (post-launch addition, 2026-07-21): admin can both edit (`expenses_update_admin_only`) and outright delete (`expenses_delete_admin_only`) an expense row, logged to `audit_log` either way — see the EXPENSES RLS section above. This diverges from `stock_entries` because an expense carries no derived value elsewhere (no weighted-average cost, no stock quantity) for a delete to leave inconsistent; don't infer from this that `stock_entries`/`ingredient_purchases`-style tables should also gain a general delete without the same reasoning applying.
 - **`items`, `ingredients`, `delivery_locations`, and `expense_categories` all support real hard delete — the deactivate-only pattern is no longer the default for the catalog.** `items` gained this first (post-launch, 2026-07-21, direct client confirmation — see `supabase/migrations/20260721080000_item_hard_delete.sql`). `ingredients`, `delivery_locations`, and `expense_categories` followed (post-launch, 2026-07-23, separately confirmed — see `supabase/migrations/20260723080000_ingredient_hard_delete.sql`, `20260723090000_delivery_location_hard_delete.sql`, `20260723100000_expense_category_hard_delete.sql`), triggered by a real incident: an ingredient called "Smokies" was mistakenly tracked as both a menu item and a raw ingredient, and the client wanted the erroneous row gone entirely, not just deactivated. Each table's delete is admin-only, requires a real impact preview (`<table>_delete_impact()`) and type-the-name-to-confirm in the UI, and permanently removes history that references it:
@@ -1603,7 +1714,7 @@ An order is a **single customer transaction** — closer to a receipt than to a 
 **Critically, an order never writes `quantity_sold` directly** — it inserts into `order_items` and then calls `public.apply_order_to_stock_entry()` (Phase 6's atomic upsert function — see §3.4's implementation note for why it replaced the originally-planned plain `recalculate_stock_entry()` call), which always re-derives the combined total from its two source numbers, so the two write-paths can never race and clobber each other. See §3.4 for the full mechanism and why it's necessary (two independent flows writing the same row is a lost-update hazard if handled naively).
 
 - **Walk-in till sales are unaffected.** The existing stepper-based `quantity_sold` entry flow (Phase 4) stays exactly as-is. Orders are only for the delivery/pickup channel that used to go through WhatsApp — not a redesign of the core entry screen, not a replacement for how walk-in sales are logged.
-- **Logged as already-completed**, same mental model as a till sale entered at time of sale. No status/workflow field (no pending → fulfilled lifecycle), no rider/driver assignment, no customer accounts or order history beyond the flat log. These are deliberate V1 exclusions — see below.
+- **Logged as already-completed**, same mental model as a till sale entered at time of sale. No status/workflow field (no pending → fulfilled lifecycle), no rider/driver assignment. These are deliberate V1 exclusions — see below. (Correction, Phase 11, 2026-07-24: the "no customer accounts" part of this exclusion is now superseded — see the "Credit sales and customer payments" subsection below. `customers` is a lightweight catalog for credit tracking, not a login/account system, so the spirit of the original exclusion — no customer-facing accounts or portal — still holds.)
 
 ### `delivery_locations` — admin-managed zone catalog
 
@@ -1624,6 +1735,31 @@ Prosper Hotel's admin (WaPrecious) sets up named delivery zones, each with a fix
 
 - **No order status/lifecycle** (pending, out for delivery, fulfilled). Orders are logged after the fact as completed transactions.
 - **No rider/driver assignment or delivery tracking.**
-- **No customer accounts, repeat-customer lookup, or order history UI beyond the flat ledger.**
+- **No customer LOGIN accounts or self-service portal.** (`customers` — Phase 11 — is an internal-only catalog for credit tracking, not a customer-facing feature; see below.)
 - **No WhatsApp API integration.** This is a manual replacement for the WhatsApp group as record-of-truth, not an automation of WhatsApp itself.
 - These are real Phase 2 candidates if the client asks for them later — not gaps to quietly close now.
+
+### Credit sales and customer payments (Phase 11, 2026-07-24 — reverses the earlier "no debtor/credit ledger" exclusion, see §5)
+
+The client (WaPrecious) asked directly to track customers who take goods or services on credit, and what each one owes until paid. This was a deliberate V1 exclusion until now — see §5's corrected entry for the full history of that reversal.
+
+**What a credit sale is, structurally:** not a new kind of row — an `orders` row, exactly like a delivery/pickup order, just with `fulfillment_type = 'counter'` (new enum value, `20260724130000_credit_ledger_enum.sql`) when it originates from a walk-in counter sale rather than a delivery/pickup. A `'counter'` order behaves identically to a `'pickup'` order for stock-deduction purposes (`delivery_location_id`/`delivery_fee_snapshot` are null/0, same as pickup) — the only meaningful difference is intent (a cashier chose to log this as a named-customer transaction, typically for credit) and that it's expected to often carry a `customer_id`. **The existing anonymous stepper-based till flow (`till_quantity_sold`, `/entry`) is completely unchanged** — it has no per-transaction identity to attach a customer or payment history to, and this phase doesn't try to retrofit one; a cashier who wants to sell on credit uses the order-style flow instead of the stepper for that specific sale.
+
+**`customers`** — a lightweight catalog (`name`, optional `phone`, optional `location`), not a login/account system (see the corrected exclusion above). Both staff and admin can create a record — a cashier meeting a new credit customer at the till shouldn't need to find an admin first. `location` is nullable and non-binding: a customer isn't assumed to belong to one location just because their first order did.
+
+**`orders.customer_id`** — nullable FK. Cash/till-derived orders don't need one. The pre-existing free-text `customer_name` column is unchanged and remains the display/fallback label everywhere — `customer_id` is additive (lets the system recognize "this is the same Mary Wambui as last week" for reporting), not a replacement for the receipt-style free-text name.
+
+**`order_payments`** — an append-only ledger, deliberately **not** a `payment_status` column on `orders`. An order's outstanding balance is always derived: `total_amount - coalesce(sum(order_payments.amount), 0)`, computed at query time by `dashboard_outstanding_total()`/`dashboard_debtors()` (§4) and by `GET /api/orders/[id]/payments`, never stored. This mirrors how `ingredient_purchases`/`canteen_stock_purchases` are already append-only logs rather than a single mutable field (§3.2) — a payment is a discrete event with its own timestamp, not a value that gets overwritten.
+
+- **Why not a stored `payment_status`:** a denormalized field would need the exact same historical-recompute discipline §3.4 built for `stock_entries` (something has to walk forward and keep it in sync on every payment write) for a genuinely marginal read-performance win this app doesn't need at its actual scale (low hundreds of entries/day, PRD §6) — not worth a second source of truth. If debtor-list query performance ever becomes a real problem at higher volume, a materialized view refreshed periodically is a better fix than a hand-synced column.
+- **Overpayment is rejected, not clamped or silently allowed** — `record_order_payment()` (the only write path; `order_payments` has no client-facing INSERT RLS policy, see §4) computes the order's current outstanding balance and raises a distinct error (`errcode 'P0005'`, message `overpayment: ...`) if the new payment would exceed it. `lib/errors.ts`'s `describeSaveError()` surfaces this as "That payment is more than what's still owed on this order." (409).
+- **Row locking, same discipline as §3.4:** `record_order_payment()` takes a `pg_advisory_xact_lock` keyed on the order's id (`lock_order_payments_row()`) before reading the existing sum of payments — two concurrent payment inserts against the same order (e.g. two different staff members both recording a payment for the same debtor) can't both compute their overpayment check from the same stale snapshot and both pass when only one legitimately should. This is the same class of race §3.4's row-locking fix (`20260712091633_stock_entry_row_locking.sql`) exists to prevent, applied to a new table.
+- **Immutable once logged, no update/delete policy** — a mistaken payment entry is an operational admin problem to resolve (e.g. a corrective note or a future reversal feature if genuinely needed), not a UI edit path. Same posture as `ingredient_purchases` (§4).
+
+**Profit/dashboard treatment:** a credit sale counts toward sales/COGS/profit **immediately** when logged — exactly like a cash sale — because it's still an `orders`/`order_items` row feeding `stock_entries` via the existing `apply_order_to_stock_entry()` mechanism (§3.4), completely unchanged by this phase. Outstanding credit is a separate reporting concern: `dashboard_outstanding_total()` (§4) sums every order's outstanding balance across both locations, surfaced as a new "Total Outstanding" metric card on the admin dashboard, alongside — not blended into — the existing profit figures. `dashboard_debtors()` (§4) provides the same per-customer breakdown for the admin debtors screen (`/dashboard/debtors`), with an optional `p_from`/`p_to` to narrow which orders count (both null = every outstanding balance regardless of age, the natural default for a "who owes us money right now" view).
+
+**Deliberate V1 exclusions for this feature specifically** (same "don't build without a fresh check-in" posture as every other exclusions list in this file):
+- No payment reversal/refund UI or route.
+- No interest, late fees, or aging-bucket automation (30/60/90-day buckets) — `oldest_unpaid_date` (from `dashboard_debtors()`) gives the admin the raw date to judge age herself.
+- No SMS/WhatsApp payment reminders — see §6's existing "No WhatsApp API integration" exclusion above, unchanged.
+- No customer-facing login/self-service balance check.

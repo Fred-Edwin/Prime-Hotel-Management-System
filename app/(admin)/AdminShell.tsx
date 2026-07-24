@@ -32,6 +32,10 @@ const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard/expenses", label: "Expenses", icon: "expenses" },
   { href: "/delivery-locations", label: "Delivery", icon: "delivery" },
   { href: "/dashboard/orders", label: "Orders", icon: "orders" },
+  // Added Phase 11 (docs/01_DATA_MODEL.md §6's "Credit sales and
+  // customer payments" subsection) -- outstanding balance per
+  // customer, drill into unpaid orders, record a payment.
+  { href: "/dashboard/debtors", label: "Debtors", icon: "expenses" },
   { href: "/staff", label: "Staff", icon: "staff" },
   { href: "/dashboard/audit-log", label: "Audit Log", icon: "history" },
 ];

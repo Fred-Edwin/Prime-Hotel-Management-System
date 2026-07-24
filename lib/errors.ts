@@ -58,6 +58,24 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
     return { message: "That item is no longer available — refresh and try again.", status: 400 };
   }
 
+  // record_order_payment()'s overpayment guard (Phase 11, credit ledger)
+  // — a payment that would push an order's total paid beyond its
+  // total_amount. See docs/01_DATA_MODEL.md §6, errcode P0005.
+  if (error.code === "P0005" || error.message.includes("overpayment")) {
+    return {
+      message: "That payment is more than what's still owed on this order.",
+      status: 409,
+    };
+  }
+
+  // record_order_payment() — the referenced order doesn't exist or
+  // isn't visible to the caller's own location (Phase 11). Distinct
+  // from P0004's 'unknown_item' meaning above. See docs/01_DATA_MODEL.md
+  // §6, errcode P0006.
+  if (error.code === "P0006" || error.message.includes("unknown_order")) {
+    return { message: "That order couldn't be found — refresh and try again.", status: 404 };
+  }
+
   // record_canteen_stock_purchase()'s item-type guard (errcode 23514,
   // check_violation) — the item picker should already only offer
   // canteen_independent items, so this is a defensive fallback, not the

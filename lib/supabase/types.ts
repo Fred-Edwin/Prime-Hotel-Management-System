@@ -210,6 +210,41 @@ export type Database = {
           },
         ]
       }
+      customers: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          location: Database["public"]["Enums"]["location_type"] | null
+          name: string
+          phone: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          location?: Database["public"]["Enums"]["location_type"] | null
+          name: string
+          phone?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          location?: Database["public"]["Enums"]["location_type"] | null
+          name?: string
+          phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_locations: {
         Row: {
           active: boolean
@@ -501,6 +536,51 @@ export type Database = {
         }
         Relationships: []
       }
+      order_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          order_id: string
+          paid_at: string
+          recorded_by: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          order_id: string
+          paid_at?: string
+          recorded_by: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          order_id?: string
+          paid_at?: string
+          recorded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_payments_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           id: string
@@ -545,6 +625,7 @@ export type Database = {
           client_request_id: string
           created_at: string
           created_by: string
+          customer_id: string | null
           customer_name: string
           delivery_fee_snapshot: number
           delivery_location_id: string | null
@@ -558,6 +639,7 @@ export type Database = {
           client_request_id: string
           created_at?: string
           created_by: string
+          customer_id?: string | null
           customer_name: string
           delivery_fee_snapshot?: number
           delivery_location_id?: string | null
@@ -571,6 +653,7 @@ export type Database = {
           client_request_id?: string
           created_at?: string
           created_by?: string
+          customer_id?: string | null
           customer_name?: string
           delivery_fee_snapshot?: number
           delivery_location_id?: string | null
@@ -586,6 +669,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
           {
@@ -954,6 +1044,7 @@ export type Database = {
           p_buying_prices: Json
           p_client_request_id: string
           p_created_by: string
+          p_customer_id?: string
           p_customer_name: string
           p_delivery_fee_snapshot?: number
           p_delivery_location_id?: string
@@ -967,6 +1058,7 @@ export type Database = {
           client_request_id: string
           created_at: string
           created_by: string
+          customer_id: string | null
           customer_name: string
           delivery_fee_snapshot: number
           delivery_location_id: string | null
@@ -1057,6 +1149,19 @@ export type Database = {
           entry_date: string
           sales_value: number
           wastage_value: number
+        }[]
+      }
+      dashboard_debtors: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: {
+          customer_id: string
+          customer_name: string
+          customer_phone: string | null
+          oldest_unpaid_date: string
+          order_count: number
+          outstanding: number
+          total_amount: number
+          total_paid: number
         }[]
       }
       dashboard_expenses_summary: {
@@ -1217,6 +1322,10 @@ export type Database = {
           wastage_value: number
         }[]
       }
+      dashboard_outstanding_total: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       delete_canteen_stock_purchase: {
         Args: { p_purchase_id: string }
         Returns: undefined
@@ -1287,6 +1396,10 @@ export type Database = {
       }
       lock_ingredient_entry_row: {
         Args: { p_entry_date: string; p_ingredient_id: string }
+        Returns: undefined
+      }
+      lock_order_payments_row: {
+        Args: { p_order_id: string }
         Returns: undefined
       }
       lock_stock_entry_row: {
@@ -1463,6 +1576,30 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "ingredient_purchases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_order_payment: {
+        Args: {
+          p_amount: number
+          p_note?: string
+          p_order_id: string
+          p_paid_at?: string
+          p_recorded_by: string
+        }
+        Returns: {
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          order_id: string
+          paid_at: string
+          recorded_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "order_payments"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1876,7 +2013,7 @@ export type Database = {
         | "canteen_supplied"
         | "canteen_independent"
       location_type: "restaurant" | "canteen"
-      order_fulfillment_type: "delivery" | "pickup"
+      order_fulfillment_type: "delivery" | "pickup" | "counter"
       user_role: "admin" | "staff"
     }
     CompositeTypes: {
@@ -2030,7 +2167,7 @@ export const Constants = {
         "canteen_independent",
       ],
       location_type: ["restaurant", "canteen"],
-      order_fulfillment_type: ["delivery", "pickup"],
+      order_fulfillment_type: ["delivery", "pickup", "counter"],
       user_role: ["admin", "staff"],
     },
   },

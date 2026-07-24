@@ -22,6 +22,12 @@ import { describeSaveError, serverErrorResponse } from "@/lib/errors";
  * delivery_locations_select_all) — this route just narrows what a staff
  * member needs for their own location, same "server-side, not just
  * RLS" discipline as every other route in this codebase.
+ *
+ * Also returns the full customers catalog (Phase 11,
+ * docs/01_DATA_MODEL.md §6) — customers_select_all already allows any
+ * authenticated user to read it; included here so the order-entry
+ * screen's customer picker (pick-existing-or-create-new) doesn't need
+ * a second round trip.
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -87,18 +93,32 @@ export async function GET(request: Request) {
     await stockEntriesQuery;
   if (stockEntriesError) return serverErrorResponse(stockEntriesError, "orders");
 
-  return NextResponse.json({ items, deliveryLocations, orders, stockEntries });
+  const customersQuery = supabase.from("customers").select("*").order("name");
+  const { data: customers, error: customersError }: Awaited<typeof customersQuery> = await customersQuery;
+  if (customersError) return serverErrorResponse(customersError, "orders");
+
+  return NextResponse.json({ items, deliveryLocations, orders, stockEntries, customers });
 }
 
 /**
  * POST /api/orders
- * Creates a delivery/pickup order. Validates: item shape (Zod), that
- * every item is sellable at the caller's own location (§3.4 "Validation:
- * an order's items must belong to its own location" — checked here
- * against real item data, not assumed from the client), and delegates
- * the actual atomic write (order + order_items + the stock_entries
- * upsert for each item) to public.create_order(), which also handles
- * duplicate-submission protection via client_request_id (§3.4).
+ * Creates a delivery/pickup/counter order. Validates: item shape (Zod),
+ * that every item is sellable at the caller's own location (§3.4
+ * "Validation: an order's items must belong to its own location" —
+ * checked here against real item data, not assumed from the client),
+ * that customer_id (if provided) references a real customer row, and
+ * delegates the actual atomic write (order + order_items + the
+ * stock_entries upsert for each item) to public.create_order(), which
+ * also handles duplicate-submission protection via client_request_id
+ * (§3.4).
+ *
+ * 'counter' (Phase 11, docs/01_DATA_MODEL.md §6) — a walk-in sale
+ * logged through this order-style flow instead of the anonymous
+ * stepper, typically for credit. Behaves identically to 'pickup' for
+ * stock-deduction/fee purposes (falls through the same
+ * fulfillment_type !== "delivery" branches below) — the only
+ * meaningful difference from pickup is intent and that it's expected
+ * to often carry a customer_id.
  *
  * location/order_date/created_by are always server-derived, never
  * accepted from the client body — same principle as /api/expenses.
@@ -118,8 +138,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const { customer_name, fulfillment_type, delivery_location_id, items, client_request_id } = parsed.data;
+  const { customer_name, fulfillment_type, delivery_location_id, items, client_request_id, customer_id } =
+    parsed.data;
   const supabase = await createServerSupabaseClient();
+
+  // customer_id (Phase 11, docs/01_DATA_MODEL.md §6) — if provided,
+  // must reference a real customer row. Not location-scoped (customers
+  // aren't tied to one location, see the customers table's own
+  // comment) — just existence, same "unknown reference" defensiveness
+  // as the item-existence check below.
+  if (customer_id) {
+    const customerQuery = supabase.from("customers").select("id").eq("id", customer_id).single();
+    const { data: customerRow, error: customerError }: Awaited<typeof customerQuery> = await customerQuery;
+    if (customerError || !customerRow) {
+      return NextResponse.json({ error: "Select a valid customer" }, { status: 400 });
+    }
+  }
 
   const itemIds = items.map((line) => line.item_id);
   const itemsQuery = supabase
@@ -194,6 +228,7 @@ export async function POST(request: Request) {
     p_buying_prices: buyingPrices,
     ...(fulfillment_type === "delivery" ? { p_delivery_location_id: delivery_location_id! } : {}),
     p_delivery_fee_snapshot: deliveryFeeSnapshot,
+    ...(customer_id ? { p_customer_id: customer_id } : {}),
   });
 
   if (error) {
