@@ -1146,6 +1146,24 @@ This required a real RLS change, not just a route/UI change: `staff_meal_entries
 
 ---
 
+## 3.14 Fix: historical wastage edits were silently zeroed by the Ledger's cascade recompute (bug found auditing §3.13's work, 2026-07-24)
+
+**How this was found.** While auditing whether the Non-Sales Stock Consumption table reflects Ledger edits correctly (a direct question from the human, unrelated to §3.12/§3.13's own scope), a test edit's save response showed a correct nonzero `wastage_value`, but re-fetching the same row immediately after showed `0` — with no other write in between. Reproduced live on `prosper-hotel-dev` with the human before any fix was written (a fresh item, a historical row edited to `wastage: 3`, save response `wastage_value: 108`, refetch `wastage_value: 0`).
+
+**Root cause.** §3.11 (2026-07-23) switched `wastage_value` (and the three claim tables' `value`) to an unconditional `quantity * selling_price_snapshot * estimated_cost_ratio()` formula, and rewrote all nine writer functions that set those columns to match. `recompute_stock_entry_chain()` (§3.4's "Historical edit cascade," `20260720100000_historical_ledger_edit_cascade.sql`) was missed — it still computed `wastage_value = wastage * buying_price_snapshot`, the formula §3.11 replaced everywhere else.
+
+This function runs on **every** admin Ledger edit to a `stock_entries` row that has any later row for the same item/location (§3.4) — which is the common case, not an edge case, since it always includes the edited row itself, not just rows after it. `save_stock_entry()` (called first, by `editStockEntry()`) would correctly compute `wastage_value` using the current formula; then the cascade, running immediately after in the same request, would silently overwrite it using the stale formula. For any item with `buying_price_snapshot = 0` — the common case for in-house-cooked menu items, deliberately zeroed per §3.10 — this collapsed a real, nonzero wastage value straight back down to KES 0, the exact failure mode §3.11 was built to eliminate. `recompute_ingredient_entry_chain()`'s equivalent line was found at the same time but is a **separate, not-a-bug case** — see below.
+
+**The fix (`20260724110000_fix_cascade_wastage_value_formula.sql`):** `recompute_stock_entry_chain()`'s `wastage_value` line changed from `wastage * buying_price_snapshot` to `wastage * selling_price_snapshot * public.estimated_cost_ratio()` — the same one-line change §3.11 already made to every other writer. No other line in the function changed; `closing_stock`/`sales_value`/`cost_value`/`closing_stock_value` are untouched, per §3.11's explicit "COGS and closing stock value are untouched by any of this" invariant.
+
+**`recompute_ingredient_entry_chain()` and `save_ingredient_entry()` are deliberately NOT fixed by this migration.** Both still compute ingredient `wastage_value` as `wastage * buying_price_snapshot` — confirmed correct, not a bug, with the human directly: ingredients have no `selling_price` at all (never sold directly, §3.2), so §3.11's formula cannot apply to them the way it does to `stock_entries`. Ingredient wastage was never part of the zero-buying-price problem §3.11 fixed in the first place — that was specifically about in-house-cooked menu items' `buying_price` being deliberately zeroed (§3.10), which has no ingredient equivalent. Ingredients keep their original formula unchanged, on purpose.
+
+**No backfill.** Historical rows already wrongly zeroed by this bug (any item edited through a historical Ledger cascade since 2026-07-23) keep their incorrect stored `wastage_value` — consistent with this schema's standing "we don't rewrite history, only new writes follow new rules" posture (§3.11 set this same precedent for its own rollout). A future cascade touching the same row (another historical edit) will correct it as a side effect; nothing retroactively sweeps the database.
+
+**Carried forward — the lesson, restated from §3.9's own postmortem for the same failure class:** a formula change to a value stored in `stock_entries`/`ingredient_entries` must audit **every** function that writes that column, not just the "obvious" writer functions §3.11's own doc comment happened to list. §3.9 already documented this exact risk for `dashboard_stock_summary()`'s carry-forward CTEs; this is the same risk surfacing in a cascade/recompute function instead of a dashboard aggregation function. Any future formula change to a stored value column should `grep` for every `create or replace function` that sets that column before considering the change complete.
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.
