@@ -1456,6 +1456,7 @@ export type Database = {
       }
       recompute_stock_entry_cascade: {
         Args: {
+          p_created_by?: string
           p_edited_from_date: string
           p_edited_location: Database["public"]["Enums"]["location_type"]
           p_item_id: string

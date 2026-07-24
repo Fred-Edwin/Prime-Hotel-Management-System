@@ -261,6 +261,7 @@ async function editStockEntry(
       p_item_id: item_id,
       p_edited_location: location,
       p_edited_from_date: entry_date,
+      p_created_by: adminId,
     },
   );
   if (cascadeError) {
