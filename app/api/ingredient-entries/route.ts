@@ -1,11 +1,35 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getActingContext, type ActingContext } from "@/lib/auth";
 import { ingredientEntriesSaveSchema, ingredientEntryLineSaveSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
+import { writeAuditLog } from "@/lib/audit";
 
-function requireStoreManager(user: Awaited<ReturnType<typeof getCurrentUser>>) {
-  return !!user && user.role === "staff" && user.location === "restaurant" && user.is_store_manager;
+// Only admin-in-acting-mode writes get an audit entry — same rationale
+// as app/api/stock-entries/route.ts's identical helper.
+async function auditActingAsWrite(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  ctx: ActingContext,
+  action: string,
+  targetId: string,
+  changes?: Record<string, unknown> | null,
+) {
+  if (!ctx.actingAs) return;
+  await writeAuditLog(supabase, {
+    actorId: ctx.user.id,
+    action,
+    targetTable: "ingredient_entries",
+    targetId,
+    changes: { acting_as: ctx.actingAs.role, ...changes },
+  });
+}
+
+// Keys off the resolved acting context (real store-manager staff, or an
+// admin acting as Store Manager — getActingContext() in lib/auth.ts
+// already forces that acting role's location to "restaurant") rather
+// than raw session fields, so this stays correct for both.
+function requireStoreManager(ctx: ActingContext | null): ctx is ActingContext {
+  return !!ctx && ctx.location === "restaurant" && ctx.isStoreManager;
 }
 
 /**
@@ -22,8 +46,8 @@ function requireStoreManager(user: Awaited<ReturnType<typeof getCurrentUser>>) {
  * write time (§3.2).
  */
 export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!requireStoreManager(user)) {
+  const ctx = await getActingContext();
+  if (!requireStoreManager(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -78,8 +102,8 @@ export async function GET(request: Request) {
  * the oversell check atomically (same rationale as stock-entries).
  */
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!requireStoreManager(user)) {
+  const ctx = await getActingContext();
+  if (!requireStoreManager(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -124,13 +148,23 @@ export async function POST(request: Request) {
   // over save_ingredient_entry() per line — same rationale as stock-entries.
   const { data, error } = await supabase.rpc("save_ingredient_entries_batch", {
     p_entry_date: entry_date,
-    p_created_by: user!.id,
+    p_created_by: ctx.user.id,
     p_lines: batchLines,
   });
 
   if (error) {
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
+  }
+
+  // target_id is a not-null uuid column (audit_log) — a batch save has
+  // no single natural target row, so this audits against the first
+  // saved row's own id rather than entry_date, which isn't a uuid.
+  if (data && data.length > 0) {
+    await auditActingAsWrite(supabase, ctx, "ingredient_entry.admin_acting_as_create", data[0].id, {
+      entry_date,
+      ingredient_count: batchLines.length,
+    });
   }
 
   return NextResponse.json({ entries: data });
@@ -147,8 +181,8 @@ export async function POST(request: Request) {
  * never writes it.
  */
 export async function PUT(request: Request) {
-  const user = await getCurrentUser();
-  if (!requireStoreManager(user)) {
+  const ctx = await getActingContext();
+  if (!requireStoreManager(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -183,13 +217,20 @@ export async function PUT(request: Request) {
     p_quantity_used: quantity_used,
     p_wastage: 0,
     p_buying_price_snapshot: ingredient.buying_price,
-    p_created_by: user!.id,
+    p_created_by: ctx.user.id,
   });
 
   if (error) {
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
   }
+
+  await auditActingAsWrite(supabase, ctx, "ingredient_entry.admin_acting_as_edit", ingredient_id, {
+    entry_date,
+    ingredient_id,
+    received,
+    quantity_used,
+  });
 
   return NextResponse.json({ entry: data });
 }

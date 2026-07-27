@@ -48,3 +48,15 @@
   gap: var(--space-3);
   list-style: none;
 }
+
+@media (min-width: 1024px) {
+  /* ItemEntryCard is already internally flex-wrap/intrinsic-width (no
+     fixed-width assumptions) — dropping it into a grid cell needs no
+     component changes, only this container switching from a single
+     stacked column to a multi-column grid. */
+  .itemList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    align-items: start;
+  }
+}

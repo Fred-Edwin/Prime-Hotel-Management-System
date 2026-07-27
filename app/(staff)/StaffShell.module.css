@@ -1,8 +1,157 @@
 .shell {
   min-height: 100dvh;
   display: flex;
-  flex-direction: column;
   background: var(--color-surface-sunken);
+}
+
+/* ---- Desktop sidebar (>=1024px only) — mirrors AdminShell.module.css's
+   sidebar exactly (see StaffShell.tsx's comment on why this exists). ---- */
+
+.sidebar {
+  display: none;
+}
+
+.sidebarTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-5) var(--space-6);
+}
+
+.sidebarCollapsed .sidebarTop {
+  justify-content: center;
+  padding: var(--space-5) var(--space-2) var(--space-6);
+}
+
+.sidebarCollapseToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-on-brand);
+  cursor: pointer;
+}
+
+.sidebarCollapseToggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.collapseIconOpen {
+  transform: rotate(180deg);
+}
+
+.sidebarNav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+}
+
+.sidebarNavItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: rgba(255, 255, 255, 0.72);
+  text-decoration: none;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.sidebarNavItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-on-brand);
+}
+
+.sidebarCollapsed .sidebarNavItem {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebarNavItemActive {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-on-brand-accent);
+}
+
+/* Acting-as badge + Exit — only present when an admin is using this
+   shell via the sidebar role switcher (lib/actingAs.ts), stacked above
+   the identity block below with its own divider so it reads as a
+   distinct, unmissable state rather than blending into the normal
+   location/staff-name footer. */
+.sidebarActingAs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sidebarCollapsed .sidebarActingAs {
+  align-items: center;
+}
+
+.sidebarBottom {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sidebarCollapsed .sidebarBottom {
+  align-items: center;
+  padding: var(--space-5) var(--space-2);
+}
+
+.sidebarStaffName {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sidebarLogout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--space-touch);
+  min-width: var(--space-touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: transparent;
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  cursor: pointer;
+}
+
+.sidebarCollapsed .sidebarLogout {
+  padding: 0;
+}
+
+/* ---- Wrapper around everything except the sidebar (top bar, content,
+   bottom dock) — needed so the desktop sidebar's width can push this
+   whole column over via margin-left, mirroring AdminShell's .main. ---- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .topBar {
@@ -127,11 +276,11 @@
     display: inline;
   }
 
-  /* Desktop/admin-width staff view stays mobile-first per CLAUDE.md (no
-     dedicated desktop staff design), so the dock stays fixed to the
-     viewport bottom exactly as at mobile widths — only the nav's own
-     internal layout (row instead of column) changes, matching the
-     pattern already established for the admin shell's nav reflow. */
+  /* Tablet width (768px–1023px, no sidebar yet) — the dock still stays
+     fixed to the viewport bottom exactly as at mobile widths; only the
+     nav's own internal layout (row instead of column) changes here. The
+     true desktop sidebar (1024px+, below) takes over from there — see
+     that block for why the dock stops being fixed at that width. */
   .bottomNav {
     justify-content: flex-start;
     gap: var(--space-2);
@@ -143,5 +292,63 @@
     flex-direction: row;
     min-height: var(--space-touch);
     padding: 0 var(--space-4);
+  }
+}
+
+/* ---- Desktop sidebar takes over (>=1024px) — see StaffShell.tsx's
+   comment for why the staff shell now has one, mirroring AdminShell's.
+   Real staff phone/tablet usage above is completely unchanged. ---- */
+
+@media (min-width: 1024px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    background: var(--color-brand-primary);
+    z-index: var(--z-index-sticky);
+    transition: width var(--motion-base);
+  }
+
+  .sidebarCollapsed {
+    width: 72px;
+  }
+
+  .topBar {
+    display: none;
+  }
+
+  .main {
+    margin-left: 240px;
+    transition: margin-left var(--motion-base);
+  }
+
+  .mainSidebarCollapsed {
+    margin-left: 72px;
+  }
+
+  .content {
+    padding: var(--space-8);
+    max-width: 1280px;
+  }
+
+  /* TillStrip/StatusStrip are already position:sticky in their own
+     component CSS — unwrapping the dock from fixed positioning is
+     sufficient here; no left-offset math is needed to track the
+     sidebar's collapsed/expanded width, unlike a viewport-fixed
+     approach would require. */
+  .bottomDock {
+    position: static;
+  }
+
+  .bottomNav {
+    display: none;
+  }
+
+  .tillStripSlot > * {
+    max-width: 1280px;
   }
 }

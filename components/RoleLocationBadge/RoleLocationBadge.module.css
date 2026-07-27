@@ -20,3 +20,17 @@
   background: var(--color-brand-primary);
   color: var(--color-text-on-brand);
 }
+
+/* Admin acting as staff (sidebar role switcher) — deliberately distinct
+   from both .location and .admin so a screen is never ambiguously "just
+   the normal staff screen" while WaPrecious is acting as Cashier/Store
+   Manager. No prior "acting as" pattern exists in the design system
+   (flagged as a gap, docs/00_ARCHITECTURE.md §5) — this reuses the
+   existing status-warning tokens (already meaning "needs attention/
+   different from the default state") plus a dashed border, rather than
+   inventing new color tokens. */
+.acting {
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning);
+  border: var(--border-width-default) dashed var(--color-status-warning);
+}

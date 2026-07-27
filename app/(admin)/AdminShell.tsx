@@ -7,8 +7,15 @@ import { Wordmark } from "@/components/Wordmark";
 import { RoleLocationBadge } from "@/components/RoleLocationBadge";
 import { Icon, type IconName } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
+import { PeriodToggle } from "@/components/PeriodToggle";
+import type { ActingAsLocation, ActingAsRole } from "@/lib/actingAs";
 import { AdminTopBarSlotProvider } from "./AdminTopBarSlot";
 import styles from "./AdminShell.module.css";
+
+const LOCATION_OPTIONS: { value: ActingAsLocation; label: string }[] = [
+  { value: "restaurant", label: "Restaurant" },
+  { value: "canteen", label: "Canteen" },
+];
 
 const SIDEBAR_COLLAPSED_KEY = "admin-sidebar-collapsed";
 
@@ -71,6 +78,39 @@ export function AdminShell({
   // a hydration error.
   const [collapsed, setCollapsed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Admin "act as staff" role switcher (sidebar/top-bar "Add Entry"
+  // affordance, previously an unwired stub — see lib/actingAs.ts and
+  // lib/auth.ts's getActingContext()). actingAsOpen drives a two-step
+  // modal: pick Cashier or Store Manager, then (Cashier only) pick a
+  // location, before POSTing the choice and navigating into the real
+  // staff screens.
+  const [actingAsOpen, setActingAsOpen] = useState(false);
+  const [pendingRole, setPendingRole] = useState<ActingAsRole | null>(null);
+  const [pendingLocation, setPendingLocation] = useState<ActingAsLocation>("restaurant");
+  const [actingAsSubmitting, setActingAsSubmitting] = useState(false);
+
+  function closeActingAsModal() {
+    setActingAsOpen(false);
+    setPendingRole(null);
+    setPendingLocation("restaurant");
+  }
+
+  async function confirmActingAs(role: ActingAsRole, location: ActingAsLocation) {
+    setActingAsSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/acting-as", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, location }),
+      });
+      if (!res.ok) return;
+      closeActingAsModal();
+      router.push(role === "store_manager" ? "/store" : "/entry");
+    } finally {
+      setActingAsSubmitting(false);
+    }
+  }
 
   const primaryMobileNavItems = NAV_ITEMS.filter((item) => PRIMARY_MOBILE_NAV_HREFS.includes(item.href));
   const secondaryMobileNavItems = NAV_ITEMS.filter((item) => !PRIMARY_MOBILE_NAV_HREFS.includes(item.href));
@@ -139,6 +179,21 @@ export function AdminShell({
             );
           })}
         </nav>
+        {/* Act-as-staff entry point (sidebar, per direct client request —
+            "a dropdown at the sidebar top or bottom where admin can
+            select any role") — sits between nav links and the
+            admin-identity footer since it's a mode switch, not a
+            destination page. Mirrors the top bar's "Add Entry" button;
+            both open the same modal. */}
+        <button
+          type="button"
+          className={styles.actingAsSidebarButton}
+          onClick={() => setActingAsOpen(true)}
+          title={collapsed ? "Act as Cashier or Store Manager" : undefined}
+        >
+          <Icon name="entry" size={18} />
+          {!collapsed && "Act as staff"}
+        </button>
         <div className={styles.sidebarBottom}>
           {!collapsed && <RoleLocationBadge label="Admin · All locations" variant="admin" />}
           {!collapsed && <span className={styles.sidebarStaffName}>{staffName}</span>}
@@ -174,15 +229,11 @@ export function AdminShell({
                   at this breakpoint (sidebar covers its role). Renders
                   whatever the current page pushed into the shared slot
                   (e.g. Dashboard/Ledger's period toggle) plus a few
-                  standing actions. "Add Entry" and the notification bell
-                  are styled as real top-bar controls (matching the Phase
-                  10 reference) but deliberately unwired — no onClick, a
-                  title tooltip on hover instead of PlaceholderStat's
-                  visible dashed treatment, which reads right inline in
-                  page content but not as a top-bar action. See Phase
-                  10's context file: admin-acts-as-staff and a
-                  notification system are both real future features, not
-                  built this phase. */}
+                  standing actions. "Add Entry" now opens the acting-as
+                  role picker (Cashier/Store Manager) — previously an
+                  unwired stub, see docs/backlog/04_admin_impersonation.md's
+                  2026-07-25 note on this being revisited. The
+                  notification bell is still an unbuilt placeholder. */}
               {showDesktopTopBar && (
                 <header className={styles.desktopTopBar}>
                   <div className={styles.desktopTopBarSlot}>{slotContent}</div>
@@ -190,7 +241,8 @@ export function AdminShell({
                     <button
                       type="button"
                       className={styles.addEntryButton}
-                      title="Lets the admin log stock/sales/orders directly, the same way staff do. Not built yet."
+                      title="Log stock, sales, or orders yourself, the same way staff do."
+                      onClick={() => setActingAsOpen(true)}
                     >
                       <Icon name="entry" size={18} />
                       Add Entry
@@ -255,6 +307,67 @@ export function AdminShell({
               );
             })}
           </nav>
+        </Modal>
+
+        {/* Act-as-staff picker (sidebar button + top-bar "Add Entry" both
+            open this). Step 1: pick Cashier or Store Manager. Step 2
+            (Cashier only — Store Manager is always restaurant, no
+            location screen exists for canteen) : pick a location, then
+            confirm. See lib/actingAs.ts for why store_manager never
+            shows a location choice. */}
+        <Modal open={actingAsOpen} onClose={closeActingAsModal} title="Act as staff">
+          {pendingRole === "cashier" ? (
+            <div className={styles.actingAsModalBody}>
+              <p className={styles.actingAsModalHint}>Which location are you covering?</p>
+              <PeriodToggle
+                options={LOCATION_OPTIONS}
+                value={pendingLocation}
+                onChange={(value) => setPendingLocation(value as ActingAsLocation)}
+              />
+              <div className={styles.actingAsModalActions}>
+                <button type="button" className={styles.sidebarLogout} onClick={() => setPendingRole(null)}>
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className={styles.addEntryButton}
+                  disabled={actingAsSubmitting}
+                  onClick={() => confirmActingAs("cashier", pendingLocation)}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.actingAsModalBody}>
+              <p className={styles.actingAsModalHint}>
+                Log stock, sales, or orders yourself — you&apos;ll see exactly what staff see.
+              </p>
+              <button
+                type="button"
+                className={styles.actingAsModalOption}
+                onClick={() => setPendingRole("cashier")}
+              >
+                <Icon name="entry" size={20} />
+                <div>
+                  <strong>Cashier</strong>
+                  <span>Till sales and delivery/pickup orders — Restaurant or Canteen.</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={styles.actingAsModalOption}
+                disabled={actingAsSubmitting}
+                onClick={() => confirmActingAs("store_manager", "restaurant")}
+              >
+                <Icon name="store" size={20} />
+                <div>
+                  <strong>Store Manager</strong>
+                  <span>Ingredient receiving and usage — Restaurant only.</span>
+                </div>
+              </button>
+            </div>
+          )}
         </Modal>
       </div>
     </div>

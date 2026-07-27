@@ -193,7 +193,11 @@ interface StaffRosterRow {
 }
 
 export function LedgerClient() {
-  const [period, setPeriod] = useState<Period>("today");
+  // Defaults to "week" rather than "today" so the ledger isn't empty first
+  // thing each morning before staff have logged anything (client feedback,
+  // 2026-07-25 — she wants the ledger to feel always-populated, not gated
+  // behind today's entries).
+  const [period, setPeriod] = useState<Period>("week");
   const [location, setLocation] = useState<Location>("");
   const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
   const [rangeDraft, setRangeDraft] = useState({ from: "", to: "" });
@@ -891,7 +895,7 @@ export function LedgerClient() {
                             }
                             body={
                               data.items.length === 0
-                                ? "Once staff save till or canteen entries, they'll show up here row by row."
+                                ? "No till or canteen entries logged for this date range yet. Try Week or Month, or check back later today."
                                 : "Try a different search term."
                             }
                           />
@@ -1229,7 +1233,7 @@ export function LedgerClient() {
                                     }
                                     body={
                                       data.ingredients.length === 0
-                                        ? "Once the store manager saves ingredient receiving/usage, they'll show up here. Or log one yourself with New entry above."
+                                        ? "No ingredient receiving/usage logged for this date range yet. Try Week or Month, or log one yourself with New entry above."
                                         : "Try a different search term."
                                     }
                                   />

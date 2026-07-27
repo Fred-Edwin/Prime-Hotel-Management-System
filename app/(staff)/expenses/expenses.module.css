@@ -208,3 +208,12 @@
   color: var(--color-text-primary);
   white-space: nowrap;
 }
+
+@media (min-width: 1024px) {
+  .expenseList,
+  .pickerList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    align-items: start;
+  }
+}

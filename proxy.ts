@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/supabase/types";
+import { ADMIN_ACTING_AS_COOKIE, parseActingAsCookie } from "@/lib/actingAs";
 
 // Unauthenticated-only: signed-in users get redirected away to their
 // role landing page (doesn't make sense to see the login screen while
@@ -95,8 +96,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/entry", request.url));
   }
 
+  // Admin acting as staff (sidebar role switcher, see lib/actingAs.ts):
+  // a valid admin_acting_as cookie lets admin through to staff routes.
+  // Cheap shape-parse only, no DB call — every route/page still
+  // re-resolves and re-validates via getActingContext() (lib/auth.ts).
   if (isStaffRoute && isAdmin) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const actingAs = parseActingAsCookie(request.cookies.get(ADMIN_ACTING_AS_COOKIE)?.value);
+    if (!actingAs) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return response;

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getActingContext } from "@/lib/auth";
 import { orderSchema } from "@/lib/validation";
 import { nairobiToday, orderTotal } from "@/lib/calculations";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
+import { writeAuditLog } from "@/lib/audit";
 
 /**
  * GET /api/orders?date=YYYY-MM-DD
@@ -30,10 +31,11 @@ import { describeSaveError, serverErrorResponse } from "@/lib/errors";
  * a second round trip.
  */
 export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  const ctx = await getActingContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const location = ctx.location;
 
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
@@ -44,7 +46,7 @@ export async function GET(request: Request) {
   const supabase = await createServerSupabaseClient();
 
   const supplyTypes =
-    user.location === "restaurant"
+    location === "restaurant"
       ? (["restaurant_only", "canteen_supplied"] as const)
       : (["canteen_supplied", "canteen_independent"] as const);
 
@@ -69,7 +71,7 @@ export async function GET(request: Request) {
   const ordersQuery = supabase
     .from("orders")
     .select("*, order_items(*)")
-    .eq("location", user.location)
+    .eq("location", location)
     .eq("order_date", date)
     .order("created_at", { ascending: false });
   const { data: orders, error: ordersError }: Awaited<typeof ordersQuery> = await ordersQuery;
@@ -87,7 +89,7 @@ export async function GET(request: Request) {
   const stockEntriesQuery = supabase
     .from("stock_entries")
     .select("*")
-    .eq("location", user.location)
+    .eq("location", location)
     .eq("entry_date", entryDate);
   const { data: stockEntries, error: stockEntriesError }: Awaited<typeof stockEntriesQuery> =
     await stockEntriesQuery;
@@ -124,10 +126,11 @@ export async function GET(request: Request) {
  * accepted from the client body — same principle as /api/expenses.
  */
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  const ctx = await getActingContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const location = ctx.location;
 
   const body = await request.json().catch(() => null);
   const parsed = orderSchema.safeParse(body);
@@ -166,7 +169,7 @@ export async function POST(request: Request) {
   const itemById = new Map((itemRows ?? []).map((row) => [row.id, row]));
 
   const eligibleSupplyTypes =
-    user.location === "restaurant"
+    location === "restaurant"
       ? new Set(["restaurant_only", "canteen_supplied"])
       : new Set(["canteen_supplied", "canteen_independent"]);
 
@@ -217,13 +220,13 @@ export async function POST(request: Request) {
   }
 
   const { data, error } = await supabase.rpc("create_order", {
-    p_location: user.location,
+    p_location: location,
     p_order_date: orderDate,
     p_customer_name: customer_name,
     p_fulfillment_type: fulfillment_type,
     p_total_amount: totalAmount,
     p_client_request_id: client_request_id,
-    p_created_by: user.id,
+    p_created_by: ctx.user.id,
     p_items: itemsPayload,
     p_buying_prices: buyingPrices,
     ...(fulfillment_type === "delivery" ? { p_delivery_location_id: delivery_location_id! } : {}),
@@ -232,6 +235,7 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    console.error("[orders] create_order failed", error);
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
   }
@@ -240,6 +244,19 @@ export async function POST(request: Request) {
   const { data: savedItems, error: savedItemsError }: Awaited<typeof orderItemsQuery> =
     await orderItemsQuery;
   if (savedItemsError) return serverErrorResponse(savedItemsError, "orders");
+
+  // Only admin-in-acting-mode writes get an audit entry — a real staff
+  // member's own orders are unchanged by this feature (see the identical
+  // rationale in app/api/stock-entries/route.ts's auditActingAsWrite()).
+  if (ctx.actingAs) {
+    await writeAuditLog(supabase, {
+      actorId: ctx.user.id,
+      action: "order.admin_acting_as_create",
+      targetTable: "orders",
+      targetId: data.id,
+      changes: { acting_as: ctx.actingAs.role, location, fulfillment_type, total_amount: totalAmount },
+    });
+  }
 
   return NextResponse.json({ order: { ...data, order_items: savedItems } }, { status: 201 });
 }

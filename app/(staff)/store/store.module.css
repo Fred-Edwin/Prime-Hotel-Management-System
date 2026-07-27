@@ -18,3 +18,14 @@
   align-items: center;
   gap: var(--space-3);
 }
+
+@media (min-width: 1024px) {
+  /* IngredientRow is already container-width-relative (its own
+     .fields is a 2-col grid internally) — grids the same way as
+     Entry's item list. */
+  .rowList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    align-items: start;
+  }
+}

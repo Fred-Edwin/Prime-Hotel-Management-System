@@ -1,18 +1,18 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getActingContext } from "@/lib/auth";
 import { EntryClient } from "./EntryClient";
 import { CanteenEntryClient } from "./CanteenEntryClient";
 
 export default async function EntryPage() {
-  const user = await getCurrentUser();
+  const ctx = await getActingContext();
 
-  if (!user || user.role !== "staff" || !user.location) {
+  if (!ctx) {
     redirect("/login");
   }
 
-  if (user.location === "canteen") {
+  if (ctx.location === "canteen") {
     return <CanteenEntryClient />;
   }
 
-  return <EntryClient isStoreManager={user.is_store_manager} />;
+  return <EntryClient isStoreManager={ctx.isStoreManager} />;
 }

@@ -2,6 +2,8 @@
 
 **SUPERSEDED 2026-07-16 — see [04_admin_ledger_edit.md](04_admin_ledger_edit.md).** During scoping, the human proposed a simpler direct-ledger-edit mechanism instead of impersonation; that design was adopted and this file is kept only as a record of the originally-scoped idea, not an active brief. Don't build from this file.
 
+**Revisited and un-superseded, 2026-07-25.** The human directly requested this feature after all — a sidebar role dropdown (Admin / Cashier / Store Manager) letting WaPrecious open the real `/entry`, `/orders`, `/store` staff screens and act as either location, closer to "direct write access via her own picker" (option 2 in this file's original "Scope for this item") than a true impersonation UI (option 1) — entries are attributed to her own admin id, not a specific staff member's. See `docs/00_ARCHITECTURE.md` §5 for the shipped mechanism and `docs/phases/postlaunch_admin_acting_as_context.md` for the implementation record. This file's own content below is otherwise unchanged, kept as the historical record of the originally-scoped idea.
+
 **Status:** Deferred at Phase 10 scoping. Not started.
 **Depends on:** Recommend [03 (audit log)](03_audit_log.md) land first — this feature lets the admin write data attributed to (or on behalf of) staff, which is exactly the kind of action that needs a trace.
 **Phase-scale?** Yes — flag explicitly and confirm with the human whether this gets its own phase-style plan before starting. It touches auth/role logic, RLS, and every staff-facing write path (`stock_entries`, `ingredient_entries`, `orders`, `expenses`).

@@ -67,6 +67,13 @@ const ACTION_LABELS: Record<string, string> = {
   "ingredient_entry.admin_edit": "Edited ingredient entry",
   "ingredient_purchase.delete": "Deleted ingredient purchase",
   "canteen_purchase.delete": "Deleted canteen purchase",
+  // Admin "act as staff" role switcher (sidebar, lib/actingAs.ts) — logged
+  // only for admin-in-acting-mode writes, not real staff's own entries.
+  "stock_entry.admin_acting_as_create": "Logged stock entry (acting as staff)",
+  "stock_entry.admin_acting_as_edit": "Updated stock entry (acting as staff)",
+  "ingredient_entry.admin_acting_as_create": "Logged ingredient entry (acting as staff)",
+  "ingredient_entry.admin_acting_as_edit": "Updated ingredient entry (acting as staff)",
+  "order.admin_acting_as_create": "Logged order (acting as staff)",
 };
 
 // A price/fee/threshold edit reads far faster as "KES 560 → KES 63.61"

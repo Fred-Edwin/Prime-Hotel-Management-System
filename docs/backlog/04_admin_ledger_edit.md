@@ -63,3 +63,7 @@ Resolved decision #1 above ("Cascade handling: block, don't cascade") was revers
 - The confirmation UI (a new `GET /api/dashboard/ledger/entry/impact` read-only pre-check, called when the edit modal opens) shows count + date range only ("This will also recalculate N later entries, through `<date>`"), not a full per-row before/after preview.
 
 **Full detail, current source of truth:** `docs/01_DATA_MODEL.md`'s "Historical edit cascade" subsection (under §3.4's "Admin direct ledger-row edit"). Decisions #2 and #3 above (price immutability, `created_by` preservation) were **not** revisited and still hold exactly as originally decided.
+
+## Related feature added alongside this one (2026-07-25): admin "act as staff"
+
+This file's mechanism (edit/create a ledger row) and the newer admin "act as staff" role switcher (`docs/backlog/04_admin_impersonation.md`'s 2026-07-25 note, `docs/00_ARCHITECTURE.md` §5) are both live, for different situations — this doc's own "Explicitly not in scope" section above still holds unchanged (no impersonation UI *through this mechanism*, orders still aren't editable *through the ledger*). Use the ledger edit when correcting a specific number on a row real staff already created; use "act as staff" when logging a live sale, order, or ingredient entry as if from the real staff screen, including orders — a case this file explicitly never covered.

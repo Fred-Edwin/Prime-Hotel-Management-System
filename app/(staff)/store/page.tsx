@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getActingContext } from "@/lib/auth";
 import { StoreClient } from "./StoreClient";
 
 export default async function StorePage() {
-  const user = await getCurrentUser();
+  const ctx = await getActingContext();
 
-  if (!user || user.role !== "staff" || user.location !== "restaurant" || !user.is_store_manager) {
+  // isStoreManager already covers both a real restaurant staff member's
+  // own flag and an admin acting as Store Manager (getActingContext()
+  // in lib/auth.ts forces that acting role's location to "restaurant").
+  if (!ctx || ctx.location !== "restaurant" || !ctx.isStoreManager) {
     redirect("/entry");
   }
 

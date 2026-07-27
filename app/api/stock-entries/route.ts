@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getActingContext, type ActingContext } from "@/lib/auth";
 import {
   canteenStockEntriesSaveSchema,
   canteenStockEntryFieldSaveSchema,
@@ -9,6 +9,28 @@ import {
 } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
+import { writeAuditLog } from "@/lib/audit";
+
+// Only admin-in-acting-mode writes get an audit entry here — a real
+// staff member's own writes are unchanged by this feature and aren't
+// newly audited (docs/backlog/04_admin_impersonation.md's acceptance
+// criteria: every write made via acting-mode must be traceable).
+async function auditActingAsWrite(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  ctx: ActingContext,
+  action: string,
+  targetId: string,
+  changes?: Record<string, unknown> | null,
+) {
+  if (!ctx.actingAs) return;
+  await writeAuditLog(supabase, {
+    actorId: ctx.user.id,
+    action,
+    targetTable: "stock_entries",
+    targetId,
+    changes: { acting_as: ctx.actingAs.role, location: ctx.location, ...changes },
+  });
+}
 
 /**
  * GET /api/stock-entries?date=YYYY-MM-DD
@@ -31,10 +53,11 @@ import { describeSaveError, serverErrorResponse } from "@/lib/errors";
  * every untouched item on a fresh day.
  */
 export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  const ctx = await getActingContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const location = ctx.location;
 
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
@@ -47,7 +70,7 @@ export async function GET(request: Request) {
   // Restaurant's entry screen sells restaurant_only + canteen_supplied
   // items (§3.1) — canteen_independent items never appear here.
   const supplyTypes =
-    user.location === "restaurant"
+    location === "restaurant"
       ? (["restaurant_only", "canteen_supplied"] as const)
       : (["canteen_supplied", "canteen_independent"] as const);
 
@@ -67,7 +90,7 @@ export async function GET(request: Request) {
   const entriesQuery = supabase
     .from("stock_entries")
     .select("*")
-    .eq("location", user.location)
+    .eq("location", location)
     .eq("entry_date", entryDate);
   const { data: entries, error: entriesError }: Awaited<typeof entriesQuery> = await entriesQuery;
 
@@ -92,7 +115,7 @@ export async function GET(request: Request) {
     const priorQuery = supabase
       .from("stock_entries")
       .select("item_id, closing_stock, entry_date")
-      .eq("location", user.location)
+      .eq("location", location)
       .lt("entry_date", entryDate)
       .in("item_id", itemIdsMissingToday)
       .order("entry_date", { ascending: false });
@@ -105,7 +128,7 @@ export async function GET(request: Request) {
     }
   }
 
-  if (user.location !== "canteen") {
+  if (location !== "canteen") {
     return NextResponse.json({ items, entries, entry_date: entryDate, opening_stock: openingStockByItemId });
   }
 
@@ -149,16 +172,17 @@ export async function GET(request: Request) {
  * one transaction (docs/01_DATA_MODEL.md §3.4).
  */
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  const ctx = await getActingContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const location = ctx.location;
 
   const body = await request.json().catch(() => null);
   const supabase = await createServerSupabaseClient();
 
-  if (user.location === "canteen") {
-    return saveCanteenEntries(body, supabase, user.id);
+  if (location === "canteen") {
+    return saveCanteenEntries(body, supabase, ctx);
   }
 
   const parsed = stockEntriesSaveSchema.safeParse(body);
@@ -209,7 +233,7 @@ export async function POST(request: Request) {
   const existingQuery = supabase
     .from("stock_entries")
     .select("item_id, opening_stock, added_stock, sent_out, wastage")
-    .eq("location", user.location)
+    .eq("location", location)
     .eq("entry_date", entry_date)
     .in("item_id", itemIds);
   const { data: existingRows, error: existingError }: Awaited<typeof existingQuery> = await existingQuery;
@@ -230,7 +254,7 @@ export async function POST(request: Request) {
     const priorQuery = supabase
       .from("stock_entries")
       .select("item_id, closing_stock, entry_date")
-      .eq("location", user.location)
+      .eq("location", location)
       .lt("entry_date", entry_date)
       .in("item_id", itemsMissingToday)
       .order("entry_date", { ascending: false });
@@ -272,9 +296,9 @@ export async function POST(request: Request) {
   // page-load snapshot of fields they don't even see in their own UI.
   // See 20260717093000_preserve_wastage_on_stock_entry_save.sql.
   const { data, error } = await supabase.rpc("save_stock_entries_batch", {
-    p_location: user.location,
+    p_location: location,
     p_entry_date: entry_date,
-    p_created_by: user.id,
+    p_created_by: ctx.user.id,
     p_lines: batchLines,
   });
 
@@ -283,13 +307,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status });
   }
 
+  // target_id is a not-null uuid column (audit_log) — a batch save has
+  // no single natural target row, so this audits against the first
+  // saved row's own id (still traceable to the batch via `changes`)
+  // rather than passing entry_date, which isn't a uuid.
+  if (data && data.length > 0) {
+    await auditActingAsWrite(supabase, ctx, "stock_entry.admin_acting_as_create", data[0].id, {
+      entry_date,
+      item_count: batchLines.length,
+    });
+  }
+
   return NextResponse.json({ entries: data });
 }
 
 async function saveCanteenEntries(
   body: unknown,
   supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
-  createdBy: string,
+  ctx: ActingContext,
 ) {
   const parsed = canteenStockEntriesSaveSchema.safeParse(body);
   if (!parsed.success) {
@@ -336,13 +371,20 @@ async function saveCanteenEntries(
   // restaurant batch above.
   const { data, error } = await supabase.rpc("save_canteen_stock_entries_batch", {
     p_entry_date: entry_date,
-    p_created_by: createdBy,
+    p_created_by: ctx.user.id,
     p_lines: batchLines,
   });
 
   if (error) {
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
+  }
+
+  if (data && data.length > 0) {
+    await auditActingAsWrite(supabase, ctx, "stock_entry.admin_acting_as_create", data[0].id, {
+      entry_date,
+      item_count: batchLines.length,
+    });
   }
 
   return NextResponse.json({ entries: data });
@@ -365,23 +407,27 @@ async function saveCanteenEntries(
  * till_quantity_sold and added_stock through its own branch.
  */
 export async function PUT(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "staff" || !user.location) {
+  const ctx = await getActingContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
   const supabase = await createServerSupabaseClient();
 
-  if (user.location === "canteen") {
-    return putCanteenField(body, supabase, user.id);
+  // Dispatch keys off the *effective* location/role (real staff session,
+  // or an admin's acting-as cookie — getActingContext(), lib/auth.ts),
+  // not raw session fields — an admin acting as canteen has a real
+  // `location: null`, so this can no longer just read `user.location`.
+  if (ctx.location === "canteen") {
+    return putCanteenField(body, supabase, ctx);
   }
 
-  if (user.is_store_manager) {
-    return putStoreManagerField(body, supabase, user.id);
+  if (ctx.isStoreManager) {
+    return putStoreManagerField(body, supabase, ctx);
   }
 
-  return putCashierField(body, supabase, user.id);
+  return putCashierField(body, supabase, ctx);
 }
 
 /**
@@ -408,7 +454,7 @@ export async function PUT(request: Request) {
 async function putStoreManagerField(
   body: unknown,
   supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
-  userId: string,
+  ctx: ActingContext,
 ) {
   const parsed = stockEntryLineSaveSchema.safeParse(body);
 
@@ -434,19 +480,26 @@ async function putStoreManagerField(
 
   const { data, error } = await supabase.rpc("save_stock_entry_store_manager_fields", {
     p_item_id: item_id,
-    p_location: "restaurant",
+    p_location: ctx.location,
     p_entry_date: entry_date,
     p_added_stock: added_stock,
     p_sent_out: sent_out,
     p_selling_price_snapshot: item.selling_price,
     p_buying_price_snapshot: item.buying_price,
-    p_created_by: userId,
+    p_created_by: ctx.user.id,
   });
 
   if (error) {
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
   }
+
+  await auditActingAsWrite(supabase, ctx, "stock_entry.admin_acting_as_edit", item_id, {
+    entry_date,
+    item_id,
+    added_stock,
+    sent_out,
+  });
 
   return NextResponse.json({ entry: data });
 }
@@ -471,7 +524,7 @@ async function putStoreManagerField(
 async function putCashierField(
   body: unknown,
   supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
-  userId: string,
+  ctx: ActingContext,
 ) {
   const parsed = stockEntryCashierLineSaveSchema.safeParse(body);
 
@@ -497,18 +550,24 @@ async function putCashierField(
 
   const { data, error } = await supabase.rpc("save_stock_entry_cashier_field", {
     p_item_id: item_id,
-    p_location: "restaurant",
+    p_location: ctx.location,
     p_entry_date: entry_date,
     p_till_quantity_sold: till_quantity_sold,
     p_selling_price_snapshot: item.selling_price,
     p_buying_price_snapshot: item.buying_price,
-    p_created_by: userId,
+    p_created_by: ctx.user.id,
   });
 
   if (error) {
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
   }
+
+  await auditActingAsWrite(supabase, ctx, "stock_entry.admin_acting_as_edit", item_id, {
+    entry_date,
+    item_id,
+    till_quantity_sold,
+  });
 
   return NextResponse.json({ entry: data });
 }
@@ -533,7 +592,7 @@ async function putCashierField(
 async function putCanteenField(
   body: unknown,
   supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
-  userId: string,
+  ctx: ActingContext,
 ) {
   const parsed = canteenStockEntryFieldSaveSchema.safeParse(body);
 
@@ -566,13 +625,20 @@ async function putCanteenField(
     ...(added_stock !== undefined ? { p_added_stock_input: added_stock } : {}),
     p_selling_price_snapshot: item.selling_price,
     p_buying_price_snapshot: item.buying_price,
-    p_created_by: userId,
+    p_created_by: ctx.user.id,
   });
 
   if (error) {
     const { message, status } = describeSaveError(error);
     return NextResponse.json({ error: message }, { status });
   }
+
+  await auditActingAsWrite(supabase, ctx, "stock_entry.admin_acting_as_edit", item_id, {
+    entry_date,
+    item_id,
+    till_quantity_sold,
+    added_stock,
+  });
 
   return NextResponse.json({ entry: data });
 }

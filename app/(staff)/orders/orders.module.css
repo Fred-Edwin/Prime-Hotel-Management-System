@@ -207,3 +207,20 @@
   color: var(--color-status-info);
   font-weight: 600;
 }
+
+@media (min-width: 1024px) {
+  /* Item-stepper list can be 10-20+ menu items, same reasoning as
+     Entry's item list — grid it the same way. */
+  .itemList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    align-items: start;
+  }
+
+  /* Past orders are receipt-style rows, typically only 2-3/day — a
+     grid over that few items looks sparse/broken, so this stays a
+     single narrower column rather than stretching or gridding. */
+  .orderList {
+    max-width: 640px;
+  }
+}

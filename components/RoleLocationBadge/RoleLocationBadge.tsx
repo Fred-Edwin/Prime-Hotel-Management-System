@@ -2,7 +2,7 @@ import styles from "./RoleLocationBadge.module.css";
 
 export interface RoleLocationBadgeProps {
   label: string;
-  variant?: "location" | "admin";
+  variant?: "location" | "admin" | "acting";
 }
 
 export function RoleLocationBadge({ label, variant = "location" }: RoleLocationBadgeProps) {

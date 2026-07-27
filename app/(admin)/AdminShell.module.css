@@ -82,6 +82,33 @@
   color: var(--color-text-on-brand-accent);
 }
 
+.actingAsSidebarButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-3) var(--space-3);
+  padding: var(--space-3);
+  min-height: var(--space-touch);
+  border: 1px dashed rgba(255, 255, 255, 0.32);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-on-brand);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.sidebarCollapsed .actingAsSidebarButton {
+  justify-content: center;
+  margin: 0 var(--space-2) var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.actingAsSidebarButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .sidebarBottom {
   display: flex;
   flex-direction: column;
@@ -394,4 +421,54 @@
     padding: var(--space-8);
     max-width: 1280px;
   }
+}
+
+/* ---- Act-as-staff modal (sidebar + top-bar "Add Entry" both open this) ---- */
+
+.actingAsModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.actingAsModalHint {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.actingAsModalOption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.actingAsModalOption:hover {
+  background: var(--color-surface-sunken);
+}
+
+.actingAsModalOption strong {
+  display: block;
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.actingAsModalOption span {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.actingAsModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }

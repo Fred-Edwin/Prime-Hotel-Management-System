@@ -141,13 +141,13 @@ An 8px base scale — a structural convention, not a brand expression.
 
 ### 2.4 Layout Grid
 
-This build is **mobile-first, single-column by default** — there is no desktop split-panel or marketing-style layout anywhere in this product. Every screen is a working screen.
+This build is **mobile-first by default** — every screen's base styles target a phone-width viewport first. **As of Phase 10 (admin desktop redesign) and the post-launch staff-shell update (2026-07-27), both the admin and staff shells add a desktop-only (≥1024px) sidebar layout** as a pure additive layer on top of the unchanged mobile base, not a rewrite of it. The original "no desktop layout anywhere in this product" position assumed exclusively phone-based staff usage; the "admin acts as staff" feature (a sidebar role switcher letting the admin open the real staff screens directly) means the admin now routinely drives these same screens from a desktop browser, which that assumption no longer covers. Real staff still primarily use phones mid-shift — nothing below `--breakpoint-desktop` changes for them.
 
 | Breakpoint | Layout | Notes |
 |---|---|---|
 | Mobile (< 600px) | Single column, full-width cards, sticky bottom action bar where relevant (e.g. running total + Save) | Primary target — staff's own phones |
 | Tablet (600–1024px) | Single column content, max-width 640px, centered | Rare but supported (e.g. admin checking dashboard on a tablet) |
-| Desktop (≥1024px) | Two-column for dashboard/reporting screens only (content + filters sidebar); single-column max-width 720px for all entry/reconciliation screens | Entry flows never benefit from extra width — constraining them keeps touch targets and scanning patterns consistent regardless of screen size |
+| Desktop (≥1024px) | Persistent left sidebar (240px, collapsible to 72px) replaces the mobile top bar/bottom nav, for **both** the admin shell and the staff shell; content area widens to a `repeat(auto-fill, minmax(280px,1fr))` grid for item/row lists (max-width 1280px), single-column max-width 640px for receipt-style lists (e.g. Orders' past-orders list) | Reversed 2026-07-27: the original "entry flows never benefit from extra width" rationale assumed staff-only, phone-only usage of these screens; the admin now uses them routinely at desktop width via the act-as-staff switcher. Real staff phone usage is unaffected — this is an added `@media (min-width:1024px)` layer, not a change to the mobile-first base |
 
 Margins: 16px on mobile, 24px on tablet, 32px+ on desktop. No 12-column grid system is needed at this product's scale of layout complexity — flex/stack-based layouts are sufficient and simpler to keep consistent across a small number of screen types.
 

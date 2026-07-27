@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getActingContext } from "@/lib/auth";
 import { OrdersClient } from "./OrdersClient";
 
 export default async function OrdersPage() {
-  const user = await getCurrentUser();
+  const ctx = await getActingContext();
 
-  if (!user || user.role !== "staff" || !user.location) {
+  if (!ctx) {
     redirect("/login");
   }
 
