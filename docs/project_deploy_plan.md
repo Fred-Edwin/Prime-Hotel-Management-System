@@ -18,3 +18,11 @@ Deployment happens in two stages, not one:
   - **Auto-deploy-on-push is NOT wired up.** Any future change needs a manual `vercel --prod` redeploy from a machine with the Vercel CLI logged in as `lobster-technologies`, until the GitHub integration is sorted (or until Stage 2 potentially resolves this differently under the client's own accounts).
 - Smoke-tested directly via curl against the live URL: login (admin + staff), role-scoped RLS (staff correctly 403s on admin routes), dashboard aggregation — all correct.
 - Still open: decide whether to fix the GitHub auto-deploy gap for Stage 1, or just accept manual deploys until Stage 2. Stage 2 itself has not been started.
+
+## Demo database migration state
+
+**Demo applied through: `20260727120000_consumption_ledger_entry_id.sql`** — keep this line current: update it every time migrations are applied to `prime-hotel-demo`, so "is demo up to date?" is answerable from this file instead of a database audit.
+
+History of this line:
+- **2026-07-27:** A full catalog fingerprint audit (read-only checks against `pg_proc`/`pg_policies`/`information_schema`/`pg_enum` for each migration's distinctive objects, run by the human in the SQL Editor) confirmed demo was current through `20260724190000` — every post-launch migration had been applied along the way despite no written record since 2026-07-23. The four `20260727*` files (ledger/debtors delete support) were then applied the same day. Note the "All 17 migrations applied" figure in the Stage-1 status above is a snapshot from 2026-07-13, superseded by this line.
+- **Reminder:** the demo *app* (`prime-hotel.vercel.app`) only picks up code changes via a manual `vercel --prod` — applying migrations here does not ship the UI that uses them.
