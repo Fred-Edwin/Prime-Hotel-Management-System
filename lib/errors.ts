@@ -76,6 +76,14 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
     return { message: "That order couldn't be found — refresh and try again.", status: 404 };
   }
 
+  // delete_stock_entry()/delete_ingredient_entry()/delete_staff_meal_entry()/
+  // delete_complimentary_meal_entry()/delete_stock_adjustment_entry() — the
+  // row being deleted no longer exists (already removed, or a stale
+  // client view). See docs/01_DATA_MODEL.md §3.2/§3.4, errcode P0007.
+  if (error.code === "P0007" || error.message.includes("unknown_entry")) {
+    return { message: "That entry no longer exists.", status: 404 };
+  }
+
   // record_canteen_stock_purchase()'s item-type guard (errcode 23514,
   // check_violation) — the item picker should already only offer
   // canteen_independent items, so this is a defensive fallback, not the

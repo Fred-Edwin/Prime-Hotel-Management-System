@@ -1292,6 +1292,7 @@ export type Database = {
         Returns: {
           category: string
           entry_date: string
+          entry_id: string | null
           ingredient_id: string
           ingredient_name: string
           item_id: string
@@ -1330,6 +1331,10 @@ export type Database = {
         Args: { p_purchase_id: string }
         Returns: undefined
       }
+      delete_complimentary_meal_entry: {
+        Args: { p_entry_id: string }
+        Returns: undefined
+      }
       delete_delivery_location: {
         Args: { p_delivery_location_id: string }
         Returns: undefined
@@ -1342,11 +1347,32 @@ export type Database = {
         Args: { p_ingredient_id: string }
         Returns: undefined
       }
+      delete_ingredient_entry: {
+        Args: { p_ingredient_id: string; p_entry_date: string }
+        Returns: undefined
+      }
       delete_ingredient_purchase: {
         Args: { p_purchase_id: string }
         Returns: undefined
       }
       delete_item: { Args: { p_item_id: string }; Returns: undefined }
+      delete_staff_meal_entry: {
+        Args: { p_entry_id: string }
+        Returns: undefined
+      }
+      delete_stock_adjustment_entry: {
+        Args: { p_entry_id: string }
+        Returns: undefined
+      }
+      delete_stock_entry: {
+        Args: {
+          p_item_id: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_entry_date: string
+          p_created_by?: string
+        }
+        Returns: undefined
+      }
       delivery_location_delete_impact: {
         Args: { p_delivery_location_id: string }
         Returns: {

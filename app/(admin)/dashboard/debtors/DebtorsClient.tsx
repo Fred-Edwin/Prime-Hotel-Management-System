@@ -179,6 +179,31 @@ export function DebtorsClient() {
     setPaymentNote("");
   }
 
+  /**
+   * Delete a mistakenly-recorded payment (client feedback, 2026-07-27:
+   * "Delete options required under Debtors for admin" — the follow-up
+   * flagged as a known gap in Phase 11, docs/phases/phase11_context.md's
+   * "No payment reversal/refund route"). No confirm-modal step, matching
+   * this screen's own existing "Record payment" flow, which also commits
+   * immediately without one — the outstanding balance simply recomputes
+   * (derived at read time, §6), same as after recording a payment.
+   */
+  async function handleDeletePayment(orderId: string, paymentId: string) {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/payments/${paymentId}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't delete payment", status: "error" });
+        return;
+      }
+      setToast({ message: "Payment deleted", status: "success" });
+      if (selectedDebtor) await fetchDebtorOrders(selectedDebtor.customer_id);
+      await load();
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    }
+  }
+
   async function handleRecordPayment() {
     if (!paymentOrderId) return;
     const amount = Number(paymentAmount);
@@ -363,6 +388,25 @@ export function DebtorsClient() {
                           Record payment
                         </Button>
                       </div>
+                      {figures && figures.payments.length > 0 && (
+                        <ul className={styles.paymentList}>
+                          {figures.payments.map((payment) => (
+                            <li key={payment.id} className={styles.paymentRow}>
+                              <span>
+                                {money(payment.amount)} · {new Date(payment.paid_at).toLocaleDateString("en-KE")}
+                                {payment.note ? ` · ${payment.note}` : ""}
+                              </span>
+                              <button
+                                type="button"
+                                className={styles.paymentRowDelete}
+                                onClick={() => handleDeletePayment(order.id, payment.id)}
+                              >
+                                Delete
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </li>
                   );
                 })}

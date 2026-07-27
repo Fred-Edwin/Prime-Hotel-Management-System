@@ -653,6 +653,30 @@ thead .stickyColItem {
   cursor: pointer;
 }
 
+/* Delete row-action pair on mobile cards (client feedback, 2026-07-27:
+   "add delete options at Item Ledger"). Sits alongside .editCardButton
+   rather than replacing it -- Edit and Delete are peer actions, same
+   pairing ActionMenu already establishes on desktop. */
+.cardActionRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.deleteCardButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--space-touch);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-status-error);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+
 .editForm {
   display: flex;
   flex-direction: column;

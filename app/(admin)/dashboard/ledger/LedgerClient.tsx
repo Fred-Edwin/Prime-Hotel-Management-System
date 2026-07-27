@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ActionMenu } from "@/components/ActionMenu";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { CategoryChips } from "@/components/CategoryChips";
@@ -92,6 +93,11 @@ interface StockConsumptionLedgerRow {
   note: string | null;
   staff_id: string | null;
   staff_name: string | null;
+  // Null for wastage rows (not a separate claim row — see
+  // 20260727120000_consumption_ledger_entry_id.sql's doc comment); a real
+  // row id for staff_meal/complimentary_meal/stock_adjustment, backing
+  // the new per-row Delete action.
+  entry_id: string | null;
 }
 
 interface LedgerResponse {
@@ -177,6 +183,34 @@ type IngredientEntryEditTarget = {
 
 type EditTarget = StockEntryEditTarget | IngredientEntryEditTarget;
 
+/**
+ * Admin row delete (client feedback, 2026-07-27: "add delete options at
+ * Item Ledger... I have double entries") — covers all three row kinds
+ * this screen surfaces. Deliberately a separate confirm-modal flow from
+ * EditTarget above, not folded into it — a delete has no form fields to
+ * show, just an impact warning (reusing the same GET .../entry/impact
+ * cascade-preview endpoint the edit flow already calls) and a single
+ * confirm action, so a distinct lightweight Modal is clearer than
+ * threading a "delete mode" through the edit modal's already-complex
+ * conditional form.
+ */
+type DeleteTarget =
+  | {
+      kind: "stock_entries";
+      item_id: string;
+      item_name: string;
+      location: "restaurant" | "canteen";
+      entry_date: string;
+    }
+  | { kind: "ingredient_entries"; ingredient_id: string; ingredient_name: string; entry_date: string }
+  | {
+      kind: "stock_consumption";
+      category: StockConsumptionCategory;
+      id: string;
+      label: string;
+      entry_date: string;
+    };
+
 interface IngredientCatalogRow {
   id: string;
   name: string;
@@ -238,6 +272,20 @@ export function LedgerClient() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Admin row delete (see DeleteTarget's doc comment above).
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  // Same cascade-impact preview the edit flow uses (GET .../entry/impact)
+  // — null while loading, { count: 0 } once confirmed nothing later
+  // depends on this row. Only fetched for the two whole-day row kinds
+  // (stock_entries/ingredient_entries); a stock_consumption claim's
+  // impact is always "recomputes this one item/location/date," not a
+  // forward chain of its own, so that case skips the fetch entirely.
+  const [deleteImpact, setDeleteImpact] = useState<{ count: number; through: string | null } | null>(
+    null
+  );
   // Which of the three ledger tables (if any) is currently maximized — one
   // shared piece of state rather than a separate boolean per table, since
   // only one table can sensibly be fullscreen at a time. Was a single
@@ -401,6 +449,137 @@ export function LedgerClient() {
     setEditError(null);
     setCascadeImpact(null);
     setCascadeConfirmed(false);
+  }
+
+  function openDeleteStockEntry(row: ItemLedgerRow) {
+    setDeleteError(null);
+    setDeleteTarget({
+      kind: "stock_entries",
+      item_id: row.item_id,
+      item_name: row.item_name,
+      location: row.location,
+      entry_date: row.entry_date,
+    });
+  }
+
+  function openDeleteIngredientEntry(row: IngredientLedgerRow) {
+    setDeleteError(null);
+    setDeleteTarget({
+      kind: "ingredient_entries",
+      ingredient_id: row.ingredient_id,
+      ingredient_name: row.ingredient_name,
+      entry_date: row.entry_date,
+    });
+  }
+
+  function openDeleteConsumptionRow(row: StockConsumptionLedgerRow, id: string) {
+    setDeleteError(null);
+    setDeleteTarget({
+      kind: "stock_consumption",
+      category: row.category,
+      id,
+      label: row.item_name ?? row.ingredient_name ?? "this entry",
+      entry_date: row.entry_date,
+    });
+  }
+
+  function closeDeleteModal() {
+    setDeleteTarget(null);
+    setDeleteError(null);
+    setDeleteImpact(null);
+  }
+
+  // Same cascade-impact preview the edit flow uses — a delete's impact is
+  // identical in shape to an edit's for the two whole-day row kinds
+  // (removing the row re-derives every later row exactly like editing it
+  // would). A stock_consumption claim only ever affects its own single
+  // item/location/date, so there's nothing to preview — treated as a
+  // resolved { count: 0 } without a fetch, same as EditTarget's create
+  // mode above.
+  useEffect(() => {
+    if (!deleteTarget || deleteTarget.kind === "stock_consumption") return;
+    let cancelled = false;
+
+    async function loadDeleteImpact() {
+      setDeleteImpact(null);
+      const params =
+        deleteTarget!.kind === "stock_entries"
+          ? new URLSearchParams({
+              table: "stock_entries",
+              item_id: deleteTarget!.item_id,
+              location: (deleteTarget as Extract<DeleteTarget, { kind: "stock_entries" }>).location,
+              entry_date: deleteTarget!.entry_date,
+            })
+          : new URLSearchParams({
+              table: "ingredient_entries",
+              ingredient_id: (deleteTarget as Extract<DeleteTarget, { kind: "ingredient_entries" }>)
+                .ingredient_id,
+              entry_date: deleteTarget!.entry_date,
+            });
+      try {
+        const res = await fetch(`/api/dashboard/ledger/entry/impact?${params.toString()}`);
+        const json = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setDeleteImpact(res.ok ? { count: json.count ?? 0, through: json.through ?? null } : { count: 0, through: null });
+        }
+      } catch {
+        if (!cancelled) setDeleteImpact({ count: 0, through: null });
+      }
+    }
+
+    loadDeleteImpact();
+    return () => {
+      cancelled = true;
+    };
+  }, [deleteTarget]);
+
+  const resolvedDeleteImpact = deleteTarget?.kind === "stock_consumption" ? { count: 0, through: null } : deleteImpact;
+
+  async function submitDelete() {
+    if (!deleteTarget) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+
+    const payload =
+      deleteTarget.kind === "stock_entries"
+        ? {
+            table: "stock_entries" as const,
+            item_id: deleteTarget.item_id,
+            location: deleteTarget.location,
+            entry_date: deleteTarget.entry_date,
+          }
+        : deleteTarget.kind === "ingredient_entries"
+          ? {
+              table: "ingredient_entries" as const,
+              ingredient_id: deleteTarget.ingredient_id,
+              entry_date: deleteTarget.entry_date,
+            }
+          : {
+              table: "stock_consumption" as const,
+              category: deleteTarget.category,
+              id: deleteTarget.id,
+            };
+
+    try {
+      const res = await fetch("/api/dashboard/ledger/entry", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(json.error ?? "Couldn't delete — please try again.");
+        return;
+      }
+      setDeleteTarget(null);
+      setDeleteImpact(null);
+      setToast("Entry deleted");
+      setReloadKey((key) => key + 1);
+    } catch {
+      setDeleteError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setDeleteSubmitting(false);
+    }
   }
 
   // Historical-edit cascade preview — fetches how many later entries (and
@@ -993,18 +1172,18 @@ export function LedgerClient() {
                               {money(Math.abs(row.non_sales_consumption_value))}
                             </span>
                           </td>
-                          <td>
-                            <button
-                              type="button"
-                              className={styles.editButton}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openStockEntryEdit(row);
-                              }}
-                              aria-label={`Edit ${row.item_name} entry`}
-                            >
-                              <Icon name="edit" size={16} />
-                            </button>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <ActionMenu
+                              aria-label={`Actions for ${row.item_name} — ${row.entry_date}`}
+                              items={[
+                                { label: "Edit", onClick: () => openStockEntryEdit(row) },
+                                {
+                                  label: "Delete",
+                                  onClick: () => openDeleteStockEntry(row),
+                                  destructive: true,
+                                },
+                              ]}
+                            />
                           </td>
                         </tr>
                       );
@@ -1122,14 +1301,24 @@ export function LedgerClient() {
                               {money(Math.abs(row.non_sales_consumption_value))}
                             </strong>
                           </div>
-                          <button
-                            type="button"
-                            className={styles.editCardButton}
-                            onClick={() => openStockEntryEdit(row)}
-                          >
-                            <Icon name="edit" size={14} />
-                            Edit entry
-                          </button>
+                          <div className={styles.cardActionRow}>
+                            <button
+                              type="button"
+                              className={styles.editCardButton}
+                              onClick={() => openStockEntryEdit(row)}
+                            >
+                              <Icon name="edit" size={14} />
+                              Edit entry
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.deleteCardButton}
+                              onClick={() => openDeleteStockEntry(row)}
+                            >
+                              <Icon name="wastage" size={14} />
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </li>
@@ -1274,18 +1463,18 @@ export function LedgerClient() {
                                 <td className={catalogStyles.numeric}>{money(row.cost_value)}</td>
                                 <td className={catalogStyles.numeric}>{money(row.closing_stock_value)}</td>
                                 <td className={catalogStyles.numeric}>{money(row.wastage_value)}</td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className={styles.editButton}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openIngredientEntryEdit(row);
-                                    }}
-                                    aria-label={`Edit ${row.ingredient_name} entry`}
-                                  >
-                                    <Icon name="edit" size={16} />
-                                  </button>
+                                <td onClick={(e) => e.stopPropagation()}>
+                                  <ActionMenu
+                                    aria-label={`Actions for ${row.ingredient_name} — ${row.entry_date}`}
+                                    items={[
+                                      { label: "Edit", onClick: () => openIngredientEntryEdit(row) },
+                                      {
+                                        label: "Delete",
+                                        onClick: () => openDeleteIngredientEntry(row),
+                                        destructive: true,
+                                      },
+                                    ]}
+                                  />
                                 </td>
                               </tr>
                             ))}
@@ -1376,14 +1565,24 @@ export function LedgerClient() {
                                     <span>Wastage value</span>
                                     <strong>{money(row.wastage_value)}</strong>
                                   </div>
-                                  <button
-                                    type="button"
-                                    className={styles.editCardButton}
-                                    onClick={() => openIngredientEntryEdit(row)}
-                                  >
-                                    <Icon name="edit" size={14} />
-                                    Edit entry
-                                  </button>
+                                  <div className={styles.cardActionRow}>
+                                    <button
+                                      type="button"
+                                      className={styles.editCardButton}
+                                      onClick={() => openIngredientEntryEdit(row)}
+                                    >
+                                      <Icon name="edit" size={14} />
+                                      Edit entry
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={styles.deleteCardButton}
+                                      onClick={() => openDeleteIngredientEntry(row)}
+                                    >
+                                      <Icon name="wastage" size={14} />
+                                      Delete
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </li>
@@ -1478,12 +1677,13 @@ export function LedgerClient() {
                         <th className={catalogStyles.numeric}>Quantity</th>
                         <th className={catalogStyles.numeric}>Value</th>
                         <th>Note</th>
+                        <th aria-label="Actions" />
                       </tr>
                     </thead>
                     <tbody>
                       {filteredConsumptionRows.length === 0 && (
                         <tr>
-                          <td colSpan={8} className={styles.emptyRow}>
+                          <td colSpan={9} className={styles.emptyRow}>
                             <EmptyState
                               icon={<Icon name="wastage" size={48} />}
                               heading={
@@ -1519,6 +1719,23 @@ export function LedgerClient() {
                             {money(Math.abs(row.value))}
                           </td>
                           <td>{row.note ?? "—"}</td>
+                          <td>
+                            {row.entry_id ? (
+                              <button
+                                type="button"
+                                className={styles.editButton}
+                                onClick={() => openDeleteConsumptionRow(row, row.entry_id!)}
+                                aria-label={`Delete ${consumptionRowLabel(row)} — ${row.item_name ?? row.ingredient_name}`}
+                              >
+                                <Icon name="wastage" size={16} />
+                              </button>
+                            ) : (
+                              <InfoTooltip
+                                label="wastage deletion"
+                                message="Wastage isn't a separate entry — edit it back to 0 from this item's row in the table above."
+                              />
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1594,6 +1811,16 @@ export function LedgerClient() {
                                 <span>Note</span>
                                 <strong>{row.note}</strong>
                               </div>
+                            )}
+                            {row.entry_id && (
+                              <button
+                                type="button"
+                                className={styles.deleteCardButton}
+                                onClick={() => openDeleteConsumptionRow(row, row.entry_id!)}
+                              >
+                                <Icon name="wastage" size={14} />
+                                Delete
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1818,6 +2045,56 @@ export function LedgerClient() {
                 />
               </>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={deleteTarget !== null}
+        onClose={closeDeleteModal}
+        title="Delete entry"
+        footer={
+          <>
+            <Button variant="tertiary" onClick={closeDeleteModal} disabled={deleteSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitDelete}
+              disabled={deleteSubmitting || resolvedDeleteImpact === null}
+            >
+              {deleteSubmitting ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <div className={styles.editForm}>
+            <p className={styles.editFormMeta}>
+              {deleteTarget.kind === "stock_entries" &&
+                `This removes the entire ${deleteTarget.entry_date} entry for ${deleteTarget.item_name} (${
+                  deleteTarget.location === "restaurant" ? "Restaurant" : "Canteen"
+                }) — opening stock, sales, wastage, everything logged for that item on that day.`}
+              {deleteTarget.kind === "ingredient_entries" &&
+                `This removes the entire ${deleteTarget.entry_date} entry for ${deleteTarget.ingredient_name} — received, used, and wastage logged for that ingredient on that day.`}
+              {deleteTarget.kind === "stock_consumption" &&
+                `This removes this ${CONSUMPTION_CATEGORY_LABELS[deleteTarget.category].toLowerCase()} claim for ${
+                  deleteTarget.label
+                } on ${deleteTarget.entry_date}.`}
+            </p>
+            {resolvedDeleteImpact === null ? (
+              <p className={styles.editFormMeta}>Checking what else this affects…</p>
+            ) : resolvedDeleteImpact.count > 0 ? (
+              <p className={styles.cascadeWarning}>
+                This will also recalculate {resolvedDeleteImpact.count}{" "}
+                {resolvedDeleteImpact.count === 1 ? "later entry" : "later entries"} for this{" "}
+                {deleteTarget.kind === "stock_entries" ? "item" : "ingredient"}, through{" "}
+                {resolvedDeleteImpact.through}.
+              </p>
+            ) : (
+              <p className={styles.editFormMeta}>This is the only/latest entry — nothing else will change.</p>
+            )}
+            {deleteError && <p className={catalogStyles.formError}>{deleteError}</p>}
           </div>
         )}
       </Modal>

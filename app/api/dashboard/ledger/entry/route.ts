@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { ledgerEntryAdminEditSchema } from "@/lib/validation";
+import { ledgerEntryAdminEditSchema, ledgerEntryDeleteSchema } from "@/lib/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { describeSaveError, serverErrorResponse } from "@/lib/errors";
 import { writeAuditLog } from "@/lib/audit";
@@ -76,6 +76,153 @@ const STOCK_CONSUMPTION_RPC = {
   complimentary_meal: "create_complimentary_meal_entry",
   stock_adjustment: "create_stock_adjustment_entry",
 } as const;
+
+const STOCK_CONSUMPTION_DELETE_RPC = {
+  staff_meal: "delete_staff_meal_entry",
+  complimentary_meal: "delete_complimentary_meal_entry",
+  stock_adjustment: "delete_stock_adjustment_entry",
+} as const;
+
+const STOCK_CONSUMPTION_TABLE = {
+  staff_meal: "staff_meal_entries",
+  complimentary_meal: "complimentary_meal_entries",
+  stock_adjustment: "stock_adjustment_entries",
+} as const;
+
+/**
+ * DELETE /api/dashboard/ledger/entry
+ *
+ * Admin row delete for the Item Ledger screen (client feedback,
+ * 2026-07-27: "add delete options at Item Ledger... I have double
+ * entries"). Covers all three row kinds the Ledger surfaces — see
+ * ledgerEntryDeleteSchema's doc comment. Each branch fetches the
+ * existing row first (for the audit log's "before" snapshot, same
+ * convention as editStockEntry/editIngredientEntry above), then
+ * delegates the actual removal + cascade recompute to the matching
+ * delete_*() RPC (20260727090000_consumption_entry_delete.sql,
+ * 20260727100000_stock_entry_delete.sql) — never deletes the row
+ * directly via the client, since only the RPC knows how to correctly
+ * re-derive the affected chain afterward.
+ */
+export async function DELETE(request: Request) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const body = await request.json().catch(() => null);
+  const parsed = ledgerEntryDeleteSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 },
+    );
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const input = parsed.data;
+
+  if (input.table === "stock_entries") {
+    const { data: existing } = await supabase
+      .from("stock_entries")
+      .select("*")
+      .eq("item_id", input.item_id)
+      .eq("location", input.location)
+      .eq("entry_date", input.entry_date)
+      .maybeSingle();
+
+    const { error } = await supabase.rpc("delete_stock_entry", {
+      p_item_id: input.item_id,
+      p_location: input.location,
+      p_entry_date: input.entry_date,
+      p_created_by: admin.id,
+    });
+    if (error) {
+      console.error("[dashboard/ledger/entry DELETE stock_entries]", error);
+      if (error.code === "P0007") {
+        return NextResponse.json({ error: "That entry no longer exists." }, { status: 404 });
+      }
+      const { message, status } = describeSaveError(error);
+      return NextResponse.json(
+        { error: `Couldn't delete: ${message}` },
+        { status },
+      );
+    }
+
+    await writeAuditLog(supabase, {
+      actorId: admin.id,
+      action: "stock_entry.admin_delete",
+      targetTable: "stock_entries",
+      targetId: existing?.id ?? `${input.item_id}:${input.location}:${input.entry_date}`,
+      changes: { before: existing ?? null },
+    });
+    return NextResponse.json({ success: true });
+  }
+
+  if (input.table === "ingredient_entries") {
+    const { data: existing } = await supabase
+      .from("ingredient_entries")
+      .select("*")
+      .eq("ingredient_id", input.ingredient_id)
+      .eq("entry_date", input.entry_date)
+      .maybeSingle();
+
+    const { error } = await supabase.rpc("delete_ingredient_entry", {
+      p_ingredient_id: input.ingredient_id,
+      p_entry_date: input.entry_date,
+    });
+    if (error) {
+      console.error("[dashboard/ledger/entry DELETE ingredient_entries]", error);
+      if (error.code === "P0007") {
+        return NextResponse.json({ error: "That entry no longer exists." }, { status: 404 });
+      }
+      const { message, status } = describeSaveError(error);
+      return NextResponse.json(
+        { error: `Couldn't delete: ${message}` },
+        { status },
+      );
+    }
+
+    await writeAuditLog(supabase, {
+      actorId: admin.id,
+      action: "ingredient_entry.admin_delete",
+      targetTable: "ingredient_entries",
+      targetId: existing?.id ?? `${input.ingredient_id}:${input.entry_date}`,
+      changes: { before: existing ?? null },
+    });
+    return NextResponse.json({ success: true });
+  }
+
+  // stock_consumption — staff_meal / complimentary_meal / stock_adjustment
+  const targetTable = STOCK_CONSUMPTION_TABLE[input.category];
+  const { data: existing } = await supabase
+    .from(targetTable)
+    .select("*")
+    .eq("id", input.id)
+    .maybeSingle();
+
+  const { error } = await supabase.rpc(STOCK_CONSUMPTION_DELETE_RPC[input.category], {
+    p_entry_id: input.id,
+  });
+  if (error) {
+    console.error("[dashboard/ledger/entry DELETE stock_consumption]", error);
+    if (error.code === "P0007") {
+      return NextResponse.json({ error: "That entry no longer exists." }, { status: 404 });
+    }
+    const { message, status } = describeSaveError(error);
+    return NextResponse.json(
+      { error: `Couldn't delete: ${message}` },
+      { status },
+    );
+  }
+
+  await writeAuditLog(supabase, {
+    actorId: admin.id,
+    action: `${targetTable}.admin_delete`,
+    targetTable,
+    targetId: input.id,
+    changes: { before: existing ?? null },
+  });
+  return NextResponse.json({ success: true });
+}
 
 /**
  * Admin-authored staff meal / complimentary meal / stock adjustment claim

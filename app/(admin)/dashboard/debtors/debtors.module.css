@@ -109,6 +109,43 @@
   flex-wrap: wrap;
 }
 
+/* Per-payment list + delete affordance under each order row (client
+   feedback, 2026-07-27: "Delete options required under Debtors for
+   admin"). A payment delete has no cascade to preview (outstanding is
+   derived at read time, docs/01_DATA_MODEL.md §6) — just a plain list
+   row with a destructive text action, no confirmation modal needed
+   given how low-stakes/reversible-in-spirit this is (a mistaken payment
+   record, not a stock movement) — consistent with this screen's own
+   existing "Record payment" flow having no confirm step either. */
+.paymentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+  margin-top: var(--space-1);
+}
+
+.paymentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  padding: var(--space-1) 0;
+}
+
+.paymentRowDelete {
+  border: none;
+  background: transparent;
+  color: var(--color-status-error);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+  padding: 0;
+}
+
 .paymentForm {
   display: flex;
   flex-direction: column;

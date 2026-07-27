@@ -428,6 +428,38 @@ export const ledgerEntryAdminEditSchema = z.discriminatedUnion("table", [
 export type LedgerEntryAdminEditInput = z.infer<typeof ledgerEntryAdminEditSchema>;
 
 /**
+ * Admin delete of a Ledger row (client feedback, 2026-07-27: "add delete
+ * options at Item Ledger... I have double entries") — DELETE
+ * /api/dashboard/ledger/entry's request body. Covers all four row kinds
+ * the Ledger surfaces: the two whole-day rows (stock_entries/
+ * ingredient_entries — identified by their natural key, same fields
+ * ledgerEntryAdminEditSchema's edit variants use) and the three
+ * unconstrained consumption-claim tables (identified by their own row id,
+ * since there's no natural key to target — see
+ * 20260727090000_consumption_entry_delete.sql).
+ */
+export const ledgerEntryDeleteSchema = z.discriminatedUnion("table", [
+  z.object({
+    table: z.literal("stock_entries"),
+    item_id: z.string().uuid(),
+    location: z.enum(["restaurant", "canteen"]),
+    entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  }),
+  z.object({
+    table: z.literal("ingredient_entries"),
+    ingredient_id: z.string().uuid(),
+    entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  }),
+  z.object({
+    table: z.literal("stock_consumption"),
+    category: z.enum(["staff_meal", "complimentary_meal", "stock_adjustment"]),
+    id: z.string().uuid(),
+  }),
+]);
+
+export type LedgerEntryDeleteInput = z.infer<typeof ledgerEntryDeleteSchema>;
+
+/**
  * Delivery/pickup order — see docs/01_DATA_MODEL.md §6, §3.4. `items` mirrors
  * a receipt's line items; `client_request_id` is the idempotency key the
  * client generates once per submit attempt and resends unchanged on retry
