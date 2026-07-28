@@ -208,6 +208,114 @@
   font-weight: 600;
 }
 
+/* Debtors tab (client feedback, 2026-07-28) -- mirrors
+   app/(admin)/dashboard/debtors/debtors.module.css's shapes, scoped
+   down to a single-location list with no period toggle/delete
+   affordances (see OrdersClient.tsx's own comments). */
+.debtorsView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.debtorsError {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-status-error);
+}
+
+.debtorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.debtorRow {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+}
+
+.debtorRowButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.debtorIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.debtorName {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.debtorMeta {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* Same warning tone as the admin debtors screen's outstanding figure --
+   money owed is normal business activity worth noticing, not an error. */
+.debtorOutstanding {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-md);
+  font-weight: 600;
+  color: var(--color-status-warning);
+  white-space: nowrap;
+  margin-left: auto;
+  margin-right: var(--space-2);
+}
+
+.debtorDetail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.debtorOrderList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.debtorOrderRow {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.debtorOrderFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 @media (min-width: 1024px) {
   /* Item-stepper list can be 10-20+ menu items, same reasoning as
      Entry's item list — grid it the same way. */

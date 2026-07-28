@@ -29,6 +29,43 @@ type FulfillmentType = Database["public"]["Enums"]["order_fulfillment_type"];
 // response as everything else on this screen.
 type Customer = Database["public"]["Tables"]["customers"]["Row"];
 
+// Client feedback, 2026-07-28 — "allow staff to record debtor
+// payments." Mirrors DebtorsClient.tsx's shapes (admin screen), scoped
+// here to the caller's own location via GET /api/orders/debtors
+// instead of the admin-only GET /api/admin/debtors.
+interface Debtor {
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string | null;
+  total_amount: number;
+  total_paid: number;
+  outstanding: number;
+  order_count: number;
+  oldest_unpaid_date: string;
+}
+
+interface DebtorOrderRow {
+  id: string;
+  location: "restaurant" | "canteen";
+  order_date: string;
+  customer_name: string;
+  fulfillment_type: "delivery" | "pickup" | "counter";
+  total_amount: number;
+  created_at: string;
+}
+
+interface PaymentRow {
+  id: string;
+  order_id: string;
+  amount: number;
+  paid_at: string;
+  note: string | null;
+}
+
+function money(value: number): string {
+  return `KES ${Math.round(value).toLocaleString("en-KE")}`;
+}
+
 function todayISO(): string {
   return nairobiToday();
 }
@@ -44,12 +81,38 @@ function todayISO(): string {
 export function OrdersClient() {
   const today = useMemo(() => todayISO(), []);
 
+  // "Log order" (the existing screen) vs. "Debtors" (client feedback,
+  // 2026-07-28) — a tab on the same screen rather than a new route/nav
+  // item, since most debtors are from past orders, not today's, and
+  // this avoids adding a permanent slot to the 3-4 item mobile bottom
+  // nav for a lookup staff won't need every visit.
+  const [view, setView] = useState<"log" | "debtors">("log");
+
   const [items, setItems] = useState<Item[]>([]);
   const [deliveryLocations, setDeliveryLocations] = useState<DeliveryLocation[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [stockEntries, setStockEntries] = useState<StockEntryRow[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Debtors tab state — mirrors DebtorsClient.tsx (admin screen), minus
+  // the period toggle and the admin-only "Delete order"/"Delete
+  // payment" actions (Phase 11 scoped whole-order delete to
+  // requireAdmin(); staff only get lookup + record-payment here).
+  const [debtors, setDebtors] = useState<Debtor[]>([]);
+  const [debtorsLoading, setDebtorsLoading] = useState(false);
+  const [debtorsLoaded, setDebtorsLoaded] = useState(false);
+  const [debtorsError, setDebtorsError] = useState<string | null>(null);
+  const [selectedDebtor, setSelectedDebtor] = useState<Debtor | null>(null);
+  const [debtorOrders, setDebtorOrders] = useState<DebtorOrderRow[]>([]);
+  const [debtorOrdersLoading, setDebtorOrdersLoading] = useState(false);
+  const [orderPayments, setOrderPayments] = useState<
+    Record<string, { totalPaid: number; outstanding: number; payments: PaymentRow[] }>
+  >({});
+  const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [recordingPayment, setRecordingPayment] = useState(false);
 
   const [customerName, setCustomerName] = useState("");
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>("pickup");
@@ -105,6 +168,140 @@ export function OrdersClient() {
       cancelled = true;
     };
   }, [today]);
+
+  // Debtors list loads lazily on first switch to that tab, not
+  // up-front alongside today's orders — a cashier who never opens the
+  // tab shouldn't pay for the extra round trip on every /orders visit.
+  useEffect(() => {
+    if (view !== "debtors" || debtorsLoaded) return;
+    let cancelled = false;
+
+    async function loadDebtors() {
+      setDebtorsLoading(true);
+      setDebtorsError(null);
+      try {
+        const res = await fetch("/api/orders/debtors");
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          setDebtorsError(body.error ?? "Couldn't load debtors");
+          return;
+        }
+        setDebtors(body.debtors ?? []);
+        setDebtorsLoaded(true);
+      } catch {
+        if (!cancelled) setDebtorsError("Couldn't reach the server — check your connection and try again.");
+      } finally {
+        if (!cancelled) setDebtorsLoading(false);
+      }
+    }
+
+    loadDebtors();
+    return () => {
+      cancelled = true;
+    };
+  }, [view, debtorsLoaded]);
+
+  async function refreshDebtors() {
+    try {
+      const res = await fetch("/api/orders/debtors");
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) setDebtors(body.debtors ?? []);
+    } catch {
+      // Silent — the visible toast from the triggering action already
+      // told the cashier what happened; a background refresh failing
+      // isn't itself worth a second error message.
+    }
+  }
+
+  async function openDebtor(debtor: Debtor) {
+    setSelectedDebtor(debtor);
+    await fetchDebtorOrders(debtor.customer_id);
+  }
+
+  async function fetchDebtorOrders(customerId: string) {
+    setDebtorOrdersLoading(true);
+    try {
+      const res = await fetch(`/api/orders/debtors/${customerId}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ message: json.error ?? "Couldn't load this customer's orders", status: "error" });
+        setDebtorOrders([]);
+        return;
+      }
+      const debtorOrdersData = (json.orders ?? []) as DebtorOrderRow[];
+      setDebtorOrders(debtorOrdersData);
+
+      const paymentEntries = await Promise.all(
+        debtorOrdersData.map(async (order) => {
+          const paymentsRes = await fetch(`/api/orders/${order.id}/payments`);
+          const paymentsJson = await paymentsRes.json().catch(() => ({}));
+          return [
+            order.id,
+            {
+              totalPaid: paymentsJson.totalPaid ?? 0,
+              outstanding: paymentsJson.outstanding ?? order.total_amount,
+              payments: paymentsJson.payments ?? [],
+            },
+          ] as const;
+        }),
+      );
+      setOrderPayments(Object.fromEntries(paymentEntries));
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setDebtorOrdersLoading(false);
+    }
+  }
+
+  function closeDebtor() {
+    setSelectedDebtor(null);
+    setDebtorOrders([]);
+    setOrderPayments({});
+  }
+
+  function openPaymentForm(orderId: string) {
+    setPaymentOrderId(orderId);
+    setPaymentAmount("");
+    setPaymentNote("");
+  }
+
+  async function handleRecordPayment() {
+    if (!paymentOrderId) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setToast({ message: "Enter a valid amount", status: "error" });
+      return;
+    }
+
+    setRecordingPayment(true);
+    try {
+      const res = await fetch(`/api/orders/${paymentOrderId}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, note: paymentNote.trim() || null }),
+      });
+      const body = await res.json();
+
+      if (!res.ok) {
+        setToast({ message: body.error ?? "Couldn't record payment", status: "error" });
+        return;
+      }
+
+      setToast({ message: "Payment recorded", status: "success" });
+      setPaymentOrderId(null);
+
+      // A payment can fully clear an order (or the whole customer, if
+      // it was their only outstanding order), so both the drill-in and
+      // the overall list need to reflect the new state.
+      if (selectedDebtor) await fetchDebtorOrders(selectedDebtor.customer_id);
+      await refreshDebtors();
+    } catch {
+      setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    } finally {
+      setRecordingPayment(false);
+    }
+  }
 
   const visibleItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -263,8 +460,10 @@ export function OrdersClient() {
     if (customer) setCustomerName(customer.name);
   }
 
+  // Only shown on the "Log order" tab -- a running cart total makes no
+  // sense while browsing debtors.
   useTillStripSlot(
-    !loading ? (
+    !loading && view === "log" ? (
       <TillStrip
         itemCount={cartItemCount}
         totalValueLabel={`KES ${total.toFixed(2)}`}
@@ -274,7 +473,7 @@ export function OrdersClient() {
         disabled={!canSave}
       />
     ) : null,
-    `${loading}:${cartItemCount}:${total}:${submitting}:${canSave}`,
+    `${loading}:${view}:${cartItemCount}:${total}:${submitting}:${canSave}`,
   );
 
   if (loading) {
@@ -298,6 +497,53 @@ export function OrdersClient() {
         <p className={styles.dateLabel}>{today}</p>
       </div>
 
+      <CategoryChips
+        options={[
+          { value: "log", label: "Log order" },
+          { value: "debtors", label: "Debtors" },
+        ]}
+        value={view}
+        onChange={(value) => setView(value as "log" | "debtors")}
+      />
+
+      {view === "debtors" ? (
+        <div className={styles.debtorsView}>
+          {debtorsError && <p className={styles.debtorsError}>{debtorsError}</p>}
+
+          {debtorsLoading && !debtorsLoaded ? (
+            <p className={styles.loading}>Loading debtors…</p>
+          ) : debtors.length === 0 ? (
+            <EmptyState
+              icon={<Icon name="expenses" size={48} />}
+              heading="No outstanding balances"
+              body="Once a counter, delivery, or pickup order is logged on credit at this location, it'll show up here until it's paid off."
+            />
+          ) : (
+            <ul className={styles.debtorList}>
+              {debtors.map((debtor) => (
+                <li key={debtor.customer_id} className={styles.debtorRow}>
+                  <button
+                    type="button"
+                    className={styles.debtorRowButton}
+                    onClick={() => openDebtor(debtor)}
+                  >
+                    <span className={styles.debtorIdentity}>
+                      <span className={styles.debtorName}>{debtor.customer_name}</span>
+                      <span className={styles.debtorMeta}>
+                        {debtor.order_count} order{debtor.order_count === 1 ? "" : "s"} · Since{" "}
+                        {debtor.oldest_unpaid_date}
+                      </span>
+                    </span>
+                    <span className={styles.debtorOutstanding}>{money(debtor.outstanding)}</span>
+                    <Icon name="chevron-right" size={20} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <>
       <div className={styles.form}>
         <Input
           label="Customer name"
@@ -347,7 +593,7 @@ export function OrdersClient() {
             Payment
             <InfoTooltip
               label="Payment"
-              message="On credit logs this sale immediately (stock and profit are unaffected) but tracks it as owed until a payment is recorded against it on the admin debtors screen."
+              message="On credit logs this sale immediately (stock and profit are unaffected) but tracks it as owed until a payment is recorded against it — use the Debtors tab above to record one."
             />
           </span>
           <CategoryChips
@@ -498,9 +744,9 @@ export function OrdersClient() {
                   {/* customer_id (Phase 11) is the signal this order may
                       be a credit sale -- there's no dedicated flag, so
                       this reads as "has a customer on file," which is
-                      the closest the staff-facing list needs to get.
-                      The admin debtors screen is the real source of
-                      truth for what's actually still owed. */}
+                      the closest today's-orders list needs to get.
+                      The Debtors tab (and the admin debtors screen) is
+                      where what's actually still owed gets resolved. */}
                   {order.customer_id && (
                     <>
                       {" "}
@@ -545,6 +791,102 @@ export function OrdersClient() {
             value={newCustomerPhone}
             onChange={(e) => setNewCustomerPhone(e.target.value)}
             placeholder="e.g. 0712 345 678"
+          />
+        </div>
+      </Modal>
+        </>
+      )}
+
+      {/* Debtor drill-in + record-payment modals -- shared by the
+          Debtors tab regardless of which tab is currently active, same
+          as DebtorsClient.tsx's own modal pair (admin screen). Modal's
+          own `open` prop gates visibility, so these are inert when
+          view === "log". No delete affordances here (Phase 11 scoped
+          whole-order/payment delete to admin only) -- lookup + record
+          payment is the full staff-facing scope for this feature. */}
+      <Modal
+        open={selectedDebtor !== null}
+        onClose={closeDebtor}
+        title={selectedDebtor ? `${selectedDebtor.customer_name} — outstanding orders` : "Debtor"}
+      >
+        {selectedDebtor && (
+          <div className={styles.debtorDetail}>
+            {debtorOrdersLoading ? (
+              <p className={styles.loading}>Loading…</p>
+            ) : debtorOrders.length === 0 ? (
+              <p className={styles.debtorMeta}>No outstanding orders for this customer.</p>
+            ) : (
+              <ul className={styles.debtorOrderList}>
+                {debtorOrders.map((order) => {
+                  const figures = orderPayments[order.id];
+                  const outstanding = figures?.outstanding ?? order.total_amount;
+                  if (outstanding <= 0) return null;
+                  return (
+                    <li key={order.id} className={styles.debtorOrderRow}>
+                      <div className={styles.orderRowHeader}>
+                        <span>
+                          {order.order_date} ·{" "}
+                          {order.fulfillment_type === "delivery"
+                            ? "Delivery"
+                            : order.fulfillment_type === "counter"
+                              ? "Counter"
+                              : "Pickup"}
+                        </span>
+                        <span className={styles.orderAmount}>{money(order.total_amount)}</span>
+                      </div>
+                      <div className={styles.debtorOrderFooter}>
+                        <span className={styles.debtorOutstanding}>
+                          {money(outstanding)} outstanding
+                          {figures && figures.totalPaid > 0 && ` (${money(figures.totalPaid)} paid)`}
+                        </span>
+                        <Button type="button" variant="secondary" onClick={() => openPaymentForm(order.id)}>
+                          Record payment
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={paymentOrderId !== null}
+        onClose={() => setPaymentOrderId(null)}
+        title="Record payment"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setPaymentOrderId(null)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleRecordPayment} disabled={recordingPayment}>
+              {recordingPayment ? "Saving…" : "Save payment"}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.form}>
+          {paymentOrderId && orderPayments[paymentOrderId] && (
+            <p className={styles.debtorMeta}>
+              {money(orderPayments[paymentOrderId].outstanding)} still outstanding on this order.
+            </p>
+          )}
+          <Input
+            label="Amount (KES)"
+            type="number"
+            min="0"
+            step="0.01"
+            value={paymentAmount}
+            onChange={(e) => setPaymentAmount(e.target.value)}
+            placeholder="e.g. 500"
+          />
+          <Input
+            label="Note (optional)"
+            value={paymentNote}
+            onChange={(e) => setPaymentNote(e.target.value)}
+            placeholder="e.g. Paid at till"
           />
         </div>
       </Modal>
