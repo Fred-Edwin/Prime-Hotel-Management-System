@@ -81,6 +81,14 @@ export function DebtorsClient() {
   const [paymentNote, setPaymentNote] = useState("");
   const [recordingPayment, setRecordingPayment] = useState(false);
 
+  // Whole-order delete (client feedback, 2026-07-28 — distinct from
+  // handleDeletePayment above, which only removes one payment). Gets a
+  // confirm modal, unlike the payment delete, since removing the whole
+  // debt/order is a heavier, harder-to-shrug-off action.
+  const [deleteOrderTarget, setDeleteOrderTarget] = useState<OrderRow | null>(null);
+  const [deleteOrderError, setDeleteOrderError] = useState<string | null>(null);
+  const [deletingOrder, setDeletingOrder] = useState(false);
+
   // Shared loader, also called after recording a payment (a payment can
   // clear a debtor off the list entirely, so the list needs to refresh
   // outside the effect too, not just on period change). Defined once
@@ -201,6 +209,48 @@ export function DebtorsClient() {
       await load();
     } catch {
       setToast({ message: "Couldn't reach the server — check your connection and try again.", status: "error" });
+    }
+  }
+
+  function openDeleteOrderConfirm(order: OrderRow) {
+    setDeleteOrderTarget(order);
+    setDeleteOrderError(null);
+  }
+
+  function closeDeleteOrderConfirm() {
+    setDeleteOrderTarget(null);
+    setDeleteOrderError(null);
+  }
+
+  /**
+   * Delete the whole order/debt (client feedback, 2026-07-28: "Debtor's
+   * delete was supposed to delete the debt. We currently just have
+   * reverse payment" — handleDeletePayment above only removes one
+   * payment; this removes the order itself, cascading its order_items
+   * and order_payments too (docs/01_DATA_MODEL.md §2/§3.16). Confirmed
+   * with the human: allowed even when payments already exist against
+   * the order — the confirmation modal warns how much payment history
+   * would be removed, this action doesn't block on it.
+   */
+  async function handleDeleteOrder() {
+    if (!deleteOrderTarget) return;
+    setDeletingOrder(true);
+    setDeleteOrderError(null);
+    try {
+      const res = await fetch(`/api/orders/${deleteOrderTarget.id}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteOrderError(body.error ?? "Couldn't delete order — please try again.");
+        return;
+      }
+      setToast({ message: "Order deleted", status: "success" });
+      setDeleteOrderTarget(null);
+      if (selectedDebtor) await fetchDebtorOrders(selectedDebtor.customer_id);
+      await load();
+    } catch {
+      setDeleteOrderError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setDeletingOrder(false);
     }
   }
 
@@ -387,6 +437,13 @@ export function DebtorsClient() {
                         <Button type="button" variant="secondary" onClick={() => openPaymentForm(order.id)}>
                           Record payment
                         </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={() => openDeleteOrderConfirm(order)}
+                        >
+                          Delete order
+                        </Button>
                       </div>
                       {figures && figures.payments.length > 0 && (
                         <ul className={styles.paymentList}>
@@ -453,6 +510,42 @@ export function DebtorsClient() {
             placeholder="e.g. Paid at till"
           />
         </div>
+      </Modal>
+
+      <Modal
+        open={deleteOrderTarget !== null}
+        onClose={closeDeleteOrderConfirm}
+        title="Delete order"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeDeleteOrderConfirm} disabled={deletingOrder}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeleteOrder} disabled={deletingOrder}>
+              {deletingOrder ? "Deleting…" : "Delete order"}
+            </Button>
+          </>
+        }
+      >
+        {deleteOrderTarget && (
+          <div className={styles.paymentForm}>
+            <p>
+              This removes the entire {deleteOrderTarget.order_date} order for{" "}
+              {deleteOrderTarget.customer_name} ({money(deleteOrderTarget.total_amount)}) — its items, and the
+              stock/sales figures it contributed will be recalculated as if it never happened.
+            </p>
+            {(() => {
+              const figures = orderPayments[deleteOrderTarget.id];
+              return figures && figures.payments.length > 0 ? (
+                <p className={styles.emptyNote}>
+                  This order has {money(figures.totalPaid)} in recorded payments — deleting the order removes
+                  those payment records too.
+                </p>
+              ) : null;
+            })()}
+            {deleteOrderError && <p className={catalogStyles.formError}>{deleteOrderError}</p>}
+          </div>
+        )}
       </Modal>
 
       {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}

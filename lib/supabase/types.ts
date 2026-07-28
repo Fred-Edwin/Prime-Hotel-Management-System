@@ -1356,6 +1356,10 @@ export type Database = {
         Returns: undefined
       }
       delete_item: { Args: { p_item_id: string }; Returns: undefined }
+      delete_order: {
+        Args: { p_order_id: string; p_created_by?: string }
+        Returns: undefined
+      }
       delete_staff_meal_entry: {
         Args: { p_entry_id: string }
         Returns: undefined
