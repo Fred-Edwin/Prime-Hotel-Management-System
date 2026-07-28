@@ -249,9 +249,9 @@ export function orderTotal(params: {
 /**
  * Admin dashboard net profit (04_PHASE_PLAN.md Phase 7, docs/01_DATA_MODEL.md
  * §3.3, revised per docs/backlog/05_stock_consumption.md, 2026-07-22):
- * sales_value - cost_value - expenses. Both inputs are already
- * period/location-aggregated in SQL before reaching this function — this
- * is a pure combining step, never a re-derivation of either input.
+ * sales_value - cost_value - expenses - assetPurchases. Both inputs are
+ * already period/location-aggregated in SQL before reaching this function —
+ * this is a pure combining step, never a re-derivation of either input.
  *
  * wastage/staff-meal/complimentary-meal/stock-adjustment values are
  * DELIBERATELY NOT subtracted here (client-directed change, 2026-07-22 —
@@ -263,6 +263,18 @@ export function orderTotal(params: {
  * (the dashboard's "Stock Consumption" section) — informational, not a
  * profit deduction.
  *
+ * assetPurchases (post-launch addition, 2026-07-28 — see the asset-register
+ * subsection of docs/01_DATA_MODEL.md) is DIFFERENT from the four
+ * categories above and genuinely IS subtracted: a durable-asset purchase
+ * (a new pot, cutlery) has no `closing_stock` anywhere in this schema to
+ * embed its cost into — assets aren't sellable stock, so there's no other
+ * place its cost is already accounted for. Optional, defaults to 0 so
+ * every pre-existing caller (byLocation.restaurant/canteen, which have no
+ * asset-purchase concept of their own) is unaffected. Asset LOSSES
+ * (breakage) are the opposite — reporting-only, same treatment as
+ * wastage, since a loss is a sunk cost already reflected in the business
+ * no longer owning the item, not a new deduction against sales.
+ *
  * costValue is expected to be periodicCogs()'s output as of the post-launch
  * COGS methodology change (2026-07-21) — see that function's doc comment.
  */
@@ -270,8 +282,9 @@ export function netProfit(params: {
   salesValue: number;
   costValue: number;
   expenses: number;
+  assetPurchases?: number;
 }): number {
-  return params.salesValue - params.costValue - params.expenses;
+  return params.salesValue - params.costValue - params.expenses - (params.assetPurchases ?? 0);
 }
 
 /**

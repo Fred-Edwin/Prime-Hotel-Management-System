@@ -84,6 +84,16 @@ import { serverErrorResponse } from "@/lib/errors";
  * orders -> apply_order_to_stock_entry() path (§3.4), completely
  * unchanged by this phase — outstandingTotal is purely an additional
  * reporting figure, never subtracted from or added to netProfit.
+ *
+ * assetPurchases/assetLosses (post-launch addition, 2026-07-28 — see the
+ * asset-register subsection of docs/01_DATA_MODEL.md): durable-equipment
+ * (utensils/cookware) purchases and breakage/loss, period-scoped like
+ * every other flow figure (unlike outstandingTotal above). assetPurchases
+ * IS a genuine netProfit() deduction (lib/calculations.ts's netProfit()
+ * doc comment explains why — an asset purchase has no closing_stock
+ * anywhere to embed its cost into, unlike wastage/stockConsumption).
+ * assetLosses stays reporting-only, shown alongside stockConsumption's
+ * existing categories, never fed into netProfit().
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -127,6 +137,8 @@ export async function GET(request: Request) {
     lowStockItemsRes,
     lowStockIngredientsRes,
     outstandingTotalRes,
+    assetPurchasesTotalRes,
+    assetLossesTotalRes,
   ] = await Promise.all([
     supabase.rpc("dashboard_stock_summary", { p_from: from, p_to: to }),
     supabase.rpc("dashboard_ingredient_summary", { p_from: from, p_to: to }),
@@ -145,6 +157,11 @@ export async function GET(request: Request) {
     // the period toggle changes. Never fed into netProfit() — see the
     // route's own doc comment above and lib/calculations.ts's netProfit().
     supabase.rpc("dashboard_outstanding_total"),
+    // Asset register (post-launch, 2026-07-28) -- period-scoped, unlike
+    // outstandingTotal above. See route's own doc comment and
+    // lib/calculations.ts's netProfit().
+    supabase.rpc("dashboard_asset_purchases_total", { p_from: from, p_to: to }),
+    supabase.rpc("dashboard_asset_losses_total", { p_from: from, p_to: to }),
   ]);
 
   for (const res of [
@@ -158,9 +175,14 @@ export async function GET(request: Request) {
     lowStockItemsRes,
     lowStockIngredientsRes,
     outstandingTotalRes,
+    assetPurchasesTotalRes,
+    assetLossesTotalRes,
   ]) {
     if (res.error) return serverErrorResponse(res.error, "dashboard/summary");
   }
+
+  const assetPurchasesTotal = assetPurchasesTotalRes.data ?? 0;
+  const assetLossesTotal = assetLossesTotalRes.data ?? 0;
 
   const stockByLocation = stockSummaryRes.data ?? [];
   const expensesByLocation = expensesSummaryRes.data ?? [];
@@ -233,9 +255,11 @@ export async function GET(request: Request) {
       ingredientSummary.closing_stock_value,
     expenses: restaurantExpenses + canteenExpenses + businessWideExpenses,
     businessWideExpenses,
+    assetPurchases: assetPurchasesTotal,
+    assetLosses: assetLossesTotal,
   };
 
-  const netProfitCombined = netProfit(combined);
+  const netProfitCombined = netProfit({ ...combined, assetPurchases: assetPurchasesTotal });
 
   // Stock Consumption (docs/backlog/05_stock_consumption.md, 2026-07-22):
   // wastage + staff meals + complimentary meals + stock adjustments,

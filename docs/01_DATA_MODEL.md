@@ -23,6 +23,8 @@ audit_log           — admin-read-only trail of sensitive admin actions; first 
 app_settings        — single-row, admin-editable business-wide settings; currently just estimated_cost_ratio (see §3.11)
 customers           — lightweight customer catalog for credit sales, added Phase 11 (see §6's "Credit sales and customer payments" subsection)
 order_payments      — append-only ledger of payments against a credit order, added Phase 11 (see §6)
+assets              — durable equipment catalog (utensils, cookware) — never sold, never consumed into a dish, only owned/purchased/lost — see §3.18
+asset_events        — append-only log of asset purchase/loss events — see §3.18
 ```
 
 Do not add tables speculatively beyond what's listed here (e.g., a generic `locations` table for restaurant/canteen — see §5 for why). `delivery_locations`/`orders`/`order_items` were added deliberately, after initial planning, per direct client input (see §6) — not a speculative addition.
@@ -1314,6 +1316,36 @@ This function runs on **every** admin Ledger edit to a `stock_entries` row that 
 
 ---
 
+## 3.18 Asset register — durable equipment (utensils, cookware), a third stock concept alongside items/ingredients (client feedback, 2026-07-28)
+
+**The request.** "They have some inventory assets used in the business like utensils that need to be accounted for." Confirmed with the human this describes durable, non-consumable equipment — plates, cutlery, pots — structurally distinct from both `items` (sold to customers) and `ingredients` (consumed into a dish, §3.2): an asset is never sold and never has a "recipe" relationship to anything, it's just owned, occasionally purchased, and occasionally lost to breakage/theft. Confirmed three jobs: (1) a catalog of what's owned with current quantity/value, (2) a breakage/loss figure over time, distinct from COGS/wastage/expenses, (3) equipment purchases counted as a real cost, shown as **its own dashboard line** rather than folded into the recurring electricity/gas/rent "Operating expenses" total — a one-off equipment buy shouldn't distort that trend.
+
+**Not a daily-reconciliation table.** Unlike `stock_entries`/`ingredient_entries`, there is no `asset_entries` table with opening/closing carry-forward — there's no "sold today" concept for a fork. Instead:
+
+- **`assets`** — catalog: `name`, `category` (free text, same "don't hardcode the client's own vocabulary" rationale as `ingredients.unit`), `location` (nullable — `null` means shared/business-wide, visible at **both** locations, same convention as `expenses.location`), `unit_cost`, an optional `low_stock_threshold`, `active`.
+- **`asset_events`** — append-only log of `purchase`/`loss` events (`asset_event_type` enum), mirroring `ingredient_purchases`'s append-only shape but simpler: no weighted-average recompute, no daily row to fold into. `quantity_on_hand` is **always derived** (`sum(purchase quantities) − sum(loss quantities)`), never stored — same "derive, don't cache" convention as every other on-hand figure in this schema. A `purchase` snapshots `unit_cost_snapshot`/`total_cost` and refreshes `assets.unit_cost` to the latest price paid (simple "last price wins," not a weighted average — an asset purchase isn't blending into an existing consumable's cost basis the way an ingredient purchase is). A `loss` carries no unit cost of its own; its reporting value is derived at query time from the asset's **current** `unit_cost` (`dashboard_asset_losses_total()`) — this doesn't violate the price-snapshot-immutability rule elsewhere in this schema (item/ingredient buying/selling prices), because that rule protects profit-affecting prices specifically, not every cost figure everywhere; a loss figure is informational/reporting-only, same category as wastage.
+
+**Scope/access — deliberately wider than `ingredients`, which is restaurant-only by business model.** Utensils/equipment exist at both locations (canteen has cups/spoons too), and canteen's Anne has no store-manager role to fall back on:
+- **Catalog visibility:** own-location + shared(`null`) + admin-sees-all (`assets_select_own_location_or_admin`) — same shape as `items`/`stock_entries`, not `ingredients`' restaurant-only scoping.
+- **Logging a loss:** any authenticated staff member, at their own location — no store-manager gate. Enforced by `asset_events_insert_scoped`'s RLS (own-location check via a join to `assets`) plus the route (`POST /api/asset-events` requires nothing extra for `event_type: 'loss'`).
+- **Logging a purchase / managing the catalog:** admin + restaurant store manager only, same population as `ingredients`/`ingredient_purchases` (`canManageAssets()` in `app/api/assets/route.ts`/`app/api/asset-events/route.ts`, mirrors `canCreateIngredient()`/`canLogPurchases()`). RLS (`assets_admin_or_restaurant_insert`/`_update`, `asset_events_insert_scoped`'s purchase branch) narrows to admin-or-restaurant; the route is the layer that further narrows non-admin to `is_store_manager` specifically, since RLS has no concept of that flag (`00_ARCHITECTURE.md` §5.1).
+
+**Functions (`20260728120000_assets.sql`):**
+- `lock_asset_row(p_asset_id)` — advisory-lock, same pattern as `lock_ingredient_entry_row()`/`lock_stock_entry_row()`, serializes concurrent events against the same asset.
+- `record_asset_event(p_asset_id, p_event_type, p_event_date, p_quantity, p_created_by, p_unit_cost, p_note)` — single write path for both event types. For a `loss`, checks the derived on-hand quantity first and raises `errcode 'P0008'` (`insufficient_asset_quantity`) if it would go negative — the same oversell-prevention discipline (`00_ARCHITECTURE.md`'s "no one can oversell") applied to a physical count, not just sellable stock.
+- `delete_asset_event(p_event_id)` — admin-only correction path (`asset_events_delete_admin` RLS is the real enforcement), simpler than `delete_ingredient_purchase()` since there's no weighted-average/daily-entry chain to recompute — just the delete.
+- `dashboard_asset_purchases_total(p_from, p_to)` / `dashboard_asset_losses_total(p_from, p_to)` / `dashboard_assets_on_hand()` — period-scoped aggregates (unlike `dashboard_outstanding_total()`, these ARE period-scoped, like every other flow figure) feeding `GET /api/dashboard/summary`'s `combined.assetPurchases`/`combined.assetLosses`, and the `/assets` catalog screen's on-hand/value columns.
+
+**Profit treatment — the one place this diverges from every other "reporting-only" category in §3.10/§3.11.** `assetPurchases` genuinely **reduces** `netProfit()` (`lib/calculations.ts`) — new optional `assetPurchases` parameter, defaults to `0` so every pre-existing caller is unaffected. This is deliberately different from wastage/staff-meals/complimentary-meals/stock-adjustments (§3.10), which stay reporting-only because their cost is *already* embedded in `costValue` via reduced `closing_stock` — an asset purchase has **no** `closing_stock` anywhere to embed into (assets aren't sellable stock), so there's no other place in the P&L its cost is already accounted for; not deducting it here would simply lose the cost. `assetLosses` stays reporting-only, same treatment as wastage — a loss is a sunk cost already reflected in the business no longer owning the item, not a new deduction against sales.
+
+**UI:**
+- Admin: new `/assets` screen (`app/(admin)/assets/`), directly mirroring `DeliveryLocationsClient.tsx`'s catalog pattern (desktop table + mobile card list, `Drawer` for add/edit, `ActionMenu` row actions) plus a shared `AssetEventModal` (`components/AssetEventModal/`) for "Log purchase"/"Log loss," parallel to `PurchaseModal` but not built on it (that component is tightly coupled to `ingredient_purchases`' single-event-type, weighted-average shape). New "Assets" nav item in `AdminShell.tsx`'s `NAV_ITEMS`, reusing the `ingredients` icon (no dedicated equipment icon exists in `components/Icon/Icon.tsx` — same design-system gap Debtors flagged for its own icon reuse in Phase 11); not added to the four primary mobile bottom-tab slots.
+- Staff: a fifth "Assets" tab on `/expenses` (`AssetLossClient.tsx`) — loss-logging only, open to any staff member per the scope above. Deliberately **not** built on `StockConsumptionClient` (the shared staff-meal/complimentary-meal/stock-adjustment component): that component is parameterized around sellable *items* (`item_category` enum, `buying_price`, an `*_available_stock()` RPC keyed on `item_id`) — assets have a different shape entirely (free-text category, on-hand keyed on `asset_id` via `dashboard_assets_on_hand()`), so a small dedicated component was judged clearer than bending a mismatched abstraction. No dedicated staff-facing bottom-nav tab was added — `/expenses` was already the established home for occasional, non-daily logging (staff meals, complimentary meals, stock adjustments), and a fifth top-level nav slot for a rarely-used "log a broken cup" flow would have crowded the staff bottom nav's 3–4 slots.
+
+**Explicitly not built:** hard-delete for `assets` (soft-`active`-deactivate only, matching `ingredients`' original posture before some other catalogs' later hard-delete additions — not requested here); a per-location split for `assetPurchases`/`assetLosses` on the dashboard (both are combined-only figures in this first pass, no `byLocation.restaurant.assetPurchases` etc.); any formal depreciation/useful-life schedule (this is a simple owned-quantity + replacement-cost register, not fixed-asset accounting).
+
+---
+
 ## 4. Row-Level Security (RLS) policies
 
 RLS must be **enabled on every table**. These policies are the real security boundary — see `00_ARCHITECTURE.md` §5.
@@ -1675,6 +1707,66 @@ create policy "order_payments_select_scoped" on public.order_payments
         and (public.is_admin() or orders.location = public.my_location())
     )
   );
+
+-- ============================================================
+-- ASSETS / ASSET_EVENTS (§3.18) -- durable equipment (utensils,
+-- cookware). Deliberately OWN-LOCATION scoped like items/
+-- stock_entries, NOT restaurant-only like ingredients -- utensils
+-- exist at both locations, unlike raw ingredients.
+-- ============================================================
+alter table public.assets enable row level security;
+alter table public.asset_events enable row level security;
+
+create policy "assets_select_own_location_or_admin" on public.assets
+  for select using (
+    public.is_admin() or location is null or location = public.my_location()
+  );
+create policy "assets_admin_or_restaurant_insert" on public.assets
+  for insert with check (
+    public.is_admin() or public.my_location() = 'restaurant'
+  );
+create policy "assets_admin_or_restaurant_update" on public.assets
+  for update using (
+    public.is_admin() or public.my_location() = 'restaurant'
+  );
+
+create policy "asset_events_select_own_location_or_admin" on public.asset_events
+  for select using (
+    public.is_admin()
+    or exists (
+      select 1 from public.assets a
+      where a.id = asset_events.asset_id
+        and (a.location is null or a.location = public.my_location())
+    )
+  );
+
+-- Insert: a 'loss' is any staff member's own-location asset (no
+-- store-manager gate -- Anne can log a broken canteen cup herself);
+-- a 'purchase' is admin-or-restaurant only, same population as
+-- ingredient_purchases_insert_restaurant. The route layer further
+-- narrows non-admin purchases to is_store_manager specifically --
+-- RLS has no concept of that flag (00_ARCHITECTURE.md §5.1).
+create policy "asset_events_insert_scoped" on public.asset_events
+  for insert with check (
+    (created_by = auth.uid() or public.is_admin())
+    and (
+      (
+        event_type = 'loss'
+        and exists (
+          select 1 from public.assets a
+          where a.id = asset_events.asset_id
+            and (a.location is null or a.location = public.my_location())
+        )
+      )
+      or (
+        event_type = 'purchase'
+        and (public.is_admin() or public.my_location() = 'restaurant')
+      )
+    )
+  );
+
+create policy "asset_events_delete_admin" on public.asset_events
+  for delete using (public.is_admin());
 
 -- ============================================================
 -- AUDIT LOG: admin-read-only, and -- unlike every other table above --

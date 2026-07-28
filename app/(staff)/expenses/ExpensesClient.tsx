@@ -10,9 +10,10 @@ import { Icon } from "@/components/Icon";
 import { nairobiToday } from "@/lib/calculations";
 import type { Database } from "@/lib/supabase/types";
 import { StockConsumptionClient } from "./StockConsumptionClient";
+import { AssetLossClient } from "./AssetLossClient";
 import styles from "./expenses.module.css";
 
-type Tab = "expenses" | "staff_meals" | "complimentary_meals" | "stock_adjustments";
+type Tab = "expenses" | "staff_meals" | "complimentary_meals" | "stock_adjustments" | "assets";
 
 type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"] & {
   expense_categories: { id: string; name: string } | null;
@@ -121,6 +122,7 @@ export function ExpensesClient() {
     staff_meals: "Staff meals",
     complimentary_meals: "Complimentary meals",
     stock_adjustments: "Stock adjustments",
+    assets: "Assets",
   };
 
   return (
@@ -137,6 +139,7 @@ export function ExpensesClient() {
             { value: "staff_meals", label: "Staff meals" },
             { value: "complimentary_meals", label: "Complimentary meals" },
             { value: "stock_adjustments", label: "Stock adjustments" },
+            { value: "assets", label: "Assets" },
           ]}
           value={tab}
           onChange={(value) => setTab(value as Tab)}
@@ -171,6 +174,8 @@ export function ExpensesClient() {
           notePlaceholder="e.g. recount correction"
           signed
         />
+      ) : tab === "assets" ? (
+        <AssetLossClient />
       ) : (
         <>
           <form className={styles.form} onSubmit={handleSubmit}>

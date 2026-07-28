@@ -678,4 +678,45 @@ export const appSettingsSchema = z.object({
     .max(1, "Must be 1 or less (enter 0.6 for 60%, not 60)"),
 });
 
+/**
+ * Asset catalog form (docs/01_DATA_MODEL.md's asset-register
+ * subsection, post-launch addition 2026-07-28) — durable equipment
+ * (utensils, cookware), distinct from items/ingredients. `location`
+ * null = shared/business-wide, visible at both locations — see
+ * 20260728120000_assets.sql.
+ */
+export const assetSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  category: z.string().min(1, "Category is required"),
+  location: z.enum(["restaurant", "canteen"]).nullable(),
+  unit_cost: nonNegativeAmount,
+  low_stock_threshold: nonNegativeAmount.nullable(),
+  active: z.boolean(),
+});
+
+export type AssetInput = z.infer<typeof assetSchema>;
+
+/**
+ * Log-purchase/log-loss form, shared by both event types — mirrors
+ * ingredientPurchaseSchema's shape. unit_cost is required only for a
+ * purchase (record_asset_event() itself also enforces this
+ * server-side, errcode 23514) — refine() surfaces a field-level error
+ * before the request ever reaches the RPC.
+ */
+export const assetEventSchema = z
+  .object({
+    asset_id: z.string().uuid(),
+    event_type: z.enum(["purchase", "loss"]),
+    event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+    quantity: z.number({ error: "Enter a valid number" }).positive("Must be greater than 0"),
+    unit_cost: nonNegativeAmount.optional(),
+    note: z.string().trim().min(1).nullable().optional(),
+  })
+  .refine((data) => data.event_type !== "purchase" || data.unit_cost !== undefined, {
+    message: "Unit cost is required for a purchase",
+    path: ["unit_cost"],
+  });
+
+export type AssetEventInput = z.infer<typeof assetEventSchema>;
+
 export type AppSettingsInput = z.infer<typeof appSettingsSchema>;

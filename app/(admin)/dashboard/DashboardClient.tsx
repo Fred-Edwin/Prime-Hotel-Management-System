@@ -52,6 +52,15 @@ interface CombinedFigures extends LocationFigures {
   // attributable to either location's own P&L, so it only exists on the
   // combined figures, never in byLocation.
   businessWideExpenses: number;
+  // Asset register (post-launch, 2026-07-28 — see docs/01_DATA_MODEL.md's
+  // asset-register subsection). assetPurchases IS folded into
+  // combined.netProfit server-side (unlike wastage/stockConsumption — an
+  // asset purchase has no closing_stock anywhere to embed its cost into).
+  // assetLosses stays reporting-only, same treatment as wastage. Neither
+  // has a byLocation split — durable equipment purchases/losses aren't
+  // tracked per-location in this first pass, only combined.
+  assetPurchases: number;
+  assetLosses: number;
 }
 
 // Ingredients (raw materials, §3.2) — a third, separate stock pool from
@@ -126,7 +135,7 @@ const PERIOD_OPTIONS = [
 // app). The four former closingStock* variants collapsed into one shared
 // string since the tile/row label already states which location/pool.
 const TOOLTIPS = {
-  netProfit: "Sales − cost of goods − expenses.",
+  netProfit: "Sales − cost of goods − expenses − asset purchases.",
   salesValue: "Till sales + delivery/pickup orders, at selling price.",
   costValue: "Opening stock + added stock − closing stock (items and ingredients combined).",
   wastageValue: "Spoiled or damaged stock, valued at selling price × the admin-set cost ratio.",
@@ -140,6 +149,9 @@ const TOOLTIPS = {
   expenses: "Costs logged for this location.",
   outstandingTotal:
     "Total still owed by customers on credit sales, both locations — not tied to the period toggle. Already counted in sales/profit above; this is what hasn't been collected yet. See Debtors for who owes what.",
+  assetPurchases: "Utensils/equipment bought this period, at the price paid — subtracted from net profit above.",
+  assetLosses:
+    "Utensils/equipment broken or missing this period, valued at current replacement cost — for stock control only, not subtracted from net profit.",
 } as const;
 
 const COMPARISON_ROWS = [
@@ -448,6 +460,35 @@ export function DashboardClient() {
                   value={money(data.combined.businessWideExpenses)}
                   onDark
                   tooltip={TOOLTIPS.businessWideExpenses}
+                />
+              )}
+              {/* Asset Purchases (post-launch, 2026-07-28 — client request
+                  to account for durable equipment like utensils). Own
+                  dashboard line rather than folded into "Operating
+                  expenses" — a one-off equipment buy shouldn't distort the
+                  recurring electricity/gas/rent trend. IS a real netProfit
+                  deduction (see lib/calculations.ts's netProfit() doc
+                  comment for why this differs from stockConsumption).
+                  Only shown when > 0, same "avoid a permanent KES 0 tile"
+                  convention as Total Outstanding below. */}
+              {data.combined.assetPurchases > 0 && (
+                <MetricCard
+                  label="Asset purchases"
+                  value={money(data.combined.assetPurchases)}
+                  onDark
+                  tooltip={TOOLTIPS.assetPurchases}
+                />
+              )}
+              {/* Asset Losses — reporting-only (breakage/theft), same
+                  treatment as wastage: informational, never subtracted
+                  from net profit. See docs/01_DATA_MODEL.md's asset-
+                  register subsection. */}
+              {data.combined.assetLosses > 0 && (
+                <MetricCard
+                  label="Asset losses"
+                  value={money(data.combined.assetLosses)}
+                  onDark
+                  tooltip={TOOLTIPS.assetLosses}
                 />
               )}
               {/* Total Outstanding (Phase 11, docs/01_DATA_MODEL.md §6) --

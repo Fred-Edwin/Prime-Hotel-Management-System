@@ -43,6 +43,12 @@ const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   // customer payments" subsection) -- outstanding balance per
   // customer, drill into unpaid orders, record a payment.
   { href: "/dashboard/debtors", label: "Debtors", icon: "expenses" },
+  // Added post-launch (docs/01_DATA_MODEL.md's asset-register subsection,
+  // 2026-07-28) -- durable equipment (utensils/cookware) catalog + on-hand
+  // value + purchase/loss logging. Reuses the "ingredients" icon --
+  // components/Icon/Icon.tsx has no dedicated equipment/asset icon, same
+  // design-system gap Debtors flagged for its own icon reuse in Phase 11.
+  { href: "/assets", label: "Assets", icon: "ingredients" },
   { href: "/staff", label: "Staff", icon: "staff" },
   { href: "/dashboard/audit-log", label: "Audit Log", icon: "history" },
 ];

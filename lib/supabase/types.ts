@@ -57,6 +57,96 @@ export type Database = {
         }
         Relationships: []
       }
+      asset_events: {
+        Row: {
+          asset_id: string
+          created_at: string
+          created_by: string
+          event_date: string
+          event_type: Database["public"]["Enums"]["asset_event_type"]
+          id: string
+          note: string | null
+          quantity: number
+          total_cost: number
+          unit_cost_snapshot: number | null
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          created_by: string
+          event_date: string
+          event_type: Database["public"]["Enums"]["asset_event_type"]
+          id?: string
+          note?: string | null
+          quantity: number
+          total_cost?: number
+          unit_cost_snapshot?: number | null
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          created_by?: string
+          event_date?: string
+          event_type?: Database["public"]["Enums"]["asset_event_type"]
+          id?: string
+          note?: string | null
+          quantity?: number
+          total_cost?: number
+          unit_cost_snapshot?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_events_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+          id: string
+          location: Database["public"]["Enums"]["location_type"] | null
+          low_stock_threshold: number | null
+          name: string
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          created_at?: string
+          id?: string
+          location?: Database["public"]["Enums"]["location_type"] | null
+          low_stock_threshold?: number | null
+          name: string
+          unit_cost: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          id?: string
+          location?: Database["public"]["Enums"]["location_type"] | null
+          low_stock_threshold?: number | null
+          name?: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -979,6 +1069,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      asset_delete_impact: {
+        Args: { p_asset_id: string }
+        Returns: {
+          events_affected_count: number
+          events_total_value: number
+        }[]
+      }
       canteen_supplied_total: {
         Args: { p_item_id: string; p_week_end: string; p_week_start: string }
         Returns: number
@@ -1134,6 +1231,22 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      dashboard_asset_losses_total: {
+        Args: { p_from: string; p_to: string }
+        Returns: number
+      }
+      dashboard_asset_purchases_total: {
+        Args: { p_from: string; p_to: string }
+        Returns: number
+      }
+      dashboard_assets_on_hand: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          asset_id: string
+          quantity_on_hand: number
+          value: number
+        }[]
       }
       dashboard_complimentary_meal_summary: {
         Args: { p_from: string; p_to: string }
@@ -1327,6 +1440,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: number
       }
+      delete_asset: {
+        Args: { p_asset_id: string }
+        Returns: undefined
+      }
+      delete_asset_event: {
+        Args: { p_event_id: string }
+        Returns: undefined
+      }
       delete_canteen_stock_purchase: {
         Args: { p_purchase_id: string }
         Returns: undefined
@@ -1423,6 +1544,10 @@ export type Database = {
           item_id: string
           profit: number
         }[]
+      }
+      lock_asset_row: {
+        Args: { p_asset_id: string }
+        Returns: undefined
       }
       lock_ingredient_entry_row: {
         Args: { p_entry_date: string; p_ingredient_id: string }
@@ -1555,6 +1680,35 @@ export type Database = {
           to: "stock_entries"
           isOneToOne: false
           isSetofReturn: true
+        }
+      }
+      record_asset_event: {
+        Args: {
+          p_asset_id: string
+          p_created_by: string
+          p_event_date: string
+          p_event_type: Database["public"]["Enums"]["asset_event_type"]
+          p_note?: string
+          p_quantity: number
+          p_unit_cost?: number
+        }
+        Returns: {
+          asset_id: string
+          created_at: string
+          created_by: string
+          event_date: string
+          event_type: Database["public"]["Enums"]["asset_event_type"]
+          id: string
+          note: string | null
+          quantity: number
+          total_cost: number
+          unit_cost_snapshot: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "asset_events"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       record_canteen_stock_purchase: {
@@ -2024,6 +2178,7 @@ export type Database = {
       }
     }
     Enums: {
+      asset_event_type: "purchase" | "loss"
       expense_category: "electricity" | "gas" | "charcoal" | "other"
       item_category:
         | "beverages"

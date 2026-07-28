@@ -95,6 +95,39 @@ export function describeSaveError(error: PostgrestError): { message: string; sta
     };
   }
 
+  // record_asset_event()'s oversell-style guard — a loss event that would
+  // take an asset's derived on-hand quantity negative. See
+  // 20260728120000_assets.sql, errcode P0008.
+  if (error.code === "P0008" || error.message.includes("insufficient_asset_quantity")) {
+    return {
+      message: "That's more than the current quantity on hand for this asset.",
+      status: 409,
+    };
+  }
+
+  // record_asset_event()'s defensive unit_cost-required guard for a
+  // purchase event — the form should already require this field, so
+  // this is a fallback, not the expected path. See 20260728120000_assets.sql.
+  if (error.message.includes("unit_cost is required for a purchase event")) {
+    return { message: "Enter a unit cost to log a purchase.", status: 400 };
+  }
+
+  // asset_events has no same-day-only restriction at all (unlike
+  // stock_entries/ingredient_entries below) — an RLS rejection here
+  // means the caller isn't allowed to log this event_type for this
+  // asset's location (e.g. a non-admin/non-store-manager attempting a
+  // purchase), not a stale date. Checked BEFORE the generic 42501
+  // fallback below, which would otherwise show the wrong "today's
+  // entry" copy — a real bug found live-testing on localhost,
+  // 2026-07-28 (see 20260728130000_fix_asset_events_admin_loss_rls.sql
+  // for the underlying RLS policy bug this surfaced).
+  if (error.code === "42501" && error.message.includes("asset_events")) {
+    return {
+      message: "You don't have permission to log that for this asset.",
+      status: 403,
+    };
+  }
+
   // Postgres RLS violation (42501 = insufficient_privilege) — most
   // commonly hit here when trying to save an entry for a date that
   // isn't today, which only an admin can edit (see
