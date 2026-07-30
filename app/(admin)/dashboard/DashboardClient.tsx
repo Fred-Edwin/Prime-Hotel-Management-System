@@ -688,9 +688,10 @@ export function DashboardClient() {
             {data.combined.businessWideExpenses > 0 && (
               <p className={styles.comparisonFootnote}>
                 Restaurant and Canteen net profit above don&rsquo;t include{" "}
-                {money(data.combined.businessWideExpenses)} in business-wide expenses (rent, salaries,
-                etc.) — that&rsquo;s subtracted only from the combined Net Profit figure at the top of this
-                page, since it isn&rsquo;t tied to one location.
+                {money(data.combined.businessWideExpenses)}{" "}
+                in business-wide expenses (rent, salaries, etc.) — that&rsquo;s subtracted only from the
+                combined Net Profit figure at the top of this page, since it isn&rsquo;t tied to one
+                location.
               </p>
             )}
 
