@@ -227,12 +227,30 @@ export function CashReconciliationClient() {
    * "Edit" a history row: there's no separate edit form — the entry
    * card above already re-populates from whatever's saved for the
    * selected date (loadExpectedForEntryDate()'s pre-fill, existing
-   * behavior). Jumping the date picker to this row's date reuses that
-   * exact mechanism, then scrolls the entry card into view so the
-   * change is obvious on a long history list.
+   * behavior, driven by an effect keyed on `entryDate`).
+   *
+   * Bug fixed here (client report, "nothing happens when I click
+   * edit"): the original version only called setEntryDate(row's date)
+   * and relied on the entryDate-effect to fetch + pre-fill the form.
+   * When the clicked row's date already equalled the current entryDate
+   * (the common case — entryDate defaults to today, and today's own
+   * row is usually the first one an admin tries to edit), React bails
+   * out of the state update and re-render entirely since the value
+   * didn't change, so the effect never re-runs and NOTHING visibly
+   * happens — not a rendering bug, a genuine no-op. Fixed by directly
+   * populating actualCash/note/expectedCash from the row's own already
+   * -fetched data unconditionally (no dependency on entryDate actually
+   * changing), with setEntryDate now just a display-consistency update
+   * for the date picker rather than the sole trigger of the pre-fill.
    */
   function handleEditRow(row: ReconciliationRow) {
     setEntryDate(row.reconciliation_date);
+    setExpectedCash((prev) => ({
+      restaurant: row.location === "restaurant" ? row.expected_cash : (prev?.restaurant ?? 0),
+      canteen: row.location === "canteen" ? row.expected_cash : (prev?.canteen ?? 0),
+    }));
+    setActualCash((prev) => ({ ...prev, [row.location]: String(row.actual_cash) }));
+    setNote((prev) => ({ ...prev, [row.location]: row.note ?? "" }));
     entryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
