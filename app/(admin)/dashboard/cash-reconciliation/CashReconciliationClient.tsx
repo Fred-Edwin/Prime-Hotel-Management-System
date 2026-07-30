@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/Card";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { Toast } from "@/components/Toast";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
+import { ActionMenu } from "@/components/ActionMenu";
 import catalogStyles from "../../catalog.module.css";
 import styles from "./cashReconciliation.module.css";
 
@@ -86,6 +88,19 @@ export function CashReconciliationClient() {
   const [history, setHistory] = useState<ReconciliationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const entryCardRef = useRef<HTMLDivElement>(null);
+
+  // Delete confirmation (client feedback, 2026-07-30: "make the history
+  // table editable in case she needs to delete or edit anything").
+  // Deleting a whole reconciliation record — not just one line in a
+  // bigger record, unlike order_payments' no-confirm delete — gets a
+  // confirm modal, matching the Item Ledger's row-delete precedent
+  // (docs/01_DATA_MODEL.md §3.16) rather than Debtors' no-confirm
+  // payment-row delete.
+  const [deleteTarget, setDeleteTarget] = useState<ReconciliationRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Wrapped in a nested function per this codebase's standing
   // "setState-before-fetch effect" convention (see DebtorsClient.tsx's
@@ -208,6 +223,57 @@ export function CashReconciliationClient() {
     }
   }
 
+  /**
+   * "Edit" a history row: there's no separate edit form — the entry
+   * card above already re-populates from whatever's saved for the
+   * selected date (loadExpectedForEntryDate()'s pre-fill, existing
+   * behavior). Jumping the date picker to this row's date reuses that
+   * exact mechanism, then scrolls the entry card into view so the
+   * change is obvious on a long history list.
+   */
+  function handleEditRow(row: ReconciliationRow) {
+    setEntryDate(row.reconciliation_date);
+    entryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openDeleteConfirm(row: ReconciliationRow) {
+    setDeleteTarget(row);
+    setDeleteError(null);
+  }
+
+  function closeDeleteConfirm() {
+    setDeleteTarget(null);
+    setDeleteError(null);
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/dashboard/cash-reconciliation/${deleteTarget.id}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(body.error ?? "Couldn't delete this reconciliation — please try again.");
+        return;
+      }
+      setToast({ message: "Reconciliation deleted", status: "success" });
+      setDeleteTarget(null);
+      // If the deleted row was the one currently pre-filled into the
+      // entry form, clear that form's fields so it doesn't keep
+      // showing a value that no longer has a saved row behind it.
+      if (deleteTarget.reconciliation_date === entryDate) {
+        setActualCash((prev) => ({ ...prev, [deleteTarget.location]: "" }));
+        setNote((prev) => ({ ...prev, [deleteTarget.location]: "" }));
+      }
+      await load();
+    } catch {
+      setDeleteError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.headerRow}>
@@ -219,6 +285,7 @@ export function CashReconciliationClient() {
         </div>
       </div>
 
+      <div ref={entryCardRef}>
       <Card className={styles.entryCard}>
         <div className={styles.entryHeader}>
           <h2 className={styles.entrySectionTitle}>Record cash received</h2>
@@ -266,6 +333,7 @@ export function CashReconciliationClient() {
           ))}
         </div>
       </Card>
+      </div>
 
       <div className={styles.historyHeaderRow}>
         <h2 className={styles.entrySectionTitle}>History</h2>
@@ -298,6 +366,7 @@ export function CashReconciliationClient() {
                   <th className={catalogStyles.numeric}>Actual</th>
                   <th className={catalogStyles.numeric}>Variance</th>
                   <th>Note</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -311,6 +380,15 @@ export function CashReconciliationClient() {
                       {moneySigned(row.variance)}
                     </td>
                     <td>{row.note ?? "—"}</td>
+                    <td>
+                      <ActionMenu
+                        aria-label={`Actions for ${row.reconciliation_date} ${row.location} reconciliation`}
+                        items={[
+                          { label: "Edit", onClick: () => handleEditRow(row) },
+                          { label: "Delete", onClick: () => openDeleteConfirm(row), destructive: true },
+                        ]}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -332,12 +410,47 @@ export function CashReconciliationClient() {
                   <span className={catalogStyles.itemCardMetrics}>
                     <span className={varianceTone(row.variance)}>{moneySigned(row.variance)}</span>
                   </span>
+                  <ActionMenu
+                    aria-label={`Actions for ${row.reconciliation_date} ${row.location} reconciliation`}
+                    items={[
+                      { label: "Edit", onClick: () => handleEditRow(row) },
+                      { label: "Delete", onClick: () => openDeleteConfirm(row), destructive: true },
+                    ]}
+                  />
                 </div>
               </li>
             ))}
           </ul>
         </>
       )}
+
+      <Modal
+        open={deleteTarget !== null}
+        onClose={closeDeleteConfirm}
+        title="Delete reconciliation"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeDeleteConfirm} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <div className={styles.deleteConfirmBody}>
+            <p>
+              This removes the {deleteTarget.reconciliation_date}{" "}
+              {deleteTarget.location === "restaurant" ? "Restaurant" : "Canteen"} reconciliation (actual{" "}
+              {money(deleteTarget.actual_cash)} vs. expected {money(deleteTarget.expected_cash)}). It has no effect
+              on recorded sales, stock, or profit — this only removes the record of what was reconciled.
+            </p>
+            {deleteError && <p className={catalogStyles.formError}>{deleteError}</p>}
+          </div>
+        )}
+      </Modal>
 
       {toast && <Toast message={toast.message} status={toast.status} onDismiss={() => setToast(null)} />}
     </div>

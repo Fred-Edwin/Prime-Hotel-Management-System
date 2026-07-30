@@ -128,3 +128,9 @@
   font-size: var(--font-size-body-sm);
   color: var(--color-text-secondary);
 }
+
+.deleteConfirmBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
