@@ -1,0 +1,130 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.backLink {
+  display: inline-block;
+  margin-top: var(--space-1);
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+.entryCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+.entryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.entrySectionTitle {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-heading-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.dateInput {
+  width: fit-content;
+}
+
+.entryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-5);
+}
+
+.entryColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+}
+
+.entryColumnTitle {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.expectedRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.expectedRow strong {
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.livePreview {
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Signed variance tone -- surplus/shortfall/neutral, same three-state
+   convention docs/01_DATA_MODEL.md §3.10's stock-adjustment sign display
+   already established (moneySigned() in this component mirrors that
+   pattern). Neutral (exact match) reads as a plain confirmation, not a
+   warning either way. */
+.varianceSurplus {
+  color: var(--color-status-success);
+}
+
+.varianceShortfall {
+  color: var(--color-status-error);
+}
+
+.varianceNeutral {
+  color: var(--color-text-secondary);
+}
+
+.historyHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.historyRangeInputs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rangeSeparator {
+  font-family: var(--font-family-structural);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}

@@ -335,6 +335,53 @@ export type Database = {
           },
         ]
       }
+      cash_reconciliations: {
+        Row: {
+          actual_cash: number
+          created_at: string
+          created_by: string
+          expected_cash: number
+          id: string
+          location: Database["public"]["Enums"]["location_type"]
+          note: string | null
+          reconciliation_date: string
+          updated_at: string
+          variance: number
+        }
+        Insert: {
+          actual_cash: number
+          created_at?: string
+          created_by: string
+          expected_cash: number
+          id?: string
+          location: Database["public"]["Enums"]["location_type"]
+          note?: string | null
+          reconciliation_date: string
+          updated_at?: string
+          variance: number
+        }
+        Update: {
+          actual_cash?: number
+          created_at?: string
+          created_by?: string
+          expected_cash?: number
+          id?: string
+          location?: Database["public"]["Enums"]["location_type"]
+          note?: string | null
+          reconciliation_date?: string
+          updated_at?: string
+          variance?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_reconciliations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_locations: {
         Row: {
           active: boolean
@@ -1240,6 +1287,10 @@ export type Database = {
         Args: { p_from: string; p_to: string }
         Returns: number
       }
+      dashboard_expected_cash: {
+        Args: { p_date: string; p_location: Database["public"]["Enums"]["location_type"] }
+        Returns: number
+      }
       dashboard_assets_on_hand: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -1680,6 +1731,33 @@ export type Database = {
           to: "stock_entries"
           isOneToOne: false
           isSetofReturn: true
+        }
+      }
+      save_cash_reconciliation: {
+        Args: {
+          p_actual_cash: number
+          p_created_by: string
+          p_location: Database["public"]["Enums"]["location_type"]
+          p_note?: string
+          p_reconciliation_date: string
+        }
+        Returns: {
+          actual_cash: number
+          created_at: string
+          created_by: string
+          expected_cash: number
+          id: string
+          location: Database["public"]["Enums"]["location_type"]
+          note: string | null
+          reconciliation_date: string
+          updated_at: string
+          variance: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cash_reconciliations"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       record_asset_event: {

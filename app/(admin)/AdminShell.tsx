@@ -43,6 +43,12 @@ const NAV_ITEMS: { href: string; label: string; icon: IconName }[] = [
   // customer payments" subsection) -- outstanding balance per
   // customer, drill into unpaid orders, record a payment.
   { href: "/dashboard/debtors", label: "Debtors", icon: "expenses" },
+  // Added post-launch (docs/01_DATA_MODEL.md's cash_reconciliations
+  // section, 2026-07-30) -- record actual cash received per location/day,
+  // see the variance against the system's own recorded sales. Reuses the
+  // "expenses" icon (a money-related figure, same reuse Debtors already
+  // established) -- no dedicated cash icon exists in components/Icon.
+  { href: "/dashboard/cash-reconciliation", label: "Cash Reconciliation", icon: "expenses" },
   // Added post-launch (docs/01_DATA_MODEL.md's asset-register subsection,
   // 2026-07-28) -- durable equipment (utensils/cookware) catalog + on-hand
   // value + purchase/loss logging. Reuses the "ingredients" icon --

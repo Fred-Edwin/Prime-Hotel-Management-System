@@ -25,6 +25,7 @@ customers           — lightweight customer catalog for credit sales, added Pha
 order_payments      — append-only ledger of payments against a credit order, added Phase 11 (see §6)
 assets              — durable equipment catalog (utensils, cookware) — never sold, never consumed into a dish, only owned/purchased/lost — see §3.18
 asset_events        — append-only log of asset purchase/loss events — see §3.18
+cash_reconciliations — admin-only daily cash reconciliation per location: actual cash received vs. the system's recorded sales, with the variance — see §3.17
 ```
 
 Do not add tables speculatively beyond what's listed here (e.g., a generic `locations` table for restaurant/canteen — see §5 for why). `delivery_locations`/`orders`/`order_items` were added deliberately, after initial planning, per direct client input (see §6) — not a speculative addition.
@@ -118,18 +119,31 @@ create table public.users (
 -- the login UI only ever shows Name (+ staff code where names collide)
 -- and a PIN field. See `04_PHASE_PLAN.md` Phase 2 for the concrete implementation.
 --
--- PIN length note (Phase 9): Supabase Auth's minimum_password_length (6,
--- see supabase/config.toml, mirrored in the production project) is
--- enforced by admin.updateUserById() (used by the Phase 9 admin PIN-reset
--- feature) but NOT by admin.createUser() (used by staff creation and
--- scripts/seed-staff.ts) -- an asymmetry discovered while building PIN
--- reset. lib/validation.ts's staffCreateSchema/staffPinResetSchema both
--- require exactly 6 digits to match the real, enforced constraint and
--- fail fast with a clear message rather than a confusing 500 from the
--- Auth layer. loginSchema (validating login *input shape*, not creating a
--- credential) deliberately stays a looser 4-6 digit range so it still
--- accepts any already-existing PIN, including dev seed data's legacy
--- 4-digit convention.
+-- PIN length note (Phase 9, corrected 2026-07-29): Supabase Auth's
+-- minimum_password_length is enforced by admin.updateUserById() (used by
+-- the Phase 9 admin PIN-reset feature) but NOT by admin.createUser() (used
+-- by staff creation and scripts/seed-staff.ts) -- an asymmetry discovered
+-- while building PIN reset. lib/validation.ts's staffCreateSchema/
+-- staffPinResetSchema both require the same range as the real, enforced
+-- constraint so staff creation/PIN reset fail fast with a clear message
+-- rather than a confusing 500 from the Auth layer. loginSchema (validating
+-- login *input shape*, not creating a credential) has always accepted a
+-- looser 4-6 digit range regardless of the current floor, so it needs no
+-- change when the floor moves.
+--
+-- 2026-07-29 update (client request via WaPrecious): minimum_password_length
+-- lowered from 6 to 4 in the Supabase dashboard (Auth settings) for
+-- prosper-hotel-dev, matching lib/validation.ts's schemas being loosened to
+-- ^\d{4,6}$ the same day -- see docs/00_ARCHITECTURE.md and the commit that
+-- made this change for the security tradeoff discussion (10,000 possible
+-- PINs vs. 1,000,000, judged acceptable for ~5 known staff given Supabase
+-- Auth's own sign-in rate limiting). NOT YET mirrored in prime-hotel-demo
+-- (production) as of this note -- that dashboard change is still pending;
+-- until it's made, PIN resets/creations of 4-5 digit PINs will fail in
+-- production even though this schema now allows them. supabase/config.toml's
+-- minimum_password_length is documentation only in this project (no local
+-- Docker stack is ever run) -- the hosted dashboard setting is the real
+-- source of truth, per project, not the file.
 
 -- ============================================================
 -- ITEMS
@@ -1930,3 +1944,46 @@ The client (WaPrecious) asked directly to track customers who take goods or serv
 - No interest, late fees, or aging-bucket automation (30/60/90-day buckets) — `oldest_unpaid_date` (from `dashboard_debtors()`) gives the admin the raw date to judge age herself.
 - No SMS/WhatsApp payment reminders — see §6's existing "No WhatsApp API integration" exclusion above, unchanged.
 - No customer-facing login/self-service balance check.
+
+---
+
+## 3.17 Cash reconciliation (client feedback, 2026-07-30)
+
+**The problem.** Staff sometimes forget to log a sale, or log one that didn't happen (a stepper mis-tap, a delivery order entered twice, etc.). WaPrecious noticed that the cash she physically receives from staff at the end of the day sometimes doesn't match what the app shows as that day's sales — either more or less. She wanted to record what she actually received, per day, and see the variance against the system's own figure, for any past date, not just today.
+
+**Scope, confirmed with the human before building:**
+- **One row per location, per day.** Restaurant and canteen are reconciled independently — she receives cash from each location's staff separately, matching every other per-location split in this schema (`stock_entries`, `expenses`, etc.).
+- **"Expected cash" is the location/day's whole recorded sales figure** — `stock_entries.sales_value` summed for that location/date, which already includes both till sales and order-driven sales (`quantity_sold`'s two contributors, §3.4) with no separate orders aggregation needed. **Deliberately not split by payment method** (cash vs. M-Pesa vs. credit) — her own framing of the problem is "what the app says" vs. "what I actually received," a single comparison, not a payment-method reconciliation. A credit sale's outstanding balance (§6) is unaffected by this feature — it's a separate concept, already fully counted toward `sales_value` the moment the order was logged.
+- **Admin-only, both write and read.** WaPrecious is the one who physically receives the cash and is the one who asked for this; there is no staff-facing screen or RLS grant for this table at all.
+
+```sql
+create table public.cash_reconciliations (
+  id uuid primary key default gen_random_uuid(),
+  location location_type not null,
+  reconciliation_date date not null,
+  expected_cash numeric(10,2) not null,
+  actual_cash numeric(10,2) not null check (actual_cash >= 0),
+  variance numeric(10,2) not null,  -- actual_cash - expected_cash, stored not generated (see CLAUDE.md)
+  note text,
+  created_by uuid not null references public.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (location, reconciliation_date)
+);
+```
+
+See `20260730120000_cash_reconciliation.sql` for the full migration (table, RLS, `dashboard_expected_cash()`, `save_cash_reconciliation()`).
+
+**`expected_cash` is snapshotted at save time, not a live reference** — same discipline as every price/figure snapshot elsewhere in this schema (see this project's own non-negotiable constraints). `public.dashboard_expected_cash(p_location, p_date)` reads `sum(stock_entries.sales_value)` for that exact location/date at the moment `save_cash_reconciliation()` runs, and that value is stored on the row — it does not silently drift if a later admin Ledger edit (§3.4) changes that date's `stock_entries` figures. If an admin ledger edit happens *after* a reconciliation was already saved for that date, the existing reconciliation keeps its own stored `expected_cash` until the admin explicitly re-opens and re-saves that day's reconciliation, at which point the fresh figure is picked up — the same "we don't rewrite history automatically" posture §3.11/§3.14 already established for other snapshot corrections.
+
+**Single write path: `save_cash_reconciliation(p_location, p_reconciliation_date, p_actual_cash, p_created_by, p_note)`.** Upserts on `(location, reconciliation_date)` — re-saving the same location/day (e.g. correcting a mistyped actual-cash figure) updates the existing row rather than erroring or duplicating, same upsert convention as `stock_entries`/`ingredient_entries`. `variance = actual_cash - expected_cash` — positive means more cash was received than the system expected (a surplus, e.g. an unlogged sale), negative means less (a shortfall, e.g. a sale logged but never actually collected, or cash that went missing). No signed-value display convention needed beyond what `moneySigned()`-style formatting already does elsewhere (§3.10) — the UI shows an explicit `+`/`−`.
+
+**No oversell-style validation, no stock/profit impact of any kind.** Unlike every other write path in this schema, this table has no relationship to `closing_stock`, COGS, or `netProfit()` — it's a pure, standalone comparison figure for the admin's own operational reconciliation. Recording a reconciliation never changes any `stock_entries` row, never affects the dashboard's profit figures, and isn't read by `dashboard_stock_summary()`/`dashboard_ingredient_summary()`/`netProfit()`/`periodicCogs()` at all.
+
+**RLS:** `cash_reconciliations_admin_all` — `for all using (is_admin()) with check (is_admin())`. No staff-facing policy exists at all, unlike almost every other table in this schema (which at minimum grant staff read/write scoped to their own location) — this is a genuinely admin-only concept end to end, closer to `audit_log`'s admin-only posture than to `expenses`' staff-writable shape.
+
+**Routes:** `GET /api/dashboard/cash-reconciliation?from=&to=` (admin-only) returns every saved row in the inclusive date range plus the current `dashboard_expected_cash()` figure for the range's `to` date, so the entry form can show "the system currently says X" before anything is typed. `POST /api/dashboard/cash-reconciliation` (admin-only) validates via `cashReconciliationSchema` (`lib/validation.ts`) and calls `save_cash_reconciliation()`.
+
+**Screen:** `/dashboard/cash-reconciliation` (`AdminShell.tsx` nav entry, reuses the `expenses` icon — no dedicated cash icon exists in `components/Icon`, same reuse precedent Debtors/Assets already established for this gap). Reporting/records lens: a date-scoped entry form (per location: system-expected figure shown live, actual-cash input, optional note, live variance preview before saving) plus a history table filterable by date range, so WaPrecious can page back to any past date and see what that day's variance was — directly satisfying her original ask ("can she go back to any date and see how much the difference was").
+
+**Explicitly not in scope:** any automatic alert/flag when a variance exceeds some threshold (she asked to be able to look it up, not to be proactively warned — a real future enhancement if she asks for it, not assumed here); any breakdown of *which* sale was missed or double-logged (this feature tells her *that* a discrepancy exists and *how much*, not *why* — diagnosing the specific missed/duplicate entry is still a manual investigation, same as her original Excel-era process, just now with a real number to investigate against instead of a vague feeling that the cash doesn't match); any change to how `stock_entries`/orders/credit sales are recorded or validated.

@@ -81,6 +81,22 @@ export const deliveryLocationSchema = z.object({
 export type DeliveryLocationInput = z.infer<typeof deliveryLocationSchema>;
 
 /**
+ * Cash reconciliation (post-launch feature, 2026-07-30) — admin logs the
+ * actual cash received from a location's staff for a given day. See
+ * docs/01_DATA_MODEL.md's cash_reconciliations section: expected_cash is
+ * always server-derived (never accepted from the client), so this schema
+ * only validates the fields the admin actually types.
+ */
+export const cashReconciliationSchema = z.object({
+  location: z.enum(["restaurant", "canteen"]),
+  reconciliation_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A valid date is required"),
+  actual_cash: nonNegativeAmount,
+  note: z.string().nullable().optional(),
+});
+
+export type CashReconciliationInput = z.infer<typeof cashReconciliationSchema>;
+
+/**
  * Staff account creation — see docs/01_DATA_MODEL.md §2 `users` and
  * scripts/seed-staff.ts for the synthetic-email/Auth-admin pattern this
  * feeds into. `location` is required for staff, absent (null) for admin.
@@ -89,16 +105,17 @@ export type DeliveryLocationInput = z.infer<typeof deliveryLocationSchema>;
  */
 export const staffCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  // Exactly 6 digits, matching Supabase Auth's minimum_password_length=6
-  // (config.toml, mirrored in the production project) — a shorter PIN
-  // passes this schema but fails at the Auth layer, which for
-  // admin.createUser fails silently on account creation (Phase 8 hit
-  // this: production PINs were all reset to 6 characters) and for
-  // admin.updateUserById (Phase 9's PIN reset) throws an
-  // AuthWeakPasswordError. Matching the real constraint here means
-  // staff creation/PIN reset fail fast with a clear message instead of
-  // a confusing 500 three steps later.
-  pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits"),
+  // 4-6 digits, matching Supabase Auth's minimum_password_length (lowered
+  // from 6 to 4 post-launch, 2026-07-29, per client request — see
+  // docs/01_DATA_MODEL.md's PIN length note) — a shorter PIN than the
+  // dashboard's configured floor passes this schema but fails at the Auth
+  // layer, which for admin.createUser fails silently on account creation
+  // (Phase 8 hit this: production PINs were all reset to 6 characters) and
+  // for admin.updateUserById (Phase 9's PIN reset) throws an
+  // AuthWeakPasswordError. Matching the real constraint here means staff
+  // creation/PIN reset fail fast with a clear message instead of a
+  // confusing 500 three steps later.
+  pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4–6 digits"),
   role: z.enum(["admin", "staff"]),
   location: z.enum(["restaurant", "canteen"]).nullable(),
   is_store_manager: z.boolean(),
@@ -125,10 +142,10 @@ export type StaffUpdateInput = z.infer<typeof staffUpdateSchema>;
 
 /**
  * Phase 9 — admin-initiated PIN reset for an existing staff account.
- * Exactly 6 digits — see staffCreateSchema's comment for why.
+ * 4-6 digits — see staffCreateSchema's comment for why.
  */
 export const staffPinResetSchema = z.object({
-  pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits"),
+  pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4–6 digits"),
 });
 
 export type StaffPinResetInput = z.infer<typeof staffPinResetSchema>;
