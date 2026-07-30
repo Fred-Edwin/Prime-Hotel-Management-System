@@ -397,6 +397,19 @@
   overflow-x: auto;
 }
 
+/* Business-wide expenses footnote (2026-07-30) — sits directly beneath
+   the comparison card, explaining why combined Net Profit doesn't equal
+   Restaurant + Canteen net profit added together whenever a business-
+   wide expense exists. Small/secondary treatment, same tone as a table
+   caption — informational, not an alert. */
+.comparisonFootnote {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
 /* Carbon-style dense grid, matching the catalog table treatment
    (../catalog.module.css's .table) — this module can't just import
    that file's classes, so the same rules are restated here. Keep the

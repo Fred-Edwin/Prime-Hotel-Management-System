@@ -673,6 +673,27 @@ export function DashboardClient() {
               </table>
             </Card>
 
+            {/* Business-wide expenses footnote (found needed 2026-07-30,
+                during a production dashboard audit — the human asked why
+                the hero "Net profit" tile didn't equal Restaurant net
+                profit + Canteen net profit added together). Answer: it
+                never will, whenever a business-wide expense exists —
+                rent/salaries/etc. logged with no location (§3.10) are
+                subtracted from the COMBINED net profit tile above but
+                deliberately never split into either location's own P&L
+                row here, since there's no fair way to attribute them to
+                one location. Shown only when nonzero, same "avoid a
+                permanent KES 0 line" convention as Asset Purchases/Losses/
+                Total Outstanding elsewhere on this dashboard. */}
+            {data.combined.businessWideExpenses > 0 && (
+              <p className={styles.comparisonFootnote}>
+                Restaurant and Canteen net profit above don&rsquo;t include{" "}
+                {money(data.combined.businessWideExpenses)} in business-wide expenses (rent, salaries,
+                etc.) — that&rsquo;s subtracted only from the combined Net Profit figure at the top of this
+                page, since it isn&rsquo;t tied to one location.
+              </p>
+            )}
+
             {/* Stock Consumption (docs/backlog/05_stock_consumption.md,
                 2026-07-22) — a separate table from the P&L comparison
                 above. Wastage, staff meals, complimentary meals, and
