@@ -275,8 +275,12 @@ export function orderTotal(params: {
  * wastage, since a loss is a sunk cost already reflected in the business
  * no longer owning the item, not a new deduction against sales.
  *
- * costValue is expected to be periodicCogs()'s output as of the post-launch
- * COGS methodology change (2026-07-21) — see that function's doc comment.
+ * costValue is expected to be splitCogs()'s costOfGoodsSold output (post-
+ * launch change, 2026-07-30, docs/01_DATA_MODEL.md §3.18) — NOT
+ * periodicCogs()'s raw combined figure. The combined figure also includes
+ * stockRevaluation (a price-edit artifact, not real trading cost), which
+ * must stay OUT of net profit entirely, same reporting-only treatment as
+ * wastage/staff meals/complimentary meals/stock adjustments above.
  */
 export function netProfit(params: {
   salesValue: number;
@@ -314,6 +318,11 @@ export function netProfit(params: {
  * quantity_sold-based cost_value (a single day's opening/added/closing
  * swings don't represent "cost of what moved that day" the way a
  * sold-based daily figure does).
+ *
+ * As of the split below (docs/01_DATA_MODEL.md §3.18), this raw combined
+ * figure is still computed (it's exactly costOfGoodsSold + stockRevaluation
+ * from splitCogs()) but is no longer what feeds netProfit() directly — see
+ * splitCogs().
  */
 export function periodicCogs(params: {
   openingStockValue: number;
@@ -321,6 +330,59 @@ export function periodicCogs(params: {
   closingStockValue: number;
 }): number {
   return params.openingStockValue + params.addedStockValue - params.closingStockValue;
+}
+
+/**
+ * Splits periodicCogs()'s combined figure into "Cost of Goods Sold" (the
+ * real trading cost) and "Stock Revaluation" (a price-edit artifact) —
+ * client-agreed change, 2026-07-30, see docs/01_DATA_MODEL.md §3.18.
+ *
+ * periodicCogs() = Opening + Added − Closing correctly measures total cost
+ * IF the per-unit price never changes mid-period. When WaPrecious edits an
+ * item/ingredient's buying_price while units of it are still sitting in
+ * stock, the SAME formula also captures that price edit as if it were cost
+ * — e.g. editing "Printing/Papers" from KES 3.50 to KES 1.00 while 94+416
+ * units sat untouched manufactured ~KES 1,275 of apparent "cost of goods"
+ * for stock nothing had sold or used. She edits buying prices frequently
+ * (real supplier costs fluctuate), so this isn't a one-off — it's a
+ * recurring source of noise in her COGS/net-profit figures.
+ *
+ * revaluationValue is computed in SQL (dashboard_stock_summary()/
+ * dashboard_ingredient_summary(), 20260730180000_split_cogs_sold_vs_
+ * revaluation.sql), per item/location (items) or per ingredient
+ * (ingredients), as:
+ *
+ *   closing_stock_qty * (closing_unit_price − opening_unit_price)
+ *
+ * i.e. exactly the value swing on units that are STILL ON HAND at period
+ * end, attributable purely to the difference between the unit price now in
+ * effect and the unit price in effect at period start — zero whenever the
+ * price never changed intra-period, by construction. Summed across every
+ * item/ingredient before reaching this function, same "SQL sums, JS
+ * combines" division of responsibility as periodicCogs()'s own inputs.
+ *
+ * costOfGoodsSold is a strict decomposition, not a new formula: it always
+ * equals combinedCostValue − revaluationValue, so
+ * costOfGoodsSold + revaluationValue === periodicCogs()'s old combined
+ * output exactly. costOfGoodsSold is what now feeds netProfit() (the real
+ * trading-cost figure); stockRevaluation is reporting-only, shown
+ * separately, NEVER netted into profit — same treatment as wastage/staff
+ * meals/complimentary meals/stock adjustments (§3.10). This applies to
+ * every period, past and present, since it only changes how already-
+ * stored, already-correct values are READ and LABELED — no stored row
+ * (buying_price_snapshot, closing_stock_value, etc.) is ever rewritten.
+ */
+export function splitCogs(params: {
+  openingStockValue: number;
+  addedStockValue: number;
+  closingStockValue: number;
+  revaluationValue: number;
+}): { costOfGoodsSold: number; stockRevaluation: number } {
+  const combinedCostValue = periodicCogs(params);
+  return {
+    costOfGoodsSold: combinedCostValue - params.revaluationValue,
+    stockRevaluation: params.revaluationValue,
+  };
 }
 
 /**

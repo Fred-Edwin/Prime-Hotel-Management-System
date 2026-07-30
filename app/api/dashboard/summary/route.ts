@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { dashboardPeriodRange, netProfit, periodicCogs, type DashboardPeriod } from "@/lib/calculations";
+import { dashboardPeriodRange, netProfit, splitCogs, type DashboardPeriod } from "@/lib/calculations";
 import { serverErrorResponse } from "@/lib/errors";
 
 /**
@@ -94,6 +94,18 @@ import { serverErrorResponse } from "@/lib/errors";
  * anywhere to embed its cost into, unlike wastage/stockConsumption).
  * assetLosses stays reporting-only, shown alongside stockConsumption's
  * existing categories, never fed into netProfit().
+ *
+ * costValue is SPLIT into costOfGoodsSold + stockRevaluation (post-launch
+ * change, 2026-07-30 — client-reported, see docs/01_DATA_MODEL.md §3.18):
+ * periodicCogs()'s old combined figure blended real trading cost together
+ * with the value swing caused by WaPrecious editing an item/ingredient's
+ * buying_price while units of it were still in stock (she does this
+ * frequently — real supplier costs fluctuate). `combined`/`byLocation` now
+ * expose costValue (unchanged, the old combined figure, kept for anyone
+ * still reading it), costOfGoodsSold (real trading cost — this is what
+ * netProfit() actually receives now), and stockRevaluation (the isolated
+ * price-edit artifact — reporting-only, NEVER fed into netProfit(), same
+ * treatment as stockConsumption). See lib/calculations.ts's splitCogs().
  */
 export async function GET(request: Request) {
   const admin = await requireAdmin();
@@ -198,6 +210,7 @@ export async function GET(request: Request) {
     received_value: 0,
     quantity_used: 0,
     closing_stock: 0,
+    revaluation_value: 0,
   };
 
   const restaurantStock = stockByLocation.find((r) => r.location === "restaurant");
@@ -224,8 +237,11 @@ export async function GET(request: Request) {
   // items' + ingredients' opening/added/closing VALUES all summed
   // together before the single opening+added-closing subtraction, per
   // WaPrecious's explicit instruction to add the two closing-stock values
-  // together into one figure.
-  const combinedCostValue = periodicCogs({
+  // together into one figure. Split into costOfGoodsSold/stockRevaluation
+  // (2026-07-30, §3.18) — revaluationValue is likewise items+ingredients
+  // summed before the split, same combining convention as every other
+  // input here.
+  const combinedSplit = splitCogs({
     openingStockValue:
       (restaurantStock?.opening_stock_value ?? 0) +
       (canteenStock?.opening_stock_value ?? 0) +
@@ -238,7 +254,12 @@ export async function GET(request: Request) {
       (restaurantStock?.closing_stock_value ?? 0) +
       (canteenStock?.closing_stock_value ?? 0) +
       ingredientSummary.closing_stock_value,
+    revaluationValue:
+      (restaurantStock?.revaluation_value ?? 0) +
+      (canteenStock?.revaluation_value ?? 0) +
+      ingredientSummary.revaluation_value,
   });
+  const combinedCostValue = combinedSplit.costOfGoodsSold + combinedSplit.stockRevaluation;
 
   const combinedWastageValue =
     (restaurantStock?.wastage_value ?? 0) + (canteenStock?.wastage_value ?? 0) + ingredientSummary.wastage_value;
@@ -249,6 +270,8 @@ export async function GET(request: Request) {
   const combined = {
     salesValue: (restaurantStock?.sales_value ?? 0) + (canteenStock?.sales_value ?? 0),
     costValue: combinedCostValue,
+    costOfGoodsSold: combinedSplit.costOfGoodsSold,
+    stockRevaluation: combinedSplit.stockRevaluation,
     closingStockValue:
       (restaurantStock?.closing_stock_value ?? 0) +
       (canteenStock?.closing_stock_value ?? 0) +
@@ -259,7 +282,12 @@ export async function GET(request: Request) {
     assetLosses: assetLossesTotal,
   };
 
-  const netProfitCombined = netProfit({ ...combined, assetPurchases: assetPurchasesTotal });
+  const netProfitCombined = netProfit({
+    salesValue: combined.salesValue,
+    costValue: combinedSplit.costOfGoodsSold,
+    expenses: combined.expenses,
+    assetPurchases: assetPurchasesTotal,
+  });
 
   // Stock Consumption (docs/backlog/05_stock_consumption.md, 2026-07-22):
   // wastage + staff meals + complimentary meals + stock adjustments,
@@ -290,16 +318,20 @@ export async function GET(request: Request) {
   // store, §3.2) — same combined-values approach as `combined` above,
   // just scoped to restaurant's items instead of items+canteen. Canteen
   // has no ingredients of its own, so its COGS below stays items-only.
-  const restaurantCostValue = periodicCogs({
+  const restaurantSplit = splitCogs({
     openingStockValue: (restaurantStock?.opening_stock_value ?? 0) + ingredientSummary.opening_stock_value,
     addedStockValue: (restaurantStock?.added_stock_value ?? 0) + ingredientSummary.received_value,
     closingStockValue: (restaurantStock?.closing_stock_value ?? 0) + ingredientSummary.closing_stock_value,
+    revaluationValue: (restaurantStock?.revaluation_value ?? 0) + ingredientSummary.revaluation_value,
   });
-  const canteenCostValue = periodicCogs({
+  const canteenSplit = splitCogs({
     openingStockValue: canteenStock?.opening_stock_value ?? 0,
     addedStockValue: canteenStock?.added_stock_value ?? 0,
     closingStockValue: canteenStock?.closing_stock_value ?? 0,
+    revaluationValue: canteenStock?.revaluation_value ?? 0,
   });
+  const restaurantCostValue = restaurantSplit.costOfGoodsSold + restaurantSplit.stockRevaluation;
+  const canteenCostValue = canteenSplit.costOfGoodsSold + canteenSplit.stockRevaluation;
 
   const restaurantWastageValue = (restaurantStock?.wastage_value ?? 0) + ingredientSummary.wastage_value;
   const canteenWastageValue = canteenStock?.wastage_value ?? 0;
@@ -308,6 +340,8 @@ export async function GET(request: Request) {
     restaurant: {
       salesValue: restaurantStock?.sales_value ?? 0,
       costValue: restaurantCostValue,
+      costOfGoodsSold: restaurantSplit.costOfGoodsSold,
+      stockRevaluation: restaurantSplit.stockRevaluation,
       closingStockValue: restaurantStock?.closing_stock_value ?? 0,
       openingStock: restaurantStock?.opening_stock ?? 0,
       addedStock: restaurantStock?.added_stock ?? 0,
@@ -317,7 +351,7 @@ export async function GET(request: Request) {
       expenses: restaurantExpenses,
       netProfit: netProfit({
         salesValue: restaurantStock?.sales_value ?? 0,
-        costValue: restaurantCostValue,
+        costValue: restaurantSplit.costOfGoodsSold,
         expenses: restaurantExpenses,
       }),
       stockConsumption: {
@@ -331,6 +365,8 @@ export async function GET(request: Request) {
     canteen: {
       salesValue: canteenStock?.sales_value ?? 0,
       costValue: canteenCostValue,
+      costOfGoodsSold: canteenSplit.costOfGoodsSold,
+      stockRevaluation: canteenSplit.stockRevaluation,
       closingStockValue: canteenStock?.closing_stock_value ?? 0,
       openingStock: canteenStock?.opening_stock ?? 0,
       addedStock: canteenStock?.added_stock ?? 0,
@@ -340,7 +376,7 @@ export async function GET(request: Request) {
       expenses: canteenExpenses,
       netProfit: netProfit({
         salesValue: canteenStock?.sales_value ?? 0,
-        costValue: canteenCostValue,
+        costValue: canteenSplit.costOfGoodsSold,
         expenses: canteenExpenses,
       }),
       stockConsumption: {

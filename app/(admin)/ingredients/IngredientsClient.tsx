@@ -33,6 +33,10 @@ const emptyForm: IngredientInput = {
   active: true,
 };
 
+function money(value: number): string {
+  return `KES ${Math.round(value).toLocaleString("en-KE")}`;
+}
+
 export function IngredientsClient({ initialIngredients }: { initialIngredients: Ingredient[] }) {
   const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -43,6 +47,12 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
   );
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Price-edit warning (docs/01_DATA_MODEL.md §3.20, companion to §3.19's
+  // Cost of Goods Sold / Stock Revaluation split) — same wiring as
+  // ItemsClient.tsx.
+  const [editingOnHand, setEditingOnHand] = useState(0);
+  const [originalBuyingPrice, setOriginalBuyingPrice] = useState(0);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -113,6 +123,8 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
     setEditingId(null);
     setForm(emptyForm);
     setFieldErrors({});
+    setEditingOnHand(0);
+    setOriginalBuyingPrice(0);
     setDrawerOpen(true);
   }
 
@@ -126,7 +138,14 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
       active: ingredient.active,
     });
     setFieldErrors({});
+    setOriginalBuyingPrice(ingredient.buying_price);
+    setEditingOnHand(0);
     setDrawerOpen(true);
+
+    fetch(`/api/ingredients/${ingredient.id}/on-hand`)
+      .then((res) => res.json())
+      .then((data: { quantityOnHand?: number }) => setEditingOnHand(data.quantityOnHand ?? 0))
+      .catch(() => setEditingOnHand(0));
   }
 
   async function handleSubmit() {
@@ -169,6 +188,15 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
       setSubmitting(false);
     }
   }
+
+  // Price-edit warning text (§3.20) — same formula/conditions as
+  // ItemsClient.tsx's priceEditWarning.
+  const priceEditWarning =
+    editingId && editingOnHand > 0 && form.buying_price !== originalBuyingPrice
+      ? `This ingredient has ${editingOnHand.toLocaleString("en-KE")} units in stock. This will show as a one-time Stock Revaluation of approximately ${money(
+          Math.abs((originalBuyingPrice - form.buying_price) * editingOnHand),
+        )} once its next entry is saved — not immediately.`
+      : null;
 
   return (
     <div>
@@ -385,6 +413,8 @@ export function IngredientsClient({ initialIngredients }: { initialIngredients: 
             onChange={(e) => setForm({ ...form, buying_price: Number(e.target.value) })}
             error={fieldErrors.buying_price}
           />
+
+          {priceEditWarning && <p className={styles.priceEditWarning}>{priceEditWarning}</p>}
         </FormSection>
 
         <FormSection label="Stock behavior">

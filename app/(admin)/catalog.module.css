@@ -466,6 +466,22 @@
   color: var(--color-text-secondary);
 }
 
+/* Price-edit warning (docs/01_DATA_MODEL.md §3.20) — Items/Ingredients
+   edit drawer, shown when a buying_price edit would show up as a Stock
+   Revaluation swing on the dashboard (§3.19). Reuses the same warning
+   tokens the margin badge (.itemCardMarginMid) already established,
+   rather than introducing a new color pairing. */
+.priceEditWarning {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning);
+  font-family: var(--font-family-data);
+  font-size: var(--font-size-body-sm);
+  line-height: 1.4;
+}
+
 .deleteImpactList {
   display: flex;
   flex-direction: column;

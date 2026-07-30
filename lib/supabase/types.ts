@@ -1363,6 +1363,7 @@ export type Database = {
           quantity_used: number
           received: number
           received_value: number
+          revaluation_value: number
           wastage_value: number
         }[]
       }
@@ -1482,6 +1483,7 @@ export type Database = {
           opening_stock: number
           opening_stock_value: number
           quantity_sold: number
+          revaluation_value: number
           sales_value: number
           sent_out: number
           wastage_value: number

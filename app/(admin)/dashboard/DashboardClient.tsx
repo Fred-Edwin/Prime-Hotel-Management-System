@@ -31,6 +31,15 @@ interface StockConsumptionFigures {
 interface LocationFigures {
   salesValue: number;
   costValue: number;
+  // Split (post-launch, 2026-07-30 — client-reported, see
+  // docs/01_DATA_MODEL.md §3.18): costValue (above) is the old combined
+  // figure, kept for backward compatibility. costOfGoodsSold is the real
+  // trading-cost figure netProfit is actually computed from now.
+  // stockRevaluation is a price-edit artifact — reporting-only, shown
+  // separately, NEVER subtracted from net profit. The two always sum back
+  // to costValue exactly.
+  costOfGoodsSold: number;
+  stockRevaluation: number;
   closingStockValue: number;
   // Quantity flows (post-launch addition, 2026-07-21) — opening_stock/
   // closing_stock are point-in-time balances (each item's earliest/latest
@@ -135,9 +144,13 @@ const PERIOD_OPTIONS = [
 // app). The four former closingStock* variants collapsed into one shared
 // string since the tile/row label already states which location/pool.
 const TOOLTIPS = {
-  netProfit: "Sales − cost of goods − expenses − asset purchases.",
+  netProfit: "Sales − cost of goods sold − expenses − asset purchases.",
   salesValue: "Till sales + delivery/pickup orders, at selling price.",
-  costValue: "Opening stock + added stock − closing stock (items and ingredients combined).",
+  costValue: "Opening stock + added stock − closing stock (items and ingredients combined). Includes stock revaluation — see Cost of Goods Sold for the real trading-cost figure.",
+  costOfGoodsSold:
+    "Value of stock actually sold or used this period — the real trading cost. Excludes stock revaluation. This is what net profit is calculated from.",
+  stockRevaluation:
+    "Unsold stock's value change from a price edit, not a sale. Updates only after the next stock entry for that item — not the moment the price is edited. Not subtracted from net profit.",
   wastageValue: "Spoiled or damaged stock, valued at selling price × the admin-set cost ratio.",
   staffMealValue: "Food given to staff, valued at selling price × the admin-set cost ratio.",
   complimentaryMealValue: "Food given away free (e.g. to a guest), valued at selling price × the admin-set cost ratio.",
@@ -156,10 +169,17 @@ const TOOLTIPS = {
 
 const COMPARISON_ROWS = [
   { label: "Gross sales", key: "salesValue", tooltip: TOOLTIPS.salesValue },
-  { label: "Cost of goods", key: "costValue", tooltip: TOOLTIPS.costValue },
+  { label: "Cost of goods sold", key: "costOfGoodsSold", tooltip: TOOLTIPS.costOfGoodsSold },
   { label: "Operating expenses", key: "expenses", tooltip: TOOLTIPS.expenses },
   { label: "Closing stock value", key: "closingStockValue", tooltip: TOOLTIPS.closingStock },
 ] as const;
+
+// Stock Revaluation (post-launch, 2026-07-30, §3.18) — a separate,
+// single-row reporting table, same "not part of the P&L comparison above"
+// treatment as Non-Sales Stock Consumption below, but kept in its own
+// table rather than folded into STOCK_CONSUMPTION_ROWS since it lives on
+// LocationFigures directly (not nested under .stockConsumption).
+const REVALUATION_ROW = { label: "Stock revaluation", key: "stockRevaluation", tooltip: TOOLTIPS.stockRevaluation } as const;
 
 // Stock Consumption comparison rows (docs/backlog/05_stock_consumption.md)
 // — a separate table from COMPARISON_ROWS above, reporting-only figures
@@ -403,11 +423,25 @@ export function DashboardClient() {
                 tooltip={TOOLTIPS.salesValue}
               />
               <MetricCard
-                label="Total cost"
-                value={money(data.combined.costValue)}
+                label="Cost of goods sold"
+                value={money(data.combined.costOfGoodsSold)}
                 onDark
-                tooltip={TOOLTIPS.costValue}
+                tooltip={TOOLTIPS.costOfGoodsSold}
               />
+              {/* Stock Revaluation (post-launch, 2026-07-30, §3.18) — only
+                  shown when nonzero, same "avoid a permanent KES 0 tile"
+                  convention as Asset Purchases/Losses/Total Outstanding
+                  below. Reporting-only: informational, never subtracted
+                  from net profit — a price edit on stock still on hand,
+                  not a sale. */}
+              {data.combined.stockRevaluation !== 0 && (
+                <MetricCard
+                  label="Stock revaluation"
+                  value={moneySigned(data.combined.stockRevaluation)}
+                  onDark
+                  tooltip={TOOLTIPS.stockRevaluation}
+                />
+              )}
               <MetricCard
                 label="Non-sales stock consumption"
                 value={moneySigned(data.combined.stockConsumption.total)}
@@ -578,6 +612,26 @@ export function DashboardClient() {
                       <td className={styles.comparisonNumeric}>{money(data.byLocation.canteen[row.key])}</td>
                     </tr>
                   ))}
+                  {/* Stock Revaluation (post-launch, 2026-07-30, §3.18) —
+                      shown in the P&L table for context (it's what the old
+                      combined "Cost of goods" figure used to hide inside
+                      it) but visually marked reporting-only, same negative-
+                      highlight treatment as the Non-Sales Stock Consumption
+                      table below, and NOT included in the Net profit row's
+                      arithmetic — that's computed server-side from
+                      costOfGoodsSold only. */}
+                  <tr>
+                    <td className={styles.comparisonLabelCell}>
+                      <span>{REVALUATION_ROW.label}</span>
+                      <InfoTooltip label={REVALUATION_ROW.label} message={REVALUATION_ROW.tooltip} />
+                    </td>
+                    <td className={[styles.comparisonNumeric, styles.comparisonNegative].join(" ")}>
+                      {moneySigned(data.byLocation.restaurant.stockRevaluation)}
+                    </td>
+                    <td className={[styles.comparisonNumeric, styles.comparisonNegative].join(" ")}>
+                      {moneySigned(data.byLocation.canteen.stockRevaluation)}
+                    </td>
+                  </tr>
                   <tr className={styles.comparisonTotalRow}>
                     <td className={styles.comparisonLabelCell}>
                       <span>Net profit</span>
@@ -608,8 +662,8 @@ export function DashboardClient() {
                 2026-07-22) — a separate table from the P&L comparison
                 above. Wastage, staff meals, complimentary meals, and
                 stock adjustments are reporting-only: their cost is
-                already embedded in "Cost of goods" above (all four
-                reduce closing stock, which periodicCogs() derives cost
+                already embedded in "Cost of goods sold" above (all four
+                reduce closing stock, which splitCogs() derives cost
                 from), so they're no longer subtracted from net profit —
                 shown here purely for stock-control visibility. */}
             <div className={styles.sectionHeader}>

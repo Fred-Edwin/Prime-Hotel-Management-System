@@ -160,6 +160,15 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Price-edit warning (docs/01_DATA_MODEL.md §3.20, companion to §3.19's
+  // Cost of Goods Sold / Stock Revaluation split) — editing buying_price
+  // while stock is on hand shows up as a Stock Revaluation swing on the
+  // dashboard, which surprised the client once already (see §3.19's client
+  // report). originalBuyingPrice is the stored value at drawer-open time,
+  // compared against the live form draft to detect an in-progress edit.
+  const [editingOnHand, setEditingOnHand] = useState(0);
+  const [originalBuyingPrice, setOriginalBuyingPrice] = useState(0);
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
@@ -273,10 +282,24 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
 
   const formMargin = marginPercent(form.buying_price, form.selling_price);
 
+  // Price-edit warning text (§3.20) — only when actually editing an
+  // existing item (not adding a new one), the buying price draft actually
+  // differs from what's stored, and there's real stock on hand for the
+  // swing to apply to. Estimate mirrors §3.19's revaluation_value formula
+  // exactly: (old price - new price) * quantity on hand.
+  const priceEditWarning =
+    editingId && editingOnHand > 0 && form.buying_price !== originalBuyingPrice
+      ? `This item has ${editingOnHand.toLocaleString("en-KE")} units in stock. This will show as a one-time Stock Revaluation of approximately ${money(
+          Math.abs((originalBuyingPrice - form.buying_price) * editingOnHand),
+        )} once its next stock entry is saved — not immediately.`
+      : null;
+
   function openAddDrawer() {
     setEditingId(null);
     setForm(emptyForm);
     setFieldErrors({});
+    setEditingOnHand(0);
+    setOriginalBuyingPrice(0);
     setDrawerOpen(true);
   }
 
@@ -292,7 +315,14 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
       active: item.active,
     });
     setFieldErrors({});
+    setOriginalBuyingPrice(item.buying_price);
+    setEditingOnHand(0);
     setDrawerOpen(true);
+
+    fetch(`/api/items/${item.id}/on-hand`)
+      .then((res) => res.json())
+      .then((data: { quantityOnHand?: number }) => setEditingOnHand(data.quantityOnHand ?? 0))
+      .catch(() => setEditingOnHand(0));
   }
 
   async function handleSubmit() {
@@ -622,6 +652,8 @@ export function ItemsClient({ initialItems }: { initialItems: Item[] }) {
             onChange={(e) => setForm({ ...form, buying_price: Number(e.target.value) })}
             error={fieldErrors.buying_price}
           />
+
+          {priceEditWarning && <p className={styles.priceEditWarning}>{priceEditWarning}</p>}
 
           <Input
             label="Selling price (KES)"
