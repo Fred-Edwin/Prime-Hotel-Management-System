@@ -235,6 +235,21 @@ function moneySigned(value: number): string {
   return value < 0 ? `+${money(Math.abs(value))}` : money(value);
 }
 
+/**
+ * Stock Revaluation only (docs/01_DATA_MODEL.md §3.19, bug found during
+ * production verification, 2026-07-30): unlike stockAdjustmentValue
+ * above, a negative revaluation_value here means the item's buying price
+ * genuinely DROPPED while stock was on hand — a real decrease in that
+ * stock's recorded value, not a "surplus" to relabel as a plus. Reusing
+ * moneySigned() for this figure was a bug — it flipped a real -1,524
+ * price-drop swing into a displayed "+KES 1,524", which reads as the
+ * opposite of what happened. This formatter shows the arithmetic sign
+ * directly: a price drop is "-KES X", a price increase is "+KES X".
+ */
+function moneySignedPlain(value: number): string {
+  return value < 0 ? `-${money(Math.abs(value))}` : value > 0 ? `+${money(value)}` : money(value);
+}
+
 function units(value: number): string {
   return value.toLocaleString("en-KE");
 }
@@ -437,7 +452,7 @@ export function DashboardClient() {
               {data.combined.stockRevaluation !== 0 && (
                 <MetricCard
                   label="Stock revaluation"
-                  value={moneySigned(data.combined.stockRevaluation)}
+                  value={moneySignedPlain(data.combined.stockRevaluation)}
                   onDark
                   tooltip={TOOLTIPS.stockRevaluation}
                 />
@@ -626,10 +641,10 @@ export function DashboardClient() {
                       <InfoTooltip label={REVALUATION_ROW.label} message={REVALUATION_ROW.tooltip} />
                     </td>
                     <td className={[styles.comparisonNumeric, styles.comparisonNegative].join(" ")}>
-                      {moneySigned(data.byLocation.restaurant.stockRevaluation)}
+                      {moneySignedPlain(data.byLocation.restaurant.stockRevaluation)}
                     </td>
                     <td className={[styles.comparisonNumeric, styles.comparisonNegative].join(" ")}>
-                      {moneySigned(data.byLocation.canteen.stockRevaluation)}
+                      {moneySignedPlain(data.byLocation.canteen.stockRevaluation)}
                     </td>
                   </tr>
                   <tr className={styles.comparisonTotalRow}>
