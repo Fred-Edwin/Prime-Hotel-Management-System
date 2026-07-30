@@ -227,6 +227,21 @@ export function AdminShell({
           <div className={styles.topBarRight}>
             <RoleLocationBadge label="Admin · All locations" variant="admin" />
             <span className={styles.staffName}>{staffName}</span>
+            {/* Mobile/tablet equivalent of the desktop top bar's "Add Entry"
+                button (below) — the desktop sidebar/top-bar entry points to
+                "Act as staff" are both hidden below the 1024px breakpoint
+                (see AdminShell.module.css's desktop-only .sidebar/.desktopTopBar),
+                so without this, admin has no way to reach the feature on a
+                phone at all. Client-reported gap, 2026-07-30. */}
+            <button
+              type="button"
+              className={styles.mobileActingAsButton}
+              title="Log stock, sales, or orders yourself, the same way staff do."
+              onClick={() => setActingAsOpen(true)}
+              aria-label="Act as staff"
+            >
+              <Icon name="entry" size={20} />
+            </button>
             <button type="button" className={styles.logoutButton} onClick={handleLogout}>
               Log out
             </button>
@@ -304,6 +319,20 @@ export function AdminShell({
 
         <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="More">
           <nav className={styles.moreMenu} aria-label="More admin navigation">
+            {/* "Act as staff" is a mode switch, not a nav destination, so it
+                isn't part of NAV_ITEMS/secondaryMobileNavItems — mirrors the
+                desktop sidebar treating it as separate from the nav list. */}
+            <button
+              type="button"
+              className={styles.moreMenuItem}
+              onClick={() => {
+                setMoreOpen(false);
+                setActingAsOpen(true);
+              }}
+            >
+              <Icon name="entry" size={20} />
+              <span>Act as staff</span>
+            </button>
             {secondaryMobileNavItems.map((item) => {
               const active = isNavItemActive(pathname, item.href);
               return (

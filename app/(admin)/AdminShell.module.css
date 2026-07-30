@@ -240,6 +240,25 @@
   cursor: pointer;
 }
 
+/* Mobile/tablet equivalent of the desktop top bar's .addEntryButton — see
+   the "Act as staff" button in AdminShell.tsx's mobile .topBar. */
+.mobileActingAsButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-touch);
+  min-height: var(--space-touch);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-surface-raised);
+  cursor: pointer;
+}
+
+.mobileActingAsButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .content {
   flex: 1;
   padding: var(--space-5);
@@ -306,15 +325,19 @@
 .moreMenuItem {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: var(--space-3);
   min-height: var(--space-touch);
   padding: 0 var(--space-3);
+  border: none;
   border-radius: var(--radius-md);
+  background: transparent;
   color: var(--color-text-primary);
   text-decoration: none;
   font-family: var(--font-family-structural);
   font-size: var(--font-size-body-md);
   font-weight: var(--font-weight-medium);
+  cursor: pointer;
 }
 
 .moreMenuItem:hover {
